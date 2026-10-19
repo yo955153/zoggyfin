@@ -17,7 +17,10 @@ The first target is macOS on Apple Silicon. Windows and Linux come later from th
   libmpv switches audio and subtitle tracks inside the file, so no new stream is necessary.
   Progress goes to the server through the same `ProgressReporter` as on the other platforms
   (start, every 10 seconds, pause, seek and stop).
-- Music and audiobooks use the web audio engine for now.
+- Music and audiobooks use the web audio engine. WebKit gives it Now Playing and the media
+  keys through the Media Session API.
+- Downloads: see [Downloads](#downloads).
+- Now Playing and media keys for libmpv video: see [Now Playing](#now-playing-and-media-keys).
 
 ### Video surface (macOS)
 
@@ -46,10 +49,52 @@ Metal render path takes its place behind the same view.
 | `src/mpv/ffi.rs` | The libmpv C API that the app uses (hand-written from the headers) |
 | `src/mpv/player.rs` | One libmpv instance; events go to the page as JSON |
 | `src/mpv/view_macos.rs` | The OpenGL layer under the web view |
+| `src/downloads.rs` | Downloads (HTTP, resume, progress) and the file commands |
+| `src/media_macos.rs` | Now Playing and the media keys for libmpv video |
 | `src/debug.rs` | Test automation, in debug builds only (see below) |
 
 Commands: `mpv_command`, `mpv_set_property`, `mpv_get_property`, `mpv_set_video_visible`,
-`desktop_toggle_fullscreen`. Events go to `window.__zoggyfinDesktop.mpv(event)`.
+`desktop_toggle_fullscreen`, `download_*`, `files_*`, `now_playing_update`,
+`now_playing_clear`. Events go to `window.__zoggyfinDesktop.mpv(event)`, `.download(event)`
+and `.remote(command)`.
+
+### Downloads
+
+The Downloads tab shows in the desktop app. The records, the queue and the state rules are
+the same code as on iPhone (`src/downloads/manager.ts`, `state-machine.ts`). The records are
+in the page's storage, as on the web. Rust only moves bytes (`src/downloads/desktop.ts` is
+the engine and the file interface over the Rust commands):
+
+- Files are in `~/Library/Application Support/com.zogtech.zoggyfin.desktop/downloads/<itemId>/`,
+  with the same layout as on iPhone: the media file, `item.json`, `primary.jpg`,
+  `backdrop.jpg`, `subtitle-<index>.vtt`, `lyrics.json`.
+- A download writes to `<file>.part` and renames it at the end. Pause keeps the partial file;
+  resume continues with an HTTP `Range` request. A server that does not answer with 206
+  (a transcode) sends the file again from the start.
+- The task list is in `download-tasks.json` (mode 0600; it holds the request headers).
+  After a restart, paused downloads stay paused and running downloads continue.
+- Progress events come twice a second. The manager starts at most two downloads.
+- Rust accepts only paths inside the data folder.
+- The page loads local images, music and subtitles through Tauri's asset protocol
+  (`asset://localhost/...`, limited to `$APPDATA/downloads/**`). libmpv gets the disk path
+  (`localPath()` in `src/platform/desktop.ts`), so a downloaded video plays with no server.
+
+### Now Playing and media keys
+
+While libmpv plays, `MpvEngine` sends the title, the series line, the artwork URL, the
+length, the position, the speed and the play state to `now_playing_update`. Rust writes them
+to `MPNowPlayingInfoCenter` and adds handlers to `MPRemoteCommandCenter`: play, pause,
+play/pause, next, previous, skip 10 s back and forward, and seek from the Control Center
+bar. The handlers send the commands to the page. When playback stops, Rust removes the
+handlers and clears Now Playing, so the media keys go back to the web audio engine.
+
+Picture in Picture for libmpv video is not done. The system PiP window
+(`AVPictureInPictureController`) needs an `AVPlayerLayer` or an
+`AVSampleBufferDisplayLayer`. libmpv draws with OpenGL into a `CAOpenGLLayer`, so each frame
+would have to go to an IOSurface-backed pixel buffer and then into a sample buffer, with its
+own timing and the subtitles drawn in. That is a separate render path. The other choice,
+a second small window with a second OpenGL layer, does not stay above full-screen apps or
+show in Spaces the way PiP does. Both are too large for this step.
 
 ### Window and menus
 
@@ -62,7 +107,7 @@ Commands: `mpv_command`, `mpv_set_property`, `mpv_get_property`, `mpv_set_video_
 
 ## Develop
 
-You need Rust (stable), pnpm and libmpv:
+For development, you need Rust (stable), pnpm and Homebrew libmpv:
 
 ```sh
 brew install mpv
@@ -72,6 +117,8 @@ pnpm desktop:dev                    # the desktop app, in another terminal
 ```
 
 `MPV_LIB_DIR` changes where the build looks for `libmpv.dylib` (default `/opt/homebrew/lib`).
+Set it to `<work>/libmpv/prefix/lib` to run a debug build with the LGPL libmpv (debug builds
+have an rpath to that folder).
 
 Build an app for testing (not signed for distribution):
 
@@ -96,61 +143,91 @@ of its window (video and page together); an app can capture its own window witho
 screen recording permission. Scripts write lines to `<folder>/out.log` with
 `__TAURI_INTERNALS__.invoke('debug_log', { line })`. Release builds do not contain this code.
 
-## libmpv: licenses, bundling and signing
-
-**Licenses.** Zoggyfin is MPL-2.0. libmpv is LGPL-2.1+ only when mpv is built with
-`-Dgpl=false`; otherwise it is GPL-2.0+. The Homebrew build is a GPL build (`gpl` is in its
-feature list, and Homebrew FFmpeg uses `--enable-gpl --enable-version3`, x264 and x265).
-Use the Homebrew build for development only. Do not ship it.
-
-A shipped app must use an LGPL build:
-
-- mpv built with `-Dlibmpv=true -Dgpl=false`.
-- FFmpeg without `--enable-gpl` and `--enable-nonfree` (no x264, x265 or other GPL parts;
-  decoders and VideoToolbox are enough for a player).
-- libass, libplacebo, HarfBuzz, FreeType, FriBidi and the other dependencies with
-  LGPL-compatible or permissive licenses.
-- Ship the license texts and a notice that tells where the source of libmpv and FFmpeg is.
-  Link libmpv dynamically, so that users can replace it (LGPL requirement).
-
-Do not copy GPL code into this repository.
-
-**Bundling (follow-up).** The Homebrew `libmpv.2.dylib` links about 60 other dylibs from
-`/opt/homebrew`. Thus the test app runs only on a Mac with Homebrew mpv. For distribution:
-
-1. Build libmpv (LGPL) and its dependencies as dylibs, or take a prebuilt LGPL libmpv
-   (for example from the MPVKit or IINA build scripts, LGPL configuration).
-2. Copy `libmpv.2.dylib` and every dependency into `Zoggyfin.app/Contents/Frameworks/`
-   (Tauri: `bundle.macOS.frameworks` in `tauri.conf.json`).
-3. Change the install names to `@rpath/...` with `install_name_tool -id` and `-change`
-   (or `dylibbundler`), and add `@executable_path/../Frameworks` to the binary's rpath.
-4. Check with `otool -L` that no path points to `/opt/homebrew` or `/usr/local`.
-
-**Signing and notarization (follow-up).** Sign every dylib in `Contents/Frameworks` first,
-then the app, with the hardened runtime:
+## Release: LGPL libmpv, signing and notarization
 
 ```sh
-codesign --force --timestamp --options runtime --sign "Developer ID Application: …" Contents/Frameworks/*.dylib
-codesign --force --timestamp --options runtime --entitlements entitlements.plist --sign "Developer ID Application: …" Zoggyfin.app
-xcrun notarytool submit Zoggyfin.zip --keychain-profile … --wait
-xcrun stapler staple Zoggyfin.app
+pnpm desktop:release
+# -> $BUILD_DIR/release/Zoggyfin-<version>-arm64.dmg (signed, notarized, stapled)
 ```
 
-With the hardened runtime, the app loads only libraries signed with the same Team ID.
-The test build loads Homebrew's libmpv, which has another signature. Thus the test build is
-ad-hoc signed without the hardened runtime (`signingIdentity: "-"`, `hardenedRuntime: false`
-in `tauri.conf.json`). The Developer ID build sets `hardenedRuntime: true` and bundles a
-libmpv signed with the app's identity. `macOSPrivateApi` (transparent web view) is acceptable for Developer ID
-distribution but not for the Mac App Store.
+`desktop/scripts/release.sh` runs these steps:
 
-The test build is ad-hoc signed (`codesign --sign -`). It runs on this Mac; another Mac
-needs Homebrew mpv and a right-click, Open.
+1. `build-libmpv.sh`: builds libmpv and its libraries from source (see below).
+2. `expo export --platform web`, then `tauri build --bundles app` with
+   `MPV_LIB_DIR=<work>/libmpv/prefix/lib`.
+3. `bundle-libmpv.sh`: copies libmpv and every library it needs into
+   `Contents/Frameworks` and the license texts into `Contents/Resources/ThirdParty`. It stops
+   when a binary links a path outside the bundle and the system (for example `/opt/homebrew`).
+4. Signs each dylib, then the app, with the Developer ID identity, the hardened runtime and a
+   secure timestamp. The entitlements file (`src-tauri/entitlements.plist`) is empty: all
+   dylibs have the same Team ID, so library validation passes, and nothing uses JIT.
+5. Notarizes the app (`notarytool --wait`) and staples it.
+6. Makes the DMG (the app and a link to Applications), signs it, notarizes it and staples it.
+   Then it checks with `spctl -a -vvv -t install` and `codesign --verify --deep --strict`.
+
+Settings: `BUILD_DIR` (a work folder with about 10 GB free) and a notary file
+(`ZOGGYFIN_NOTARY_ENV`, default `~/.config/zoggyfin-desktop/notary.env`) with
+`APPLE_SIGNING_IDENTITY`, `APPLE_API_KEY` (the key id), `APPLE_API_ISSUER` and
+`APPLE_API_KEY_PATH` (the `.p8` file). Do not commit the notary file. `SKIP_NOTARIZE=1`
+signs only. The script waits while an `eas build` runs, because that narrows the keychain
+search list.
+
+### The LGPL libmpv build
+
+Zoggyfin is MPL-2.0. libmpv is LGPL-2.1+ only when mpv is built with `-Dgpl=false`.
+The Homebrew build is a GPL build (Homebrew FFmpeg has `--enable-gpl`, x264 and x265).
+Use Homebrew libmpv for development only. Do not ship it.
+
+`desktop/scripts/build-libmpv.sh` builds for arm64 with a macOS 13.0 deployment target (the
+`minimumSystemVersion` of the app). The script pins each version and the SHA-256 of each
+source archive (libplacebo: a git commit). Only the work folder is used; pkg-config sees only
+the work prefix, so no Homebrew library gets in.
+
+| Library | Version | License | Notes |
+|---|---|---|---|
+| mpv (libmpv) | 0.41.0 | LGPL-2.1+ | `-Dgpl=false`, no `mpv` program, no Lua, no JavaScript; one upstream patch (audio device change crash on macOS 26) |
+| FFmpeg | 9.0.2 | LGPL-2.1+ | `--disable-autodetect`; no `--enable-gpl`, `--enable-nonfree` or `--enable-version3`; VideoToolbox, AudioToolbox, Secure Transport (HTTPS), dav1d |
+| libplacebo | 7.360.1 | LGPL-2.1+ | OpenGL only (no Vulkan, no shader compilers) |
+| libass | 0.17.5 | ISC | Core Text fonts (no fontconfig) |
+| HarfBuzz | 14.6.0 | MIT | |
+| FreeType | 2.15.0 | FTL | |
+| FriBidi | 1.0.17 | LGPL-2.1+ | |
+| dav1d | 1.5.4 | BSD-2-Clause | AV1 software decoding |
+
+Video decoding: VideoToolbox (`hwdec=auto-safe`, zero copy into OpenGL through
+`videotoolbox-gl`), with dav1d and the FFmpeg decoders as the software path. mpv needs Cocoa
+and its Swift helpers for `videotoolbox-gl`; they link only system Swift libraries.
+
+The script checks the license at the end: `avutil_license()` and the other FFmpeg
+`*_license()` calls (what `ffmpeg -L` prints) must say "LGPL version 2.1 or later", the FFmpeg
+configuration must not have `CONFIG_GPL` or `CONFIG_NONFREE`, and the libmpv property
+`mpv-configuration` (what `mpv --version` prints) must contain `-Dgpl=false`. Result of the
+build for 0.1.0:
+
+```text
+avutil: LGPL version 2.1 or later   (avcodec, avformat, avfilter, swscale, swresample: the same)
+mpv-version: mpv v0.41.0
+mpv-configuration: ... -Dgpl=false -Dlibmpv=true -Dcplayer=false ...
+ffmpeg-version: 9.0.2
+```
+
+The bundle has `Contents/Resources/ThirdParty/THIRD-PARTY-NOTICES.txt` (each library, its
+version, license and source URL, and the written source offer) and the full license texts.
+libmpv and FFmpeg are separate dylibs in `Contents/Frameworks`, so a user can replace them
+(LGPL section 6). Do not copy GPL code into this repository.
+
+**Local Network access.** libmpv opens its own connections to the server. For a server on
+the local network, macOS asks once if Zoggyfin can find devices on the local network
+(`NSLocalNetworkUsageDescription` in `Info.plist`). Until the user allows it, the pages
+load (WebKit), but video stops with "loading failed". A debug build or a binary started from
+a terminal uses the terminal's permission and does not show this.
+
+`macOSPrivateApi` (transparent web view) is acceptable for Developer ID distribution but not
+for the Mac App Store.
 
 ## Left to do
 
-- Bundle an LGPL libmpv and its dylibs; Developer ID signing and notarization.
-- Downloads in Rust (the Downloads tab is hidden on the desktop, as on the web).
-- Now Playing and media keys for libmpv video (the web audio engine has Media Session).
-- Picture in Picture for libmpv video.
+- Picture in Picture for libmpv video (see above).
+- Auto update (for example the Tauri updater with a signed feed).
 - Windows and Linux: the same Rust code with a native child window (`wid`) or the OpenGL
   render API in place of `view_macos.rs`.

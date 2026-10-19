@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements of the Developer ID build (hardened runtime, no App Sandbox).
+  The app needs no exceptions: every dylib in Contents/Frameworks has the same
+  Team ID, so library validation passes, and libmpv and FFmpeg use no JIT.
+  Network access needs no entitlement outside the App Sandbox.
+-->
+<plist version="1.0">
+<dict>
+</dict>
+</plist>

@@ -68,7 +68,7 @@ export const files: DownloadFiles = {
       return null;
     }
   },
-  readUriText(uri) {
+  async readUriText(uri) {
     try {
       const f = new File(uri);
       return f.exists ? f.textSync() : null;

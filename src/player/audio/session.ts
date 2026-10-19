@@ -526,7 +526,7 @@ class AudioSession {
       const { api } = context();
       const local = findDownload(itemId);
       const saved = local?.state === 'completed' && local.hasLyrics ? localExtraUri(local, 'lyrics.json') : null;
-      const text = saved ? readLocalText(saved) : null;
+      const text = saved ? await readLocalText(saved) : null;
       // Another server's download: only its saved lyrics, never a call to the active server.
       const dto = text ? (JSON.parse(text) as LyricDto) : foreignRecord(itemId) ? null : await jf.getLyrics(api, itemId);
       const lyrics = fromLyricDto(dto);

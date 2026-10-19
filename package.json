@@ -72,7 +72,8 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
-    "desktop:build": "expo export --platform web && tauri build --bundles app --config desktop/src-tauri/tauri.conf.json"
+    "desktop:build": "expo export --platform web && tauri build --bundles app --config desktop/src-tauri/tauri.conf.json",
+    "desktop:release": "bash desktop/scripts/release.sh"
   },
   "private": true,
   "license": "MPL-2.0",

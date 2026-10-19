@@ -669,7 +669,7 @@ class VideoSession {
     if (!option?.url) return;
     try {
       const { api } = context();
-      const text = option.url.startsWith('file://') ? (readLocalText(option.url) ?? '') : await jf.getText(api, option.url);
+      const text = /^(file|asset):/.test(option.url) ? ((await readLocalText(option.url)) ?? '') : await jf.getText(api, option.url);
       if (playerState().now?.plan.subtitleIndex !== index) return;
       setPlayerState({ cues: parseVtt(text) });
     } catch (e) {

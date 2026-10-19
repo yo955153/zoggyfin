@@ -5,10 +5,16 @@
  */
 import type { DownloadRecord } from './types';
 
-/** Joins the document directory and a relative path into a file:// URI. */
+/**
+ * Joins the document directory and a relative path into a URI: file:// on
+ * iPhone, the asset:// URL of the data folder in the desktop app.
+ */
 export function fileUri(documentsDir: string, relative: string): string {
-  const base = documentsDir.replace(/^file:\/\//, '').replace(/\/+$/, '');
   const rel = relative.replace(/^\/+/, '');
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(documentsDir) && !documentsDir.startsWith('file://')) {
+    return `${documentsDir.replace(/\/+$/, '')}/${rel}`;
+  }
+  const base = documentsDir.replace(/^file:\/\//, '').replace(/\/+$/, '');
   return `file://${base}/${rel}`;
 }
 

@@ -33,12 +33,16 @@ export const isTV: boolean = isNativeTV || webPreview();
 /** The web TV preview (arrow keys move the focus, Escape goes back). */
 export const isTVPreview: boolean = isTV && !isNativeTV;
 
+/** The desktop app (Tauri) runs the web build and has downloads. */
+const isDesktopApp = Platform.OS === 'web' && typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
 /**
  * What each platform shows. TV has no downloads, no watch together and no
- * extension web panels (design spec, Platforms). Web has no downloads.
+ * extension web panels (design spec, Platforms). Web has no downloads, but
+ * the desktop app has.
  */
 export const features = {
-  downloads: !isTV && Platform.OS !== 'web',
+  downloads: !isTV && (Platform.OS !== 'web' || isDesktopApp),
   watchTogether: !isTV,
   extensionPanels: !isTV,
   touchGestures: !isTV,

@@ -30,12 +30,12 @@ export { etaSeconds, fraction } from './state-machine';
 export { chooseMedia, fileUri, localImageUri, localMediaUri } from './local';
 export { isNetworkError, serverOrLocal } from './fallback';
 
-/** Reads a local text file (a downloaded subtitle) by its file:// URI. */
-export function readLocalText(uri: string): string | null {
+/** Reads a local text file (a downloaded subtitle or lyrics) by its local URI. */
+export function readLocalText(uri: string): Promise<string | null> {
   return files.readUriText(uri);
 }
 
-/** True where downloads exist (iPhone, iPad, Mac). False on web and TV. */
+/** True where downloads exist (iPhone, iPad, the desktop app). False on web and TV. */
 export const downloadsSupported: boolean = features.downloads && downloadManager.supported;
 
 export const downloads = {

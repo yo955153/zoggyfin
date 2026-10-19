@@ -4,9 +4,27 @@
  * subtitles), draws the video under the web page and switches tracks inside
  * the file. The player screen draws the controls over the video.
  */
-import { desktopWindow, mpv, type MpvEvent, type MpvTrack } from '@/platform/desktop';
+import { desktopWindow, localPath, mpv, type MpvEvent, type MpvTrack, nowPlaying, type NowPlayingInfo, type RemoteCommand } from '@/platform/desktop';
 
 import type { EngineEvent, EngineListener, EngineSource, EngineSubtitle, VideoEngine } from './engine-types';
+
+/** What Now Playing shows for the current state; null when nothing plays. */
+export function nowPlayingInfo(
+  meta: { title: string; subtitle?: string; artworkUri?: string } | null,
+  state: { duration: number; position: number; paused: boolean; rate: number },
+): NowPlayingInfo | null {
+  if (!meta) return null;
+  return {
+    title: meta.title,
+    subtitle: meta.subtitle,
+    // Only http(s) artwork: Rust loads it; local files are not reachable by URL there.
+    artworkUrl: meta.artworkUri && /^https?:\/\//.test(meta.artworkUri) ? meta.artworkUri : undefined,
+    duration: state.duration,
+    position: state.position,
+    playing: !state.paused,
+    rate: state.rate,
+  };
+}
 
 /** The libmpv track for a Jellyfin stream index: the same stream index in the file, else the same position. */
 export function trackFor(tracks: readonly MpvTrack[], type: 'audio' | 'sub', index: number, ordinal: number): MpvTrack | null {
@@ -34,10 +52,47 @@ export class MpvEngine implements VideoEngine {
   private pendingSub: EngineSubtitle | null | undefined = undefined;
   /** External subtitle URLs already added to this file, with their libmpv track id. */
   private added = new Map<string, number>();
+  /** Now Playing: the loaded item, its length and speed. */
+  private meta: { title: string; subtitle?: string; artworkUri?: string } | null = null;
+  private duration = 0;
+  private rate = 1;
 
   constructor() {
     mpv.subscribe(this.onEvent);
+    nowPlaying.onRemote(this.onRemote);
   }
+
+  /** Sends the state to Now Playing (on load, play, pause, seek, speed and length changes). */
+  private publish() {
+    const info = nowPlayingInfo(this.active ? this.meta : null, { duration: this.duration, position: this.pos, paused: this.paused, rate: this.rate });
+    void (info ? nowPlaying.update(info) : nowPlaying.clear()).catch(() => undefined);
+  }
+
+  private onRemote = (c: RemoteCommand) => {
+    if (!this.active) return;
+    switch (c.command) {
+      case 'play':
+        this.play();
+        break;
+      case 'pause':
+        this.pause();
+        break;
+      case 'toggle':
+        if (this.paused) this.play();
+        else this.pause();
+        break;
+      case 'skip':
+        this.seekTo(this.pos + c.seconds);
+        break;
+      case 'seek':
+        this.seekTo(c.position);
+        break;
+      case 'next':
+      case 'previous':
+        this.emit({ type: 'remote', command: c.command });
+        break;
+    }
+  };
 
   private emit(e: EngineEvent) {
     this.listeners.forEach((l) => l(e));
@@ -55,9 +110,14 @@ export class MpvEngine implements VideoEngine {
       case 'tracks':
         this.tracksNow = e.tracks;
         break;
+      case 'playback-restart':
+        // After a seek: Now Playing moves its time from the new position.
+        if (this.active) this.publish();
+        break;
       case 'file-loaded':
         this.loaded = true;
         this.applyPendingTracks();
+        this.publish();
         this.emit({ type: 'status', status: 'ready' });
         this.emit({ type: 'playing', playing: !this.paused });
         break;
@@ -65,9 +125,11 @@ export class MpvEngine implements VideoEngine {
         if (!this.active) break;
         if (e.reason === 'eof') {
           this.active = false;
+          this.publish();
           this.emit({ type: 'ended' });
         } else if (e.reason === 'error') {
           this.active = false;
+          this.publish();
           this.emit({ type: 'status', status: 'error', error: e.error ? `The video could not be played (${e.error}).` : 'The video could not be played.' });
         }
         break;
@@ -88,16 +150,27 @@ export class MpvEngine implements VideoEngine {
         if (typeof value === 'number') this.cacheEnd = value;
         break;
       case 'duration':
-        if (typeof value === 'number' && value > 0) this.emit({ type: 'duration', duration: value });
+        if (typeof value === 'number' && value > 0) {
+          this.duration = value;
+          this.publish();
+          this.emit({ type: 'duration', duration: value });
+        }
         break;
       case 'pause':
-        if (typeof value === 'boolean') this.emit({ type: 'playing', playing: !value });
+        if (typeof value === 'boolean') {
+          this.publish();
+          this.emit({ type: 'playing', playing: !value });
+        }
         break;
       case 'paused-for-cache':
         if (this.loaded && typeof value === 'boolean') this.emit({ type: 'status', status: value ? 'loading' : 'ready' });
         break;
       case 'speed':
-        if (typeof value === 'number') this.emit({ type: 'rate', rate: value });
+        if (typeof value === 'number') {
+          this.rate = value;
+          this.publish();
+          this.emit({ type: 'rate', rate: value });
+        }
         break;
       case 'mute':
         if (typeof value === 'boolean') this.emit({ type: 'muted', muted: value });
@@ -125,13 +198,16 @@ export class MpvEngine implements VideoEngine {
     this.subOrder = source.streams?.subtitles ?? [];
     this.pendingAudio = source.audioIndex ?? null;
     this.pendingSub = undefined;
+    this.meta = { title: source.title, subtitle: source.subtitle, artworkUri: source.artworkUri };
+    this.duration = 0;
     this.emit({ type: 'status', status: 'loading' });
     const paused = source.autoplay === false;
     this.run(async () => {
       await mpv.set('pause', paused);
       await mpv.set('force-media-title', source.title);
       // Subtitles stay off until the session picks one; audio follows the plan.
-      await mpv.command('loadfile', source.uri, 'replace', '-1', `start=${start.toFixed(3)},sid=no`);
+      // A download plays from its file on the disk.
+      await mpv.command('loadfile', localPath(source.uri), 'replace', '-1', `start=${start.toFixed(3)},sid=no`);
     });
   }
 
@@ -140,6 +216,8 @@ export class MpvEngine implements VideoEngine {
     this.active = false;
     this.loaded = false;
     this.pos = 0;
+    this.meta = null;
+    this.publish();
     this.run(() => mpv.command('stop'));
   }
 
@@ -208,7 +286,7 @@ export class MpvEngine implements VideoEngine {
       }
       const url = sub.url;
       this.run(async () => {
-        await mpv.command('sub-add', url, 'select', sub.label, sub.language ?? '');
+        await mpv.command('sub-add', localPath(url), 'select', sub.label, sub.language ?? '');
         const id = Number(await mpv.get('sid'));
         if (Number.isFinite(id)) this.added.set(url, id);
       });

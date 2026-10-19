@@ -1,7 +1,13 @@
-/** Web and TV: no downloads. Native builds use `engine.native.ts`. */
+/**
+ * Web and TV: no downloads. The desktop app (Tauri) downloads in Rust
+ * (`desktop.ts`). Native builds use `engine.native.ts`.
+ */
+import { dataDir, invoke, onDownloadEvent } from '@/platform/desktop';
+
+import { createDesktopEngine } from './desktop';
 import type { DownloadEngine } from './engine-types';
 
-export const engine: DownloadEngine = {
+const none: DownloadEngine = {
   supported: false,
   configure: () => undefined,
   start: () => undefined,
@@ -11,3 +17,5 @@ export const engine: DownloadEngine = {
   existing: async () => [],
   finish: () => undefined,
 };
+
+export const engine: DownloadEngine = dataDir ? createDesktopEngine(invoke, onDownloadEvent) : none;

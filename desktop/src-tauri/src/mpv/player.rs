@@ -83,8 +83,11 @@ impl Mpv {
                 ("sub-shadow-offset", "1"),
             ];
             for (k, v) in options {
-                let (k, v) = (cstring(k)?, cstring(v)?);
-                check(mpv_set_option_string(handle, k.as_ptr(), v.as_ptr()), "set option")?;
+                let (kc, vc) = (cstring(k)?, cstring(v)?);
+                // A build without Lua has no `osc`, `ytdl` or `load-scripts`: those are off anyway.
+                if let Err(e) = check(mpv_set_option_string(handle, kc.as_ptr(), vc.as_ptr()), k) {
+                    eprintln!("[mpv] {e}");
+                }
             }
             check(mpv_initialize(handle), "start libmpv")?;
             for (i, (name, format)) in OBSERVED.iter().enumerate() {

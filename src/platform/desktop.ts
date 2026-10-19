@@ -8,7 +8,8 @@
  * nothing here runs.
  *
  * The Rust side calls `window.__zoggyfinDesktop.mpv(event)` for libmpv
- * events and `window.__zoggyfinDesktop.menu(command)` for menu items.
+ * events, `.menu(command)` for menu items, `.download(event)` for download
+ * progress and `.remote(command)` for the media keys and Now Playing.
  */
 import { router } from 'expo-router';
 
@@ -18,9 +19,16 @@ interface TauriInternals {
 
 type DesktopWindow = Window & {
   __TAURI_INTERNALS__?: TauriInternals;
-  __zoggyfinDesktop?: { mpv(event: MpvEvent): void; menu(command: string): void };
+  __zoggyfinDesktop?: {
+    mpv(event: MpvEvent): void;
+    menu(command: string): void;
+    download(event: DownloadEvent): void;
+    remote(command: RemoteCommand): void;
+  };
   /** Set by the desktop app before the page loads when libmpv started. */
   __ZOGGYFIN_MPV__?: boolean;
+  /** The app data folder (absolute path), set by the desktop app before the page loads. */
+  __ZOGGYFIN_DATA_DIR__?: string;
 };
 
 function tauri(): TauriInternals | null {
@@ -34,7 +42,10 @@ export const isDesktop: boolean = tauri() !== null;
 /** True when the desktop app plays video through libmpv. */
 export const hasMpv: boolean = isDesktop && (window as DesktopWindow).__ZOGGYFIN_MPV__ === true;
 
-function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+/** The app data folder (an absolute path) in the desktop app, else null. Downloads live under it. */
+export const dataDir: string | null = (isDesktop && (window as DesktopWindow).__ZOGGYFIN_DATA_DIR__) || null;
+
+export function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const t = tauri();
   if (!t) return Promise.reject(new Error('Not in the desktop app.'));
   return t.invoke(cmd, args) as Promise<T>;
@@ -59,6 +70,68 @@ export type MpvEvent =
   | { type: 'end-file'; reason: 'eof' | 'error' | 'stop' | 'quit' | 'redirect'; error: string | null };
 
 const mpvListeners = new Set<(e: MpvEvent) => void>();
+
+/** Download progress from the Rust downloader (`desktop/src-tauri/src/downloads.rs`). */
+export type DownloadEvent =
+  | { type: 'begin'; id: string; expected: number }
+  | { type: 'progress'; id: string; done: number; total: number }
+  | { type: 'done'; id: string; bytes: number }
+  | { type: 'error'; id: string; message: string; code: number };
+
+const downloadListeners = new Set<(e: DownloadEvent) => void>();
+
+/** Download events. Returns the unsubscribe function. */
+export function onDownloadEvent(listener: (e: DownloadEvent) => void): () => void {
+  downloadListeners.add(listener);
+  return () => downloadListeners.delete(listener);
+}
+
+/** A media key, a Control Center button or a Now Playing seek (macOS). */
+export type RemoteCommand =
+  | { command: 'play' | 'pause' | 'toggle' | 'next' | 'previous' }
+  | { command: 'skip'; seconds: number }
+  | { command: 'seek'; position: number };
+
+const remoteListeners = new Set<(c: RemoteCommand) => void>();
+
+/** What the system shows in Now Playing for libmpv video. */
+export interface NowPlayingInfo {
+  title: string;
+  subtitle?: string;
+  artworkUrl?: string;
+  duration: number;
+  position: number;
+  playing: boolean;
+  rate: number;
+}
+
+/** Now Playing and the media keys for libmpv video (macOS; elsewhere the calls do nothing). */
+export const nowPlaying = {
+  update: (info: NowPlayingInfo): Promise<void> => invoke('now_playing_update', { info }),
+  clear: (): Promise<void> => invoke('now_playing_clear'),
+  onRemote(listener: (c: RemoteCommand) => void): () => void {
+    remoteListeners.add(listener);
+    return () => remoteListeners.delete(listener);
+  },
+};
+
+/** The URL prefix of Tauri's asset protocol, which serves local files to the page (macOS). */
+const ASSET_PREFIX = 'asset://localhost/';
+
+/**
+ * A page URL for a folder on the disk. The page cannot load `file://` URLs;
+ * Tauri's asset protocol serves the files (with HTTP ranges, for audio seeks).
+ */
+export function assetUrl(path: string): string {
+  return ASSET_PREFIX + encodeURIComponent(path.replace(/\/+$/, ''));
+}
+
+/** The disk path of a local URL (`asset://` or `file://`), for libmpv. Other URLs stay as they are. */
+export function localPath(uri: string): string {
+  if (uri.startsWith(ASSET_PREFIX)) return decodeURIComponent(uri.slice(ASSET_PREFIX.length));
+  if (uri.startsWith('file://')) return decodeURIComponent(uri.slice('file://'.length));
+  return uri;
+}
 
 /** libmpv in the desktop app. All calls fail outside the desktop app. */
 export const mpv = {
@@ -152,7 +225,8 @@ function installChrome(): void {
     html.zf-fullscreen #zf-titlebar { display: none; }
     html.${VIDEO_CLASS}, html.${VIDEO_CLASS} body { background: transparent !important; }
     html.${VIDEO_CLASS} [${PATH_ATTRIBUTE}] { background-color: transparent !important; background-image: none !important; }
-    html.${VIDEO_CLASS} *:has(~ [${PATH_ATTRIBUTE}]) { visibility: hidden !important; }
+    html.${VIDEO_CLASS} *:has(~ [${PATH_ATTRIBUTE}]),
+    html.${VIDEO_CLASS} *:has(~ [${PATH_ATTRIBUTE}]) * { visibility: hidden !important; }
   `;
   document.head.appendChild(style);
   const bar = document.createElement('div');
@@ -172,9 +246,12 @@ if (isDesktop && typeof window !== 'undefined') {
   (window as DesktopWindow).__zoggyfinDesktop = {
     mpv: (event) => mpvListeners.forEach((l) => l(event)),
     menu: onMenu,
+    download: (event) => downloadListeners.forEach((l) => l(event)),
+    remote: (command) => remoteListeners.forEach((l) => l(command)),
   };
   installChrome();
   // A page reload leaves libmpv as it was: stop what played before.
   void mpv.command('stop').catch(() => undefined);
   void mpv.setVideoVisible(false).catch(() => undefined);
+  void nowPlaying.clear().catch(() => undefined);
 }

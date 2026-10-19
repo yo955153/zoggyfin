@@ -9,6 +9,10 @@ describe('local-first media choice', () => {
     expect(fileUri('/data/Documents', '/downloads/a')).toBe('file:///data/Documents/downloads/a');
   });
 
+  it('keeps the asset URL of the desktop data folder', () => {
+    expect(fileUri('asset://localhost/%2Fdata%2FApp%20Support', 'downloads/a/media.mkv')).toBe('asset://localhost/%2Fdata%2FApp%20Support/downloads/a/media.mkv');
+  });
+
   it('plays a completed download from the device and never builds the server URL', () => {
     const r = rec({ state: 'completed', mediaFile: 'media.mp3' });
     const remote = jest.fn(() => 'http://server/stream');

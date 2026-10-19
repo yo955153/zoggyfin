@@ -32,6 +32,22 @@ pub fn debug_log(line: String) {
     }
 }
 
+/// Writes what MPNowPlayingInfoCenter has to `out.log` (main thread).
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn debug_now_playing<R: Runtime>(app: AppHandle<R>) {
+    let _ = app.run_on_main_thread(|| {
+        use objc2_media_player::MPNowPlayingInfoCenter;
+        // SAFETY: main thread.
+        let (info, state) = unsafe {
+            let c = MPNowPlayingInfoCenter::defaultCenter();
+            (c.nowPlayingInfo(), c.playbackState())
+        };
+        let text = info.map(|i| format!("{i:?}")).unwrap_or_else(|| "none".into());
+        debug_log(format!("now playing (state {}): {}", state.0, text.replace('\n', " ")));
+    });
+}
+
 pub fn start<R: Runtime>(app: &AppHandle<R>) {
     let Some(d) = dir() else { return };
     let _ = std::fs::create_dir_all(&d);

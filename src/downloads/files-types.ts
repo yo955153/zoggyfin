@@ -11,8 +11,8 @@ export interface DownloadFiles {
   remove(relative: string): void;
   writeText(relative: string, text: string): void;
   readText(relative: string): string | null;
-  /** Reads a text file by its file:// URI (local subtitles). */
-  readUriText(uri: string): string | null;
+  /** Reads a text file by its local URI (`localExtraUri`: subtitles, lyrics). */
+  readUriText(uri: string): Promise<string | null>;
   /** Downloads a small file (image, subtitle) in the foreground. */
   fetchFile(url: string, relative: string, headers?: Record<string, string>): Promise<number>;
   /** Free and total bytes on the device, or null when unknown. */

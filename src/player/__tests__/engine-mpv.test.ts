@@ -1,6 +1,6 @@
 import type { MpvTrack } from '@/platform/desktop';
 
-import { trackFor } from '../engine-mpv';
+import { nowPlayingInfo, trackFor } from '../engine-mpv';
 
 function track(id: number, type: MpvTrack['type'], ffIndex: number | null, external = false): MpvTrack {
   return { id, type, ffIndex, external, title: null, lang: null, codec: null, selected: false };
@@ -30,5 +30,29 @@ describe('libmpv track for a Jellyfin stream', () => {
 
   it('never picks an added subtitle file for an embedded stream', () => {
     expect(trackFor(tracks, 'sub', 9, 2)).toBeNull();
+  });
+});
+
+describe('Now Playing for libmpv video', () => {
+  const state = { duration: 5400, position: 61.5, paused: false, rate: 1 };
+
+  it('shows nothing when no file plays', () => {
+    expect(nowPlayingInfo(null, state)).toBeNull();
+  });
+
+  it('shows the title, the times and the play state', () => {
+    expect(nowPlayingInfo({ title: 'Movie', subtitle: '2024', artworkUri: 'https://s/Items/1/Images/Primary' }, { ...state, paused: true })).toEqual({
+      title: 'Movie',
+      subtitle: '2024',
+      artworkUrl: 'https://s/Items/1/Images/Primary',
+      duration: 5400,
+      position: 61.5,
+      playing: false,
+      rate: 1,
+    });
+  });
+
+  it('leaves out artwork that is not on a server', () => {
+    expect(nowPlayingInfo({ title: 'Movie', artworkUri: 'asset://localhost/x/primary.jpg' }, state)?.artworkUrl).toBeUndefined();
   });
 });

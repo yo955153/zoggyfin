@@ -1,7 +1,13 @@
-/** Web: downloads are hidden, so there are no files. Native builds use `files.native.ts`. */
+/**
+ * Web: downloads are hidden, so there are no files. The desktop app (Tauri)
+ * has them (`desktop.ts`). Native builds use `files.native.ts`.
+ */
+import { assetUrl, dataDir, invoke } from '@/platform/desktop';
+
+import { createDesktopFiles } from './desktop';
 import type { DownloadFiles } from './files-types';
 
-export const files: DownloadFiles = {
+const none: DownloadFiles = {
   documentsDir: () => null,
   absolutePath: (relative) => relative,
   ensureDir: () => undefined,
@@ -10,9 +16,11 @@ export const files: DownloadFiles = {
   remove: () => undefined,
   writeText: () => undefined,
   readText: () => null,
-  readUriText: () => null,
+  readUriText: async () => null,
   fetchFile: async () => 0,
   diskSpace: () => null,
   listDirs: () => [],
   excludeFromBackup: () => undefined,
 };
+
+export const files: DownloadFiles = dataDir ? createDesktopFiles(invoke, dataDir, assetUrl) : none;
