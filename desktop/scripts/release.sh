@@ -114,8 +114,11 @@ fi
 
 # 4. Sign: the dylibs first, then the app, with the hardened runtime and a timestamp.
 log "Sign with $APPLE_SIGNING_IDENTITY"
-while pgrep -f "eas build" >/dev/null; do
-  echo "An EAS build runs (it changes the keychain list). Waiting..."
+# A local EAS build (`eas build --local`) narrows the keychain search list while it runs, and
+# codesign then cannot find the identity. Wait for it. Cloud builds (`eas build:view`, a
+# build on the EAS servers) do not touch the keychain.
+while pgrep -f "eas build .*--local|eas build --local" >/dev/null; do
+  echo "A local EAS build runs (it changes the keychain list). Waiting..."
   sleep 30
 done
 for lib in "$APP"/Contents/Frameworks/*.dylib; do

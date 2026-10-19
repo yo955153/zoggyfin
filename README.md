@@ -1,10 +1,17 @@
 # Zoggyfin
 
 Zoggyfin is an open-source client for [Jellyfin](https://jellyfin.org) media servers.
-It runs on iPhone, iPad, Apple Silicon Macs ("Designed for iPad") and the web.
+It runs on iPhone, iPad and the web, and on Apple silicon Macs as a desktop app with libmpv (`desktop/`).
 Android comes later. The goal is a client that is fast, stable and clear.
 
 Zoggyfin is not affiliated with the Jellyfin project.
+
+## Download
+
+- **Mac** (Apple silicon, macOS 13 or later): [Zoggyfin-arm64.dmg](https://releases.zog-tech.com/zoggyfin/latest/Zoggyfin-arm64.dmg),
+  signed and notarized. The app updates itself. All versions and notes:
+  [zoggyfin.zog-tech.com/download](https://zoggyfin.zog-tech.com/download) and the GitHub releases.
+- **iPhone and iPad:** the beta on [TestFlight](https://testflight.apple.com/join/qRFABNBJ).
 
 ## Status
 

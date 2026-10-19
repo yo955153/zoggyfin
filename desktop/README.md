@@ -143,11 +143,81 @@ of its window (video and page together); an app can capture its own window witho
 screen recording permission. Scripts write lines to `<folder>/out.log` with
 `__TAURI_INTERNALS__.invoke('debug_log', { line })`. Release builds do not contain this code.
 
+## Updates
+
+The app updates itself with the [Tauri updater](https://v2.tauri.app/plugin/updater/) and a
+signed feed on Cloudflare R2: `https://releases.zog-tech.com/zoggyfin/latest.json`
+(`plugins.updater` in `tauri.conf.json`, with the public key).
+
+- The web app (`src/platform/updates/`) checks 10 s after start and every 4 hours in release
+  builds. "Check for Updates…" in the app menu and in Settings checks at once. The state rules
+  (`machine.ts`) and the version compare (`version.ts`) are pure code with unit tests.
+- The update card (`src/features/updates/update-card.tsx`, design system §7.18) shows the new
+  version and its notes, "Install and restart" and "Later", a progress bar, and the errors.
+  "Later" keeps quiet for that version only. In a browser and on iPhone and iPad nothing shows.
+- Rust (`src-tauri/src/update.rs`) checks, downloads (progress events to
+  `window.__zoggyfinDesktop.update`), checks the signature, and installs. These rules came from
+  the problems of an earlier Tauri app:
+  - The update goes into the bundle that the user installed: the real path of the executable,
+    or the original path when macOS translocated the app.
+  - Relaunch: a detached shell waits until the old process has exited, then runs `open` on the
+    same bundle path (no `-n`). Tauri's `restart()` starts the new process while the old one
+    runs, and the Dock then shows two icons.
+  - A release build that runs from the disk image, App Translocation or `~/Downloads` asks to
+    move to Applications ("Do not ask again" is kept in the app config folder). The copy is made
+    with `ditto` and loses the quarantine attribute, so it is not translocated again.
+  - The single-instance plugin: a second start focuses the running window.
+  - `panic = "unwind"` in the release profile (`lib.rs` refuses "abort"): wry catches WebKit's
+    Objective-C exceptions by unwinding through Rust.
+  - An app on the Desktop needs the macOS Desktop folder permission for the swap. The install
+    waits until the user answers.
+
+## Publish a release
+
+One command builds, signs, notarizes, uploads and makes the GitHub release:
+
+```sh
+pnpm desktop:version 0.1.2   # tauri.conf.json, Cargo.toml and Cargo.lock; adds a CHANGELOG section
+# write the notes in desktop/CHANGELOG.md, commit, push to main
+pnpm desktop:publish
+```
+
+`desktop/scripts/publish.sh`:
+
+1. Checks: the CHANGELOG has a section for the version, HEAD is on `origin/main`, the version
+   is not on R2 yet, and the updater endpoint matches the R2 prefix.
+2. Makes a clean git worktree of HEAD in `$BUILD_DIR/src` and runs `release.sh` there, so
+   uncommitted files never ship.
+3. Writes `latest.json` (version, notes from the CHANGELOG, date, the signature and the URL of
+   the update archive).
+4. Uploads to R2. The version files first, the feed last:
+
+   | Path under `https://releases.zog-tech.com/zoggyfin/` | Cache |
+   |---|---|
+   | `<version>/Zoggyfin-<version>-arm64.dmg` | immutable |
+   | `<version>/Zoggyfin-<version>-arm64.app.tar.gz` and `.sig` (the update) | immutable |
+   | `<version>/latest.json` | no-cache |
+   | `latest/Zoggyfin-arm64.dmg` (the website link: always the newest) | no-cache |
+   | `latest.json` (the updater feed) | no-cache |
+
+5. Makes the GitHub release `v<version>` with the DMG, the update archive, its signature and
+   `latest.json`. While the repository is private, only collaborators see it.
+
+Secrets stay in `~/.config/zoggyfin-desktop/` (mode 600, never in the repository):
+`notary.env` (Developer ID identity and the App Store Connect API key), `updater.env` and
+`updater.key` (the updater private key and its password), `r2.env` (`R2_ENDPOINT`,
+`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PREFIX`, `R2_PUBLIC_URL`).
+If the updater key is lost, installed apps cannot update any more: keep a backup of it.
+
+Options: `SKIP_BUILD=1` (publish the last build), `SKIP_GITHUB=1`, and for test releases only
+`ALLOW_UNPUSHED=1` and `REPUBLISH=1`.
+
 ## Release: LGPL libmpv, signing and notarization
 
 ```sh
 pnpm desktop:release
-# -> $BUILD_DIR/release/Zoggyfin-<version>-arm64.dmg (signed, notarized, stapled)
+# -> $BUILD_DIR/release/<version>/ Zoggyfin-<version>-arm64.dmg (signed, notarized, stapled),
+#    Zoggyfin-<version>-arm64.app.tar.gz and .sig (the update), Zoggyfin.app
 ```
 
 `desktop/scripts/release.sh` runs these steps:
@@ -162,10 +232,19 @@ pnpm desktop:release
    secure timestamp. The entitlements file (`src-tauri/entitlements.plist`) is empty: all
    dylibs have the same Team ID, so library validation passes, and nothing uses JIT.
 5. Notarizes the app (`notarytool --wait`) and staples it.
-6. Makes the DMG (the app and a link to Applications), signs it, notarizes it and staples it.
-   Then it checks with `spctl -a -vvv -t install` and `codesign --verify --deep --strict`.
+6. Makes the update archive: a `tar.gz` of the stapled app (with `COPYFILE_DISABLE=1`),
+   signed with the updater key (`tauri signer sign`). Tauri's own updater archive is not used:
+   Tauri makes it before libmpv goes in and before notarization.
+7. Makes the DMG with `dmgbuild` (`desktop/dmg/settings.py`): a 600 × 380 window, the app on
+   the left, a link to Applications on the right, and the background from
+   `desktop/scripts/dmg-background.py`. `desktop/dmg/verify.py` checks the layout. Then it
+   signs, notarizes and staples the DMG, and checks with `spctl -a -vvv -t install` and
+   `codesign --verify --deep --strict`.
 
-Settings: `BUILD_DIR` (a work folder with about 10 GB free) and a notary file
+Settings: `BUILD_DIR` (a work folder with about 10 GB free, default
+`/Users/Shared/zoggyfin-release`; not in the home folder, because FFmpeg keeps its build path
+in the library and the privacy check stops on the home folder path), the updater file
+(`ZOGGYFIN_UPDATER_ENV`, default `~/.config/zoggyfin-desktop/updater.env`) and a notary file
 (`ZOGGYFIN_NOTARY_ENV`, default `~/.config/zoggyfin-desktop/notary.env`) with
 `APPLE_SIGNING_IDENTITY`, `APPLE_API_KEY` (the key id), `APPLE_API_ISSUER` and
 `APPLE_API_KEY_PATH` (the `.p8` file). Do not commit the notary file. `SKIP_NOTARIZE=1`
@@ -228,6 +307,5 @@ for the Mac App Store.
 ## Left to do
 
 - Picture in Picture for libmpv video (see above).
-- Auto update (for example the Tauri updater with a signed feed).
 - Windows and Linux: the same Rust code with a native child window (`wid`) or the OpenGL
   render API in place of `view_macos.rs`.

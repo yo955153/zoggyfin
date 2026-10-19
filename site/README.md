@@ -5,13 +5,17 @@ The static pages for `zoggyfin.zog-tech.com`. The App Store listing links to the
 | Path | File |
 |---|---|
 | `/` | `public/index.html` |
+| `/download` | `public/download/index.html` (Mac DMG, TestFlight) |
 | `/privacy` | `public/privacy/index.html` |
 | `/support` | `public/support/index.html` |
 | any other path | `public/404.html` |
 
 All pages use the one stylesheet `public/style.css`. The pages are plain HTML: no build
-step, no scripts, no external requests. The Content-Security-Policy in `nginx.conf` blocks
-scripts and external files, so change it if a page needs more. Add a page as
+step and no external requests. The only script is `public/download/download.js`: it reads
+`/download/latest.json` and shows the newest Mac version and its notes. nginx serves that
+file from the update feed (`https://releases.zog-tech.com/zoggyfin/latest.json`), so the
+page needs no change for a new release. The Content-Security-Policy in `nginx.conf` allows
+scripts and requests from the same origin only. Add a page as
 `public/<name>/index.html`; nginx serves it at `/<name>`.
 
 Rules: no personal names or personal domains. The owner is Zog Tech, Inc. The contact is

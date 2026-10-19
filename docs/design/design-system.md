@@ -536,6 +536,30 @@ The generated tile is a real tile (same press, hover and badge rules). It is not
 
 Disabled: 40 % opacity, `accessibilityState={{ disabled: true }}`, no press feedback.
 
+### 7.18 Update card (Mac app)
+
+- Only in the desktop app. Nothing shows in a browser or on iPhone and iPad.
+- Place: bottom trailing, over the content, 16 pt from the edge, and above the mini player
+  (84 pt from the bottom). Width 340 (less in a narrow window). It does not block the page.
+- Card: `material.chrome` glass (`glassFallback` on web), radius 14, `floating` shadow,
+  16-pt padding. Leading badge 29 × 29 (radius 7) on `accentSoft` with an `accent` glyph;
+  on an error, `surface3` with a `danger` glyph.
+- Text: title `headline` ("Zoggyfin 0.1.2 is available"), then `footnote` `text2`
+  ("You have version 0.1.1."). Release notes as bullets in `subheadline`, at most 4 lines,
+  then "Show all (n)" in `accent`.
+- Buttons, trailing: Small tonal "Later" and Small primary "Install and restart". After an
+  error: "Later" (or "Close") and "Try again", with the error text in `footnote` `danger`.
+- Download: a 4-pt bar (`accent` on `surface3`, pill), with "12.3 MB of 40.0 MB" in
+  `footnote` tabular `text2`. Install: a small spinner and "Installing. Zoggyfin restarts."
+  During the download and the install, no button closes the card.
+- A manual check ("Check for Updates…" in the app menu and in Settings) shows "Checking…",
+  then the result. "Zoggyfin is up to date" closes after 4 s.
+- An automatic check opens the card only for a new version, and not for a version that the
+  user put off with "Later". It does not take the focus. A manual check focuses the main
+  button. Esc in the card is "Later".
+- Motion: in with a 12-pt slide and a fade (`smooth` spring), out with a 160-ms fade.
+  Reduced motion: the fade only. VoiceOver reads the title.
+
 ---
 
 ## 8. iPad, Mac, keyboard and pointer
