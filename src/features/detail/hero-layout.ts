@@ -40,3 +40,24 @@ export function heroHeight(layout: HeroLayout, width: number, height: number, wi
   if (layout === 'backdrop') return Math.round(wideWindow ? Math.min(420, height * 0.5) : Math.min(height * 0.56, 520));
   return 0;
 }
+
+/**
+ * The round actions under the hero that fit in one row of `width`. The gap
+ * gets smaller first (from the first to the last value of `gaps`). When the
+ * row is still too wide, actions marked `spare` (they are also in the More
+ * sheet) leave the row, last first. Before the first layout (width 0) all
+ * actions show. Pure.
+ */
+export function fitRoundActions<T extends { spare?: boolean }>(items: readonly T[], width: number, itemWidth: number, gaps: readonly number[]): { items: T[]; gap: number } {
+  const all = [...items];
+  const gap = gaps[0] ?? 0;
+  if (width <= 0 || !gaps.length) return { items: all, gap };
+  const fits = (n: number, g: number) => n * itemWidth + Math.max(0, n - 1) * g <= width;
+  for (const g of gaps) if (fits(all.length, g)) return { items: all, gap: g };
+  const last = gaps[gaps.length - 1] ?? 0;
+  const kept = [...all];
+  for (let i = kept.length - 1; i >= 0 && !fits(kept.length, last); i--) {
+    if (kept[i]?.spare) kept.splice(i, 1);
+  }
+  return { items: kept, gap: last };
+}

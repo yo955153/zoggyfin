@@ -12,6 +12,7 @@ import { findServer } from '@/auth/accounts';
 import { useAccounts } from '@/auth/session-store';
 import { Button } from '@/components/button';
 import { ItemImage } from '@/components/item-image';
+import { shapeFor } from '@/components/tile-shape';
 import { downloadedChildren, downloads } from '@/downloads';
 import { TrackRow } from '@/features/detail/rows';
 import { confirmDestructive } from '@/lib/confirm';
@@ -33,7 +34,9 @@ export function OtherServerDownloadDetail({ item, serverId }: { item: BaseItemDt
   const container = CONTAINERS.has(item.Type ?? '');
   const children = container ? (downloadedChildren(item.Id) ?? []) : [];
   const audio = item.Type === 'MusicAlbum' || item.Type === 'Playlist' || item.MediaType === 'Audio';
-  const width = Math.min(l.width - l.gutter * 2, scaled(audio ? 240 : 200));
+  // Wide art (episodes, videos) shows 16:9, so a video thumbnail is not cut to a poster.
+  const wide = !audio && (shapeFor(item) === 'thumb' || (item.PrimaryImageAspectRatio ?? 0) > 1.2);
+  const width = Math.min(l.width - l.gutter * 2, scaled(audio ? 240 : wide ? 320 : 200));
   const meta = [item.Type === 'Episode' ? item.SeriesName : null, item.ProductionYear ? String(item.ProductionYear) : null, item.AlbumArtist]
     .filter(Boolean)
     .join(' · ');
@@ -56,7 +59,7 @@ export function OtherServerDownloadDetail({ item, serverId }: { item: BaseItemDt
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[s.content, { paddingHorizontal: l.gutter }]}>
       <View style={s.hero}>
-        <ItemImage item={item} variant={audio ? 'square' : item.Type === 'Episode' ? 'landscape' : 'poster'} width={width} aspectRatio={audio ? 1 : item.Type === 'Episode' ? 16 / 9 : 2 / 3} rounded={radius.lg} />
+        <ItemImage item={item} variant={audio ? 'square' : wide ? 'landscape' : 'poster'} width={width} aspectRatio={audio ? 1 : wide ? 16 / 9 : 2 / 3} rounded={radius.lg} />
         <Text style={[s.title, scriptStyle(item.Name, s.title)]} accessibilityRole="header">
           {item.Name}
         </Text>

@@ -1,4 +1,4 @@
-import { heroHeight, heroLayout } from '../hero-layout';
+import { fitRoundActions, heroHeight, heroLayout } from '../hero-layout';
 
 describe('heroLayout', () => {
   it('uses the wide hero for a video with only a wide primary image', () => {
@@ -28,5 +28,23 @@ describe('heroLayout', () => {
     expect(heroHeight('backdrop', 393, 1000, false)).toBe(520);
     expect(heroHeight('wide', 393, 852, false)).toBe(221);
     expect(heroHeight('square', 393, 852, false)).toBe(0);
+  });
+});
+
+describe('fitRoundActions', () => {
+  const row = [{ id: 'start' }, { id: 'download', spare: true }, { id: 'playlist', spare: true }, { id: 'played', spare: true }, { id: 'fav', spare: true }, { id: 'together' }, { id: 'more' }];
+  it('keeps every action with the big gap when they fit', () => {
+    expect(fitRoundActions(row, 600, 56, [20, 8])).toEqual({ items: row, gap: 20 });
+  });
+  it('makes the gap smaller first', () => {
+    expect(fitRoundActions(row, 7 * 56 + 6 * 8, 56, [20, 8]).gap).toBe(8);
+  });
+  it('moves spare actions out of the row, last first, on a phone', () => {
+    const r = fitRoundActions(row, 361, 56, [20, 8]);
+    expect(r.items.map((x) => x.id)).toEqual(['start', 'download', 'playlist', 'together', 'more']);
+    expect(r.gap).toBe(8);
+  });
+  it('shows all actions before the first layout', () => {
+    expect(fitRoundActions(row, 0, 56, [20, 8]).items).toHaveLength(7);
   });
 });

@@ -47,6 +47,13 @@ export function clearOutboxFor(serverId: string, userId: string, itemId: string)
   if (entries.some((e) => keyOf(e) === key)) outboxStore.write(entries.filter((e) => keyOf(e) !== key));
 }
 
+/** The position that waits in the outbox for this item, in ticks, or null. It is newer than the saved item facts. */
+export function outboxPosition(serverId: string, userId: string, itemId: string): number | null {
+  const key = keyOf({ serverId, userId, itemId });
+  const e = outboxStore.read().find((x) => keyOf(x) === key);
+  return e ? (e.played ? 0 : e.positionTicks) : null;
+}
+
 export function outboxSize(): number {
   return outboxStore.read().length;
 }

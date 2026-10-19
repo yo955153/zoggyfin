@@ -4,6 +4,7 @@ import { ScrollView, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import type { BaseItemDto } from '@/api/types';
+import { useSessionStore } from '@/auth/session-store';
 import { Icon, type IconName } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
 import { EmptyState } from '@/components/states';
@@ -46,6 +47,8 @@ export default function DownloadsScreen() {
   const { inProgress, sections, appBytes } = useDownloadLists();
   const empty = inProgress.length === 0 && sections.length === 0;
   const allPaused = inProgress.length > 0 && inProgress.every((r) => r.state === 'paused' || r.state === 'failed');
+  // Opened from the sign-in screen with no account (route /offline): a way back, no library links.
+  const signedIn = useSessionStore((st) => !!st.session);
 
   return (
     <>
@@ -56,6 +59,15 @@ export default function DownloadsScreen() {
           headerStyle: { backgroundColor: c.bgGrouped },
           headerLargeStyle: { backgroundColor: c.bgGrouped },
           contentStyle: { backgroundColor: c.bgGrouped },
+          ...(signedIn
+            ? null
+            : {
+                headerLeft: () => (
+                  <Touchable onPress={() => (router.canGoBack() ? router.back() : router.replace('/sign-in'))} radius={8} hitSlop={8} accessibilityRole="button" accessibilityLabel="Sign in">
+                    <Text style={s.link}>Sign in</Text>
+                  </Touchable>
+                ),
+              }),
         }}
       />
       <ScrollView contentInsetAdjustmentBehavior="automatic" style={s.page} contentContainerStyle={[s.content, { paddingHorizontal: l.gutter, paddingLeft: sidebar + l.gutter }]}>
@@ -74,7 +86,7 @@ export default function DownloadsScreen() {
                 icon="arrow.down.circle"
                 title="No downloads yet"
                 message="Tap the download button on any movie, episode or album."
-                action={{ title: 'Browse library', onPress: () => router.navigate('/(tabs)/(library)/libraries') }}
+                action={signedIn ? { title: 'Browse library', onPress: () => router.navigate('/(tabs)/(library)/libraries') } : undefined}
                 style={s.empty}
               />
             ) : null}
@@ -103,7 +115,7 @@ export default function DownloadsScreen() {
               </Animated.View>
             ) : null}
             {sections.map((sec) => (
-              <ServerDownloads key={sec.serverId} section={sec} titled={sections.length > 1} />
+              <ServerDownloads key={sec.serverId} section={sec} titled={sections.length > 1 || !sec.active} />
             ))}
             {sections.length ? <Text style={s.footer}>Swipe left on a row to delete it. Downloads of every server play with no connection.</Text> : null}
           </View>
@@ -193,7 +205,7 @@ function RoundControl({ icon, label, onPress, color }: { icon: IconName; label: 
 function ProgressRow({ record: r, last }: { record: DownloadRecord; last: boolean }) {
   const s = useStyles(makeStyles);
   const { c } = useTheme();
-  const open = useOpenItem();
+  const open = useOpenDetail();
   const f = fraction(r);
   const failed = r.state === 'failed';
   const cancel = async () => {
@@ -205,7 +217,7 @@ function ProgressRow({ record: r, last }: { record: DownloadRecord; last: boolea
     <SwipeRow onSwipe={cancel} label="Cancel">
       <Touchable
         kind="row"
-        onPress={() => open(r.item)}
+        onPress={open ? () => open(r.item) : undefined}
         accessibilityRole="button"
         accessibilityLabel={`${r.item.Name ?? 'Download'}. ${statusLine(r)}`}
         accessibilityActions={[{ name: 'cancel', label: 'Cancel download' }]}
@@ -297,7 +309,7 @@ function GroupRow({ group: g, last }: { group: DownloadGroupView; last: boolean 
   const s = useStyles(makeStyles);
   const { c } = useTheme();
   const player = usePlayer();
-  const open = useOpenItem();
+  const open = useOpenDetail();
   const [expanded, setExpanded] = useState(false);
   const single = g.type === 'Single' && g.records.length === 1;
   const first = g.records[0];
@@ -332,15 +344,12 @@ function GroupRow({ group: g, last }: { group: DownloadGroupView; last: boolean 
         <Touchable
           kind="row"
           onPress={() => (single ? playGroup() : setExpanded((e) => !e))}
-          onLongPress={() => open(single && first ? first.item : g.item)}
+          onLongPress={open ? () => open(single && first ? first.item : g.item) : undefined}
           accessibilityRole="button"
           accessibilityLabel={`${g.name}. ${meta}. Downloaded`}
           accessibilityHint={single ? 'Plays it' : expanded ? 'Hides the items' : 'Shows the items'}
-          accessibilityActions={[
-            { name: 'delete', label: 'Delete download' },
-            { name: 'open', label: 'Open details' },
-          ]}
-          onAccessibilityAction={(e) => (e.nativeEvent.actionName === 'delete' ? void remove() : open(single && first ? first.item : g.item))}
+          accessibilityActions={[{ name: 'delete', label: 'Delete download' }, ...(open ? [{ name: 'open', label: 'Open details' }] : [])]}
+          onAccessibilityAction={(e) => (e.nativeEvent.actionName === 'delete' ? void remove() : open?.(single && first ? first.item : g.item))}
           style={({ pressed, hovered }) => [s.row, (pressed || hovered) && s.rowActive]}>
           <Thumb item={single && first ? first.item : g.item} video={!!video && single} />
           <View style={[s.rowBody, !last || expanded ? s.line : null]}>
@@ -371,6 +380,13 @@ function GroupRow({ group: g, last }: { group: DownloadGroupView; last: boolean 
         : null}
     </View>
   );
+}
+
+/** Opens an item page. Null with no account signed in: item pages need the server. */
+function useOpenDetail(): ((item: BaseItemDto) => void) | null {
+  const open = useOpenItem();
+  const signedIn = useSessionStore((st) => !!st.session);
+  return signedIn ? open : null;
 }
 
 function ChildRow({ record: r, group, index, last }: { record: DownloadRecord; group: DownloadGroupView; index: number; last: boolean }) {

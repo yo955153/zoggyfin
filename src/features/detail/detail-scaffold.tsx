@@ -48,7 +48,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { usePullRefresh } from '@/lib/use-pull-refresh';
 
-import { heroHeight, heroLayout } from './hero-layout';
+import { fitRoundActions, heroHeight, heroLayout } from './hero-layout';
 
 export type ArtShape = 'poster' | 'square' | 'circle' | 'thumb';
 
@@ -118,6 +118,7 @@ export function DetailScaffold<Row>({
   const together = useTogetherEntry(item);
   const download = useDownloadStatus(item.Id);
   const [sheet, setSheet] = useState(false);
+  const [rowWidth, setRowWidth] = useState(0);
   const pull = usePullRefresh(onRefresh);
   const scrollRef = useAnimatedRef<Animated.FlatList<Row>>();
   const offset = useScrollOffset(scrollRef);
@@ -152,7 +153,7 @@ export function DetailScaffold<Row>({
     return { transform: [{ translateY: interpolate(y, [0, heroH], [0, heroH / 2], 'clamp') }] };
   });
 
-  const secondary: { icon: IconName; label: string; active?: boolean; onPress: () => void; ring?: number; tint?: string; a11y?: string }[] = [];
+  const secondary: { icon: IconName; label: string; active?: boolean; onPress: () => void; ring?: number; tint?: string; a11y?: string; spare?: boolean }[] = [];
   if (playable && resumable) {
     secondary.push({ icon: 'arrow.counterclockwise', label: 'Start over', onPress: () => player.play({ item, startPositionTicks: 0 }) });
   }
@@ -176,9 +177,9 @@ export function DetailScaffold<Row>({
     }
   }
   const playlistAction = actions.find((a) => a.id === 'builtin.addToPlaylist');
-  if (playlistAction && item.Type !== 'Playlist') secondary.push({ icon: 'text.badge.plus', label: 'Playlist', a11y: 'Add to playlist', onPress: () => run(playlistAction) });
-  if (playedAction) secondary.push({ icon: 'checkmark', label: 'Played', active: played, onPress: () => run(playedAction) });
-  if (favAction) secondary.push({ icon: favorite ? 'heart.fill' : 'heart', label: 'Favourite', active: favorite, onPress: () => run(favAction) });
+  if (playlistAction && item.Type !== 'Playlist') secondary.push({ icon: 'text.badge.plus', label: 'Playlist', a11y: 'Add to playlist', spare: true, onPress: () => run(playlistAction) });
+  if (playedAction) secondary.push({ icon: 'checkmark', label: 'Played', active: played, spare: true, onPress: () => run(playedAction) });
+  if (favAction) secondary.push({ icon: favorite ? 'heart.fill' : 'heart', label: 'Favourite', active: favorite, spare: true, onPress: () => run(favAction) });
   if (together) secondary.push({ icon: 'person.2', label: 'Together', a11y: 'Watch together', onPress: together });
   for (const a of extraActions ?? []) secondary.push(a);
   secondary.push({ icon: 'ellipsis', label: 'More', onPress: () => setSheet(true) });
@@ -221,9 +222,11 @@ export function DetailScaffold<Row>({
     )
   ) : null;
 
+  // One row: on a narrow window the gap gets smaller, then actions that are also in More leave the row.
+  const fitted = fitRoundActions(secondary, rowWidth, scaled(58), [spacing.xl, spacing.sm]);
   const actionsRow = (
-    <View style={[s.actions, centered ? s.actionsCenter : null]}>
-      {secondary.map((a) => (
+    <View style={[s.actions, { gap: fitted.gap }, centered ? s.actionsCenter : null]} onLayout={(e) => setRowWidth(Math.floor(e.nativeEvent.layout.width))}>
+      {fitted.items.map(({ spare: _spare, ...a }) => (
         <RoundAction key={a.label} {...a} />
       ))}
     </View>
@@ -508,7 +511,7 @@ const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
   stack: { flexDirection: 'column' as const },
   resumeTrack: { height: sizes.resumeBar, borderRadius: 2, backgroundColor: c.surface3, marginTop: spacing.md, marginHorizontal: spacing.xxxl, overflow: 'hidden' as const },
   resumeFill: { height: '100%' as const, backgroundColor: c.accent },
-  actions: { flexDirection: 'row' as const, gap: spacing.xl, marginTop: spacing.xs },
+  actions: { flexDirection: 'row' as const, alignSelf: 'stretch' as const, gap: spacing.xl, marginTop: spacing.xs },
   actionsCenter: { justifyContent: 'center' as const },
   roundWrap: { alignItems: 'center' as const, gap: 6, minWidth: scaled(56) },
   round: {

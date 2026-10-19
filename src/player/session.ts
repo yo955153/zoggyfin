@@ -16,6 +16,7 @@ import type { BaseItemDto } from '@/api/types';
 import { clientIdentity } from '@/auth/identity';
 import { useSessionStore } from '@/auth/session-store';
 import { type DownloadRecord, findDownload, localExtraUri, localFileFor, readLocalText } from '@/downloads';
+import { outboxPosition } from '@/downloads/outbox-store';
 import { resolveImage } from '@/images/resolve-image';
 import { isOffline } from '@/lib/online';
 import { bitrateFor, usePlaybackSettings } from '@/settings/playback';
@@ -60,7 +61,9 @@ function downloaded(itemId: string | null | undefined): DownloadRecord | null {
 
 /** True when the download is from a server that is not the active one: no server calls for it. */
 function foreign(r: DownloadRecord): boolean {
-  return isForeignDownload(r, useSessionStore.getState().session?.serverId);
+  const active = useSessionStore.getState().session?.serverId;
+  // With no account signed in, every download counts as another server's: no server calls, progress to the outbox.
+  return !active || isForeignDownload(r, active);
 }
 
 /** The stream plan for a downloaded file: the file itself, with its saved subtitles. */
@@ -265,8 +268,12 @@ class VideoSession {
     const uri = localFileFor(r.itemId);
     if (!uri) throw new Error('The downloaded file is missing. Download it again.');
     const plan = localPlan(r, uri);
+    // With no fresh facts from the server, a position that waits in the outbox is the newest one.
+    const pending = item === r.item ? outboxPosition(r.serverId, r.userId, r.itemId) : null;
     const start =
-      request.startPositionTicks !== undefined ? ticksToSecondsExact(request.startPositionTicks) : ticksToSecondsExact(item.UserData?.PlaybackPositionTicks);
+      request.startPositionTicks !== undefined
+        ? ticksToSecondsExact(request.startPositionTicks)
+        : ticksToSecondsExact(pending ?? item.UserData?.PlaybackPositionTicks);
     const queue = request.queue ?? [];
     setPlayerState({
       now: {
@@ -369,8 +376,7 @@ class VideoSession {
       duration: ticksToSecondsExact(item.RunTimeTicks),
     });
     this.engine.load({ uri: src.uri, isHls: false, startSeconds: src.startSeconds, title: item.Name ?? 'Video', subtitle: subtitleLine(item), autoplay: src.autoplay });
-    const s = useSessionStore.getState().session;
-    if (r && s) {
+    if (r) {
       this.reporter = this.localReporter(r, item);
       this.reporter.start({ itemId: r.itemId, mediaSourceId: plan.mediaSourceId, playSessionId: null, playMethod: 'DirectPlay', canSeek: true });
       this.watchAppState();
