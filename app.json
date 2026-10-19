@@ -26,7 +26,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.zogtech.zoggyfin"
+      "package": "com.zogtech.zoggyfin",
+      "permissions": [
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -68,8 +73,22 @@
           }
         }
       ],
-      "expo-audio",
-      "@kesha-antonov/react-native-background-downloader"
+      [
+        "expo-audio",
+        {
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": true
+        }
+      ],
+      "@kesha-antonov/react-native-background-downloader",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -82,6 +101,17 @@
       "name": "Zoggyfin",
       "backgroundColor": "#0B0B0E",
       "themeColor": "#0B0B0E"
-    }
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "d419963f-c3a0-4c69-8653-01ac1df4262e"
+      }
+    },
+    "owner": "admin.zogtech"
   }
 }
