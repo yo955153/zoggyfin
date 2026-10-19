@@ -195,7 +195,7 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   trackNoBox: { width: scaled(sizes.trackNumber) - 8, alignItems: 'center' as const },
   trackTitle: { ...font(type.callout), color: c.text },
   trackSub: { ...font(type.footnote), color: c.text2, marginTop: 1 },
-  trackTime: { ...font(type.footnote, { tabular: true }), color: c.text3 },
+  trackTime: { ...font(type.footnote, { tabular: true }), color: c.text3, minWidth: scaled(38), textAlign: 'right' as const },
   episode: { flexDirection: 'row' as const, gap: spacing.md, paddingVertical: spacing.md },
   epTop: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm },
   epLabel: { ...font(type.caption1, { tabular: true }), color: c.text2 },

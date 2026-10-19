@@ -10,16 +10,18 @@ import { useChildren } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
 import { ItemActionSheet } from '@/components/action-sheet';
 import { DownloadGlyph } from '@/components/download-indicator';
+import { Icon } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
 import { ReorderList } from '@/components/reorder-list';
 import { ErrorState, LoadingState } from '@/components/states';
 import { SwipeRow } from '@/components/swipe-row';
+import { Touchable } from '@/components/touchable';
 import { openRenamePlaylist } from '@/features/playlists/add-to-playlist';
 import { moveItem, removeItems } from '@/features/playlists/ops';
 import { episodeLabel, formatClock, formatDuration } from '@/lib/format';
 import { features } from '@/platform/tv';
 import { isAudioItem, usePlayer } from '@/player';
-import { createStyles, type AppTheme, font, radius, scaled, scriptStyle, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
+import { createStyles, type AppTheme, font, iconSize, radius, scaled, scriptStyle, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
 
 import { DetailScaffold } from './detail-scaffold';
 import { TrackRow } from './rows';
@@ -98,14 +100,14 @@ export function PlaylistDetail({ item, refreshing, onRefresh }: ViewProps) {
           ) : null}
           {editing && list.length ? (
             <>
-              <Text style={[s.hint, { paddingHorizontal: l.gutter }]}>Drag the handles to change the order.</Text>
+              <Text style={[s.hint, { paddingHorizontal: l.gutter }]}>Drag the handles to change the order. Tap the bin to remove an entry.</Text>
               <ReorderList
                 rows={list}
                 rowKey={(t, i) => t.PlaylistItemId ?? `${t.Id}-${i}`}
                 rowHeight={EDIT_ROW}
                 label={(t) => t.Name ?? 'item'}
                 onMove={(from, to) => void moveItem(playlistId, from, to)}
-                renderRow={(t, _i, handle) => <EditRow item={t} handle={handle} />}
+                renderRow={(t, _i, handle) => <EditRow item={t} handle={handle} onRemove={() => remove(t)} />}
               />
             </>
           ) : null}
@@ -118,7 +120,7 @@ export function PlaylistDetail({ item, refreshing, onRefresh }: ViewProps) {
   );
 }
 
-function EditRow({ item, handle }: { item: BaseItemDto; handle: ReactNode }) {
+function EditRow({ item, handle, onRemove }: { item: BaseItemDto; handle: ReactNode; onRemove: () => void }) {
   const s = useStyles(makeStyles);
   const l = useLayout();
   const { c } = useTheme();
@@ -138,6 +140,10 @@ function EditRow({ item, handle }: { item: BaseItemDto; handle: ReactNode }) {
       </View>
       <DownloadGlyph id={item.Id} />
       <Text style={s.time}>{formatClock(item.RunTimeTicks)}</Text>
+      {/* Remove works with a pointer, a remote and VoiceOver; swipe is touch only. */}
+      <Touchable onPress={onRemove} radius={radius.pill} hitSlop={6} style={s.remove} accessibilityRole="button" accessibilityLabel={`Remove ${item.Name ?? 'item'}`}>
+        <Icon name="trash" size={scaled(iconSize.sm)} color={c.danger} />
+      </Touchable>
       {handle}
     </View>
   );
@@ -157,5 +163,6 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   },
   title: { ...font(type.callout), color: c.text },
   sub: { ...font(type.footnote), marginTop: 1 },
-  time: { ...font(type.footnote, { tabular: true }), color: c.text3 },
+  remove: { width: scaled(36), height: scaled(36), alignItems: 'center' as const, justifyContent: 'center' as const },
+  time: { ...font(type.footnote, { tabular: true }), color: c.text3, minWidth: scaled(38), textAlign: 'right' as const },
 }));

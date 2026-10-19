@@ -63,7 +63,9 @@ export function ToastHost() {
       pointerEvents="box-none"
       style={[s.host, { top: insets.top + spacing.sm }, wide ? { right: l.gutter, alignItems: 'flex-end' } : s.centered]}>
       <GestureDetector gesture={swipe}>
-        <Animated.View key={current.id} exiting={FadeOut.duration(motion.duration.fast)} style={[s.shadow, style]}>
+        {/* The fade-out sits on a wrapper, so it does not fight the swipe style's opacity. */}
+        <Animated.View key={current.id} exiting={FadeOut.duration(motion.duration.fast)}>
+          <Animated.View style={[s.shadow, style]}>
           <Glass variant="regular" scheme="auto" style={s.capsule}>
             <View style={s.row} accessibilityLiveRegion="polite" accessibilityRole={Platform.OS === 'web' ? 'alert' : undefined}>
               {current.icon ? <Icon name={current.icon} size={scaled(iconSize.sm)} color={c.text} /> : null}
@@ -85,6 +87,7 @@ export function ToastHost() {
               ) : null}
             </View>
           </Glass>
+          </Animated.View>
         </Animated.View>
       </GestureDetector>
     </View>
