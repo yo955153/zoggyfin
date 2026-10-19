@@ -120,3 +120,22 @@ describe('shapeForList', () => {
     expect(shapeForList([{ PrimaryImageAspectRatio: 1.78 }], 'square')).toBe('square');
   });
 });
+
+describe('download formats', () => {
+  const { formatBytes, formatEta, formatSpeed } = jest.requireActual('../format') as typeof import('../format');
+  it('formats sizes', () => {
+    expect(formatBytes(0)).toBe('0 B');
+    expect(formatBytes(640_000)).toBe('640 KB');
+    expect(formatBytes(8_600_000)).toBe('8.6 MB');
+    expect(formatBytes(812_000_000)).toBe('812 MB');
+    expect(formatBytes(1_400_000_000)).toBe('1.4 GB');
+    expect(formatSpeed(8_600_000)).toBe('8.6 MB/s');
+  });
+  it('formats time left', () => {
+    expect(formatEta(null)).toBeNull();
+    expect(formatEta(20)).toBe('a few seconds left');
+    expect(formatEta(61)).toBe('1 min left');
+    expect(formatEta(3600 + 300)).toBe('1 h 5 min left');
+    expect(formatEta(7200)).toBe('2 h left');
+  });
+});

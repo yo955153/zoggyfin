@@ -79,3 +79,28 @@ export function subtitleFor(item: BaseItemDto): string | null {
       return item.ProductionYear ? String(item.ProductionYear) : null;
   }
 }
+
+/** "812 MB", "1.4 GB", "640 KB" (brand voice: exact numbers, short units; 1 KB = 1000 bytes like iOS). */
+export function formatBytes(bytes: number | null | undefined): string {
+  const b = Math.max(0, bytes ?? 0);
+  if (b < 1000) return `${Math.round(b)} B`;
+  if (b < 1e6) return `${Math.round(b / 1e3)} KB`;
+  if (b < 1e9) return `${b < 1e7 ? (b / 1e6).toFixed(1) : Math.round(b / 1e6)} MB`;
+  return `${(b / 1e9).toFixed(b < 1e11 ? 1 : 0)} GB`;
+}
+
+/** "8.6 MB/s". */
+export function formatSpeed(bytesPerSecond: number): string {
+  return `${formatBytes(bytesPerSecond)}/s`;
+}
+
+/** "1 min left", "2 h 5 min left", "a few seconds left". */
+export function formatEta(seconds: number | null): string | null {
+  if (seconds === null || !Number.isFinite(seconds)) return null;
+  if (seconds < 45) return 'a few seconds left';
+  const m = Math.round(seconds / 60);
+  if (m < 60) return `${m} min left`;
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest ? `${h} h ${rest} min left` : `${h} h left`;
+}
