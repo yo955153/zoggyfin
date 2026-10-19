@@ -260,16 +260,19 @@ skip lengths, clear cache.
 1. **Foundation**: project, auth (server URL, login, Quick Connect), API layer, query
    cache, tab shell, image resolver, Home, Library, item detail, Search.
 2. **Video**: device profile, expo-video player with all phase-1 features, progress reporting.
-2b. **Platform base and restyle**: switch to react-native-tvos, add Android phone,
-   Android TV and Apple TV builds with the TV navigation, then restyle all phase 1
-   screens to docs/design/.
+2b. **Restyle and platform base**: restyle all phase 1 screens to docs/design/, and
+   switch the dependency to react-native-tvos (no TV layouts yet).
+
+Priority: iPhone, iPad and web come first. TV work (layouts, focus, remote, Android TV
+and Fire TV builds) waits for phase 6.
 3. **Music and audio**: expo-audio queue, mini player, full player, lyrics, Instant Mix,
    long-form audio features.
 4. **Downloads and playlists**: background downloads, Downloads tab, offline playback,
    playlist management.
 5. **Watch together**: a short spike first (two simulators/devices over Multipeer, file
    streaming and sync accuracy), then nearby mode and SyncPlay internet mode.
-6. **Phase 2 features**: MPV engine, Chromecast, CarPlay, Live Activity for
+6. **Phase 2 features**: TV (side rail, focus, remote, Android TV / Fire TV / Apple TV
+   builds), MPV engine, Chromecast, CarPlay, Live Activity for
    downloads, Android, the web deployment and a pass over iPad and Mac polish
    (keyboard shortcuts, pointer, multi-window), and the extension system.
 7. **Together, part 2**: voice chat and messages in a session.
