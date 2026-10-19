@@ -3,7 +3,9 @@
  * trackpad), with the same tab strip as native.
  */
 import { useRef, useState } from 'react';
-import { Animated, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, StyleSheet, View } from 'react-native';
+import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { TabStrip } from './tab-strip';
 import type { TabPagerProps } from './tab-pager-types';
@@ -13,10 +15,7 @@ export function TabPager({ tabs, renderPage, initialIndex = 0, onIndexChange }: 
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(initialIndex);
   const [visited, setVisited] = useState(() => new Set([initialIndex]));
-  const scrollX = useState(() => new Animated.Value(0))[0];
-  // scrollX / width, as an interpolation so the strip gets one type on both platforms.
-  const w = Math.max(1, width);
-  const position = scrollX.interpolate({ inputRange: [0, w], outputRange: [0, 1], extrapolate: 'extend' });
+  const position = useSharedValue(initialIndex);
 
   const select = (i: number) => {
     if (i === index) return;
@@ -33,11 +32,13 @@ export function TabPager({ tabs, renderPage, initialIndex = 0, onIndexChange }: 
     }
   };
 
-  const onScroll = Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-    useNativeDriver: false,
-    listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (width > 0) select(Math.round(e.nativeEvent.contentOffset.x / width));
-    },
+  const onPage = (page: number) => select(page);
+  const onScroll = useAnimatedScrollHandler((e) => {
+    if (width <= 0) return;
+    const p = e.contentOffset.x / width;
+    position.set(p);
+    const page = Math.round(p);
+    if (page !== index) scheduleOnRN(onPage, page);
   });
 
   return (

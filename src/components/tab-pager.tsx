@@ -1,10 +1,13 @@
 /**
  * A swipeable pager with a tab strip that follows the swipe (native:
  * react-native-pager-view). Web uses tab-pager.web.tsx.
+ *
+ * The scroll position goes to a Reanimated shared value on the UI thread.
  */
-import { useMemo, useRef, useState } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
-import PagerView from 'react-native-pager-view';
+import { useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import PagerView, { type PagerViewOnPageScrollEventData, type PagerViewProps } from 'react-native-pager-view';
+import Animated, { useEvent, useSharedValue } from 'react-native-reanimated';
 
 import { TabStrip } from './tab-strip';
 import type { TabPagerProps } from './tab-pager-types';
@@ -15,21 +18,14 @@ export function TabPager({ tabs, renderPage, initialIndex = 0, onIndexChange }: 
   const pagerRef = useRef<PagerView>(null);
   const [index, setIndex] = useState(initialIndex);
   const [visited, setVisited] = useState(() => new Set([initialIndex]));
+  const position = useSharedValue(initialIndex);
 
-  const scrollPosition = useState(() => new Animated.Value(initialIndex))[0];
-  const scrollOffset = useState(() => new Animated.Value(0))[0];
-  const position = useMemo(
-    () =>
-      Animated.add(scrollPosition, scrollOffset).interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'extend' }),
-    [scrollPosition, scrollOffset],
-  );
-
-  const onPageScroll = useMemo(
-    () =>
-      Animated.event([{ nativeEvent: { position: scrollPosition, offset: scrollOffset } }], {
-        useNativeDriver: true,
-      }),
-    [scrollPosition, scrollOffset],
+  const onPageScroll = useEvent<PagerViewOnPageScrollEventData>(
+    (e) => {
+      'worklet';
+      position.set(e.position + e.offset);
+    },
+    ['onPageScroll'],
   );
 
   const select = (i: number) => {
@@ -45,7 +41,8 @@ export function TabPager({ tabs, renderPage, initialIndex = 0, onIndexChange }: 
         ref={pagerRef}
         style={styles.flex}
         initialPage={initialIndex}
-        onPageScroll={onPageScroll}
+        // Reanimated's processed handler runs on the UI thread; its type differs from the prop's.
+        onPageScroll={onPageScroll as unknown as PagerViewProps['onPageScroll']}
         onPageSelected={(e: { nativeEvent: { position: number } }) => select(e.nativeEvent.position)}>
         {tabs.map((t, i) => (
           <View key={t.key} style={styles.flex} collapsable={false}>

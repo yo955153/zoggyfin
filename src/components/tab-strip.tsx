@@ -1,5 +1,6 @@
 import { type ComponentRef, useEffect, useRef, useState } from 'react';
-import { Animated, type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { Extrapolation, interpolate, type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 import { colors, GUTTER, size, spacing, type } from '@/theme';
 
@@ -12,7 +13,8 @@ interface Layout {
 
 /**
  * The tab strip over a pager. `position` is the pager's live scroll position
- * (page index plus fraction), so the indicator follows the finger.
+ * (page index plus fraction), so the indicator follows the finger. It runs on
+ * the UI thread (Reanimated) and moves only by transform.
  */
 export function TabStrip({
   tabs,
@@ -22,7 +24,7 @@ export function TabStrip({
 }: {
   tabs: PagerTab[];
   index: number;
-  position: Animated.AnimatedInterpolation<number>;
+  position: SharedValue<number>;
   onPress: (index: number) => void;
 }) {
   const [layouts, setLayouts] = useState<(Layout | undefined)[]>([]);
@@ -44,20 +46,21 @@ export function TabStrip({
   };
 
   const inputRange = tabs.map((_, i) => i);
-  const indicator =
-    ready && tabs.length > 1
-      ? {
-          // Transforms only, so the native driver can run it: a 1 pt bar scaled to the tab width.
-          transform: [
-            {
-              translateX: position.interpolate({ inputRange, outputRange: layouts.map((l) => l?.x ?? 0), extrapolate: 'clamp' }),
-            },
-            {
-              scaleX: position.interpolate({ inputRange, outputRange: layouts.map((l) => l?.width ?? 0), extrapolate: 'clamp' }),
-            },
-          ],
-        }
-      : null;
+  const xs = layouts.map((l) => l?.x ?? 0);
+  const widths = layouts.map((l) => l?.width ?? 0);
+  const showIndicator = ready && tabs.length > 1;
+  // A 1 pt bar scaled to the tab width: transforms only.
+  const indicator = useAnimatedStyle(() => {
+    if (!showIndicator) return { opacity: 0 };
+    const p = position.get();
+    return {
+      opacity: 1,
+      transform: [
+        { translateX: interpolate(p, inputRange, xs, Extrapolation.CLAMP) },
+        { scaleX: interpolate(p, inputRange, widths, Extrapolation.CLAMP) },
+      ],
+    };
+  });
 
   return (
     <View style={styles.wrap}>
@@ -74,7 +77,7 @@ export function TabStrip({
               <Text style={[styles.label, i === index && styles.labelActive]}>{t.title}</Text>
             </Pressable>
           ))}
-          {indicator ? <Animated.View style={[styles.indicator, indicator]} /> : null}
+          {tabs.length > 1 ? <Animated.View style={[styles.indicator, indicator]} /> : null}
         </View>
       </ScrollView>
     </View>
