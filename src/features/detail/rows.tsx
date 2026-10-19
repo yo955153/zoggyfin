@@ -33,10 +33,13 @@ export const TrackRow = memo(function TrackRow({
   onLongPress,
   last,
   trailing,
+  note,
 }: {
   item: BaseItemDto;
   index: number;
   showArt?: boolean;
+  /** Added to the artist line, for example the server of a download. */
+  note?: string;
   onPress: (item: BaseItemDto) => void;
   /** Opens the item's action sheet (Play next, Add to queue, Instant mix). */
   onLongPress?: (item: BaseItemDto) => void;
@@ -48,7 +51,7 @@ export const TrackRow = memo(function TrackRow({
   const { c } = useTheme();
   const l = useLayout();
   const playing = usePlayerStore((st) => !!item.Id && st.now?.item.Id === item.Id);
-  const artist = item.Artists?.join(', ') ?? item.AlbumArtist;
+  const artist = [item.Artists?.join(', ') ?? item.AlbumArtist, note].filter(Boolean).join(' · ') || undefined;
   const time = formatClock(item.RunTimeTicks);
   return (
     <Touchable

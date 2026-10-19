@@ -28,7 +28,7 @@ import { storage } from '@/storage/kv';
 
 import { mediaCapabilities } from '../capabilities';
 import { buildDeviceProfile } from '../device-profile';
-import { withOutbox } from '../outbox-transport';
+import { isForeignDownload, outboxOnly, withOutbox } from '../outbox-transport';
 import { ProgressReporter, secondsToTicks, ticksToSecondsExact, toServerReport } from '../progress-reporter';
 import { initialPlayerState, type NowPlaying, playerState, setPlayerState } from '../store';
 import type { StreamServer } from '../stream';
@@ -76,6 +76,12 @@ interface Ctx {
   userId: string;
   serverId: string;
   server: StreamServer;
+}
+
+/** The download record when the item is another server's download (not the active server), else null. */
+function foreignRecord(itemId: string | null | undefined) {
+  const r = findDownload(itemId);
+  return r && r.state === 'completed' && isForeignDownload(r, useSessionStore.getState().session?.serverId) ? r : null;
 }
 
 function context(): Ctx {
@@ -305,6 +311,12 @@ class AudioSession {
   private async finishedLongItem(item: AudioItem) {
     this.positions.forget(item.Id);
     let ids: { userId: string; serverId: string } | null = null;
+    const other = foreignRecord(item.Id);
+    if (other) {
+      // Another server's download: the outbox marks it played on that server.
+      addToOutbox({ serverId: other.serverId, userId: other.userId, itemId: item.Id, positionTicks: 0, runTimeTicks: item.RunTimeTicks ?? null, played: true, at: Date.now() });
+      return;
+    }
     try {
       const { api, userId, serverId } = context();
       ids = { userId, serverId };
@@ -321,11 +333,12 @@ class AudioSession {
 
   private trackFor(entry: QueueEntry<AudioItem> | null): EngineTrack | null {
     if (!entry) return null;
-    const { server, userId, serverId } = context();
+    const { server, userId } = context();
     const profile = buildDeviceProfile(mediaCapabilities(), { maxBitrate: this.bitrate || bitrateFor(usePlaybackSettings.getState(), false) });
     const playSessionId = randomId().replace(/-/g, '');
     // A downloaded track plays from the device; the server URL is built only when it is not.
-    const choice = chooseMedia(findDownload(entry.item.Id), documentsDir(), serverId, () =>
+    // A download from any saved server plays from the device.
+    const choice = chooseMedia(findDownload(entry.item.Id), documentsDir(), null, () =>
       universalAudioUrl(server, entry.item.Id, profile, { userId, maxBitrate: profile.MaxStreamingBitrate ?? this.bitrate, playSessionId }),
     );
     const playMethod = choice.kind === 'local' ? 'DirectPlay' : predictPlayMethod(entry.item, profile, profile.MaxStreamingBitrate ?? this.bitrate);
@@ -415,6 +428,28 @@ class AudioSession {
 
   private startReporter(entry: QueueEntry<AudioItem>) {
     const info = this.tracks.get(entry.key);
+    const other = foreignRecord(entry.item.Id);
+    if (other) {
+      // Another server's download: its progress goes only into the outbox, for that server and user.
+      const reporter = new ProgressReporter(
+        outboxOnly({ serverId: other.serverId, userId: other.userId, runTimeTicks: entry.item.RunTimeTicks ?? null }),
+        () => {
+          const st = playerState();
+          return {
+            positionTicks: secondsToTicks(this.engine.loaded ? this.engine.position : st.position),
+            isPaused: !st.playing,
+            isMuted: false,
+            playbackRate: st.rate,
+            audioStreamIndex: null,
+            subtitleStreamIndex: null,
+          };
+        },
+      );
+      reporter.start({ itemId: entry.item.Id, mediaSourceId: entry.item.MediaSources?.[0]?.Id ?? entry.item.Id, playSessionId: null, playMethod: 'DirectPlay', canSeek: true });
+      this.reporter = reporter;
+      this.reporterKey = entry.key;
+      return;
+    }
     let api: Api;
     try {
       api = context().api;
@@ -492,7 +527,8 @@ class AudioSession {
       const local = findDownload(itemId);
       const saved = local?.state === 'completed' && local.hasLyrics ? localExtraUri(local, 'lyrics.json') : null;
       const text = saved ? readLocalText(saved) : null;
-      const dto = text ? (JSON.parse(text) as LyricDto) : await jf.getLyrics(api, itemId);
+      // Another server's download: only its saved lyrics, never a call to the active server.
+      const dto = text ? (JSON.parse(text) as LyricDto) : foreignRecord(itemId) ? null : await jf.getLyrics(api, itemId);
       const lyrics = fromLyricDto(dto);
       if (currentEntry(audioState().queue)?.item.Id !== itemId) return;
       setAudioState({ lyrics: lyrics ? { itemId, status: 'ready', lyrics } : { itemId, status: 'none' } });

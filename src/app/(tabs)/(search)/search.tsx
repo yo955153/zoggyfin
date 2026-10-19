@@ -5,7 +5,6 @@ import type { SearchBarCommands } from 'react-native-screens';
 
 import { useSearch } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
-import { useSessionStore } from '@/auth/session-store';
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
@@ -18,6 +17,7 @@ import { isNetworkError, searchDownloads } from '@/downloads';
 import { useDownloadsStore } from '@/downloads/store';
 import { TrackRow } from '@/features/detail/rows';
 import { OfflineBanner } from '@/features/offline/offline-banner';
+import { useServerNames } from '@/features/servers/use-server-names';
 import {
   filterSections,
   groupSearchResults,
@@ -64,10 +64,15 @@ export default function SearchScreen() {
   const q = useSearch(term);
   const offline = useOffline();
   const records = useDownloadsStore((st) => st.records);
-  const serverId = useSessionStore((st) => st.session?.serverId);
+  const nameOf = useServerNames();
+  // With downloads from more than one server, each local result names its server.
+  const serverOf = useMemo(() => {
+    const servers = new Set(Object.values(records).map((r) => r.serverId));
+    return servers.size > 1 ? (it: BaseItemDto) => (it.Id && records[it.Id] ? nameOf(records[it.Id].serverId) : undefined) : null;
+  }, [records, nameOf]);
   // Offline (or the server cannot be reached): search what is on this device.
   const localOnly = offline || (!!q.error && !q.data && isNetworkError(q.error));
-  const localResults = useMemo(() => (localOnly ? searchDownloads(records, term, serverId) : []), [localOnly, records, term, serverId]);
+  const localResults = useMemo(() => (localOnly ? searchDownloads(records, term) : []), [localOnly, records, term]);
   const results = localOnly ? localResults : q.data;
   const all = useMemo(() => groupSearchResults(results ?? []), [results]);
   const sections = useMemo(() => filterSections(all, filter), [all, filter]);
@@ -234,11 +239,25 @@ export default function SearchScreen() {
                 <View key={sec.key} style={{ marginTop: l.sectionGap }}>
                   <RowHeader title={sec.title} />
                   {sec.items.slice(0, 8).map((song, i, list) => (
-                    <TrackRow key={song.Id ?? i} item={song} index={i} showArt last={i === list.length - 1} onPress={(it) => player.play({ item: it })} />
+                    <TrackRow
+                      key={song.Id ?? i}
+                      item={song}
+                      index={i}
+                      showArt
+                      note={localOnly ? serverOf?.(song) : undefined}
+                      last={i === list.length - 1}
+                      onPress={(it) => player.play({ item: it })}
+                    />
                   ))}
                 </View>
               ) : (
-                <ItemRow key={sec.key} title={sec.title} items={sec.items} shape={sec.items[0] ? shapeFor(sec.items[0]) : 'poster'} />
+                <ItemRow
+                  key={sec.key}
+                  title={sec.title}
+                  items={sec.items}
+                  shape={sec.items[0] ? shapeFor(sec.items[0]) : 'poster'}
+                  tileSubtitle={localOnly && serverOf ? serverOf : undefined}
+                />
               ),
             )}
             {localOnly ? <Text style={[s.localNote, { paddingHorizontal: l.gutter }]}>Showing downloads only. The server cannot be reached.</Text> : null}

@@ -11,6 +11,8 @@ export interface DownloadGroupView {
   item: BaseItemDto;
   records: DownloadRecord[];
   bytes: number;
+  /** The server of the group's downloads. */
+  serverId?: string;
 }
 
 export function buildLists(records: Record<string, DownloadRecord>, collections: Record<string, DownloadCollection>) {
@@ -59,30 +61,52 @@ export function forServer<T extends Pick<DownloadRecord, 'serverId'>>(all: Recor
   return out;
 }
 
-export interface OtherServerDownloads {
+/** The completed downloads of one server, grouped by show, album or single item. */
+export interface ServerSection {
   serverId: string;
+  /** The active server. Records with no server Id (from the first phase) count for it. */
+  active: boolean;
+  groups: DownloadGroupView[];
   count: number;
   bytes: number;
 }
 
-/** Completed and waiting downloads of the other servers, by server, largest first. Pure. */
-export function otherServers(records: Record<string, DownloadRecord>, serverId: string | null | undefined): OtherServerDownloads[] {
-  const by = new Map<string, OtherServerDownloads>();
-  for (const r of Object.values(records)) {
-    if (onServer(r, serverId)) continue;
-    const o = by.get(r.serverId) ?? { serverId: r.serverId, count: 0, bytes: 0 };
-    o.count += 1;
-    o.bytes += r.bytesDone;
-    by.set(r.serverId, o);
+/**
+ * Every completed download on the device, by server: the active server
+ * first, then the other servers, largest first. Inside a server, the groups
+ * are the same as in `buildLists`. Pure.
+ */
+export function buildServerSections(
+  records: Record<string, DownloadRecord>,
+  collections: Record<string, DownloadCollection>,
+  activeServerId: string | null | undefined,
+): ServerSection[] {
+  const ids = new Set<string>();
+  for (const r of Object.values(records)) if (r.state === 'completed') ids.add(onServer(r, activeServerId) ? (activeServerId ?? r.serverId) : r.serverId);
+  const sections: ServerSection[] = [];
+  for (const id of ids) {
+    const active = !!activeServerId && id === activeServerId;
+    const mine = active ? forServer(records, id) : Object.fromEntries(Object.entries(records).filter(([, r]) => r.serverId === id));
+    const cols = active ? forServer(collections, id) : Object.fromEntries(Object.entries(collections).filter(([, c]) => c.serverId === id));
+    const { groups } = buildLists(mine, cols);
+    if (!groups.length) continue;
+    const tagged = groups.map((g) => ({ ...g, serverId: id }));
+    sections.push({
+      serverId: id,
+      active,
+      groups: tagged,
+      count: tagged.reduce((n, g) => n + g.records.length, 0),
+      bytes: tagged.reduce((n, g) => n + g.bytes, 0),
+    });
   }
-  return [...by.values()].sort((a, b) => b.bytes - a.bytes);
+  return sections.sort((a, b) => (a.active === b.active ? b.bytes - a.bytes : a.active ? -1 : 1));
 }
 
-/** Downloaded items that match a search term, grouped like server results. Pure. */
-export function searchDownloads(records: Record<string, DownloadRecord>, term: string, serverId?: string | null): BaseItemDto[] {
+/** Downloaded items (from every server) that match a search term, grouped like server results. Pure. */
+export function searchDownloads(records: Record<string, DownloadRecord>, term: string): BaseItemDto[] {
   const t = term.trim().toLowerCase();
   if (t.length < 2) return [];
-  return Object.values(forServer(records, serverId))
+  return Object.values(records)
     .filter((r) => r.state === 'completed')
     .filter((r) =>
       [r.item.Name, r.item.Album, r.item.AlbumArtist, r.item.SeriesName, ...(r.item.Artists ?? [])]

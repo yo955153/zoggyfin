@@ -18,17 +18,13 @@ import { fileUri, localImageUri, localMediaUri } from './local';
 import { downloadManager } from './manager';
 import { isDownloadable } from './plan';
 import { downloadsState, statusOf, useDownloadsStore } from './store';
-import { buildLists, type DownloadGroupView, forServer, onServer, otherServers, type OtherServerDownloads } from './lists';
+import { buildLists, buildServerSections, type DownloadGroupView, forServer, onServer, type ServerSection } from './lists';
 import type { DownloadRecord, DownloadStatus } from './types';
 
 export type { DownloadCollection, DownloadRecord, DownloadState, DownloadStatus, LocalSubtitle } from './types';
 export { DOWNLOAD_SCHEMA_VERSION } from './types';
-export { buildLists, type DownloadGroupView, onServer, type OtherServerDownloads, searchDownloads } from './lists';
+export { buildLists, buildServerSections, type DownloadGroupView, onServer, type ServerSection, searchDownloads } from './lists';
 
-/** The active server's Id: downloads of other servers stay on the device but do not show in its lists. */
-function activeServerId(): string | null {
-  return useSessionStore.getState().session?.serverId ?? null;
-}
 export { DOWNLOAD_QUALITY_OPTIONS, isDownloadable } from './plan';
 export { etaSeconds, fraction } from './state-machine';
 export { chooseMedia, fileUri, localImageUri, localMediaUri } from './local';
@@ -84,11 +80,11 @@ export function localExtraUri(record: DownloadRecord, file: string): string | nu
 export function downloadedChildren(containerId: string | null | undefined): BaseItemDto[] | null {
   if (!containerId) return null;
   const s = downloadsState();
-  const serverId = activeServerId();
   const c = s.collections[containerId];
-  const list = c && onServer(c, serverId)
+  // Item ids are unique across servers, so a container's downloads are found on any server.
+  const list = c
     ? c.itemIds.map((id) => s.records[id])
-    : Object.values(forServer(s.records, serverId))
+    : Object.values(s.records)
         .filter((r) => r.group.id === containerId)
         .sort((a, b) => a.sort - b.sort);
   const items = list.filter((r): r is DownloadRecord => !!r && r.state === 'completed').map((r) => r.item);
@@ -113,30 +109,72 @@ export function useLocalImage(id: string | null | undefined, variant: 'poster' |
   return useDownloadsStore((s) => {
     if (!id || !downloadsSupported) return null;
     const holder = s.records[id] ?? s.collections[id];
-    return holder && onServer(holder, activeServerId()) ? localImageUri(holder, s.documentsDir, variant) : null;
+    return holder ? localImageUri(holder, s.documentsDir, variant) : null;
   });
 }
 
 /**
- * In progress (queue order) and Downloaded (grouped by show or album) of the
- * active server, for the Downloads tab. `appBytes` counts every server, for
- * the storage bar; `others` sums up the downloads of the other servers.
+ * The Downloads tab lists: in progress (every server, queue order), and the
+ * completed downloads of every server (`sections`: the active server first,
+ * then by server, then by show or album). `groups` are the active server's
+ * groups only. `appBytes` counts every server, for the storage bar.
  */
 export function useDownloadLists(): {
   inProgress: DownloadRecord[];
   groups: DownloadGroupView[];
+  sections: ServerSection[];
   appBytes: number;
   activeCount: number;
-  others: OtherServerDownloads[];
 } {
   const records = useDownloadsStore((s) => s.records);
   const collections = useDownloadsStore((s) => s.collections);
   const serverId = useSessionStore((s) => s.session?.serverId ?? null);
   return useMemo(() => {
-    const lists = buildLists(forServer(records, serverId), forServer(collections, serverId));
-    const appBytes = Object.values(records).reduce((n, r) => n + r.bytesDone, 0);
-    return { ...lists, appBytes, others: otherServers(records, serverId) };
+    const all = buildLists(records, collections);
+    const sections = buildServerSections(records, collections, serverId);
+    const groups = buildLists(forServer(records, serverId), forServer(collections, serverId)).groups;
+    return { inProgress: all.inProgress, activeCount: all.activeCount, appBytes: all.appBytes, groups, sections };
   }, [records, collections, serverId]);
+}
+
+const groupItems = new Map<string, BaseItemDto>();
+
+/** The item that stands for a show or album group, made from one of its downloads (cached, so it stays the same object). */
+function groupItem(r: DownloadRecord): BaseItemDto {
+  const hit = groupItems.get(r.group.id);
+  if (hit) return hit;
+  const item: BaseItemDto =
+    r.group.type === 'MusicAlbum'
+      ? { Id: r.group.id, Name: r.group.name, Type: 'MusicAlbum', AlbumArtist: r.item.AlbumArtist, ImageTags: r.item.AlbumPrimaryImageTag ? { Primary: r.item.AlbumPrimaryImageTag } : undefined }
+      : r.group.type === 'Series'
+        ? { Id: r.group.id, Name: r.group.name, Type: 'Series' }
+        : r.item;
+  groupItems.set(r.group.id, item);
+  return item;
+}
+
+/** True when a download (by item id) is from a server that is not the active one. */
+export function isOtherServerDownload(itemId: string | null | undefined): boolean {
+  const s = downloadsState();
+  const r = itemId ? (s.records[itemId] ?? s.collections[itemId]) : null;
+  const active = useSessionStore.getState().session?.serverId;
+  return !!r && !onServer(r, active);
+}
+
+/** The download record or collection of another server for this id, or null (reactive). */
+export function useOtherServerDownload(id: string | null | undefined): { serverId: string; item: BaseItemDto } | null {
+  const active = useSessionStore((s) => s.session?.serverId ?? null);
+  return useDownloadsStore(
+    useShallow((s) => {
+      if (!id) return null;
+      const r = s.records[id] ?? s.collections[id];
+      if (r) return !onServer(r, active) ? { serverId: r.serverId, item: r.item } : null;
+      // A show or album group with no collection record: its items name it.
+      const child = Object.values(s.records).find((x) => x.group.id === id);
+      if (!child || onServer(child, active)) return null;
+      return { serverId: child.serverId, item: groupItem(child) };
+    }),
+  );
 }
 
 /** Deletes every download of a server (when the user removes the server). */

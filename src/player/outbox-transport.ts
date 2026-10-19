@@ -45,3 +45,23 @@ export function withOutbox(transport: ProgressTransport, ctx: OutboxContext): Pr
     stopped: (r) => guard(r, () => transport.stopped(r), true),
   };
 }
+
+/**
+ * Progress of a download from a server that is not the active one: it goes
+ * only into the outbox, tagged with that download's server and user. The
+ * outbox sends it when that server answers. Nothing goes to the active server.
+ */
+export function outboxOnly(ctx: OutboxContext): ProgressTransport {
+  const save = (r: PlaybackReport) =>
+    addToOutbox({ serverId: ctx.serverId, userId: ctx.userId, itemId: r.itemId, positionTicks: r.positionTicks, runTimeTicks: ctx.runTimeTicks, at: Date.now() });
+  return {
+    start: async () => undefined,
+    progress: async (r) => save(r),
+    stopped: async (r) => save(r),
+  };
+}
+
+/** True when a download belongs to a server other than the active one. */
+export function isForeignDownload(record: { serverId?: string | null } | null | undefined, activeServerId: string | null | undefined): boolean {
+  return !!record?.serverId && !!activeServerId && record.serverId !== activeServerId;
+}

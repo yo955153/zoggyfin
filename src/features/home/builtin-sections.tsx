@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 
 import { useLatest, useNextUp, useResume, useViews } from '@/api/queries';
 import { downloadsSupported, useDownloadLists } from '@/downloads';
+import { useServerNames } from '@/features/servers/use-server-names';
 import { useOffline } from '@/lib/online';
 import type { BaseItemDto } from '@/api/types';
 import { ItemRow } from '@/components/item-row';
@@ -97,11 +98,14 @@ function RecentlyAdded() {
   );
 }
 
-/** Downloads on this device as tiles: the album, the show or the movie. */
+/** Downloads on this device as tiles: the album, the show or the movie, from every saved server. */
 function DownloadedRow() {
-  const { groups } = useDownloadLists();
+  const { sections } = useDownloadLists();
+  const nameOf = useServerNames();
+  const groups = sections.flatMap((sec) => sec.groups);
   const items = groups.map((g) => g.item);
   if (!downloadsSupported || !items.length) return null;
+  const many = sections.length > 1;
   return (
     <ItemRow
       title="Downloads"
@@ -110,7 +114,9 @@ function DownloadedRow() {
       onSeeAll={() => router.navigate('/(tabs)/(saved)/downloads')}
       tileSubtitle={(it) => {
         const g = groups.find((x) => x.id === it.Id);
-        return g && g.records.length > 1 ? `${g.records.length} ${g.type === 'Series' ? 'episodes' : 'songs'}` : undefined;
+        const count = g && g.records.length > 1 ? `${g.records.length} ${g.type === 'Series' ? 'episodes' : 'songs'}` : null;
+        // With downloads from more than one server, each tile names its server.
+        return [count, many && g ? nameOf(g.serverId) : null].filter(Boolean).join(' · ') || undefined;
       }}
     />
   );

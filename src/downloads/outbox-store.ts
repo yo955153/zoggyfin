@@ -1,23 +1,31 @@
 /**
- * The outbox on the device (MMKV), and the transport that sends it to the
- * server. Flushed when the server is reachable again.
+ * The outbox on the device (MMKV), and the transports that send it. Each
+ * entry carries its server Id and user Id and goes only to that account's
+ * server, when that server answers.
  */
+import type { Api } from '@jellyfin/sdk';
+
 import { getApi } from '@/api/client';
 import { describeError } from '@/api/errors';
 import * as jf from '@/api/jellyfin';
 import { queryClient } from '@/api/query-client';
 import { queryKeys } from '@/api/query-keys';
-import { useSessionStore } from '@/auth/session-store';
+import { findUser } from '@/auth/accounts';
+import { tokenFor, useSessionStore } from '@/auth/session-store';
+import { isOffline } from '@/lib/online';
+import { checkConnection, connectionOf } from '@/servers/connection';
 import { readJson, writeJson } from '@/storage/json';
 
 import {
-  flush,
+  flushByAccount,
   keyOf,
   migrateOutbox,
   OUTBOX_SCHEMA_VERSION,
   type OutboxEntry,
+  type OutboxAccount,
   type OutboxInput,
   type OutboxStore,
+  type OutboxTransport,
   record,
 } from './outbox';
 
@@ -45,42 +53,68 @@ export function outboxSize(): number {
 
 let running: Promise<number> | null = null;
 
-/** Sends what waits for the signed-in account. Returns how many entries were sent. */
+function transportOf(api: Api): OutboxTransport {
+  return {
+    send: async (e: OutboxEntry) => {
+      await jf.updatePlayState(api, e.userId, e.itemId, { positionTicks: e.positionTicks, played: e.played, at: e.at });
+    },
+  };
+}
+
+/**
+ * The transport of one account, or null when its server does not answer now.
+ * The active account uses the address in use. Another account's server is
+ * probed in the background (its addresses, with the server Id check), and
+ * the active account does not change.
+ */
+async function accountTransport(account: OutboxAccount): Promise<OutboxTransport | null> {
+  const st = useSessionStore.getState();
+  const s = st.session;
+  if (s && s.serverId === account.serverId && s.userId === account.userId) {
+    return isOffline() ? null : transportOf(getApi(s.serverUrl, s.token));
+  }
+  if (!findUser(st.accounts, account)) return null;
+  const token = tokenFor(account);
+  if (!token) return null;
+  // The same server as the active account (another user): its address is already checked.
+  const url = s && s.serverId === account.serverId ? (isOffline() ? null : s.serverUrl) : (await checkConnection(account.serverId)) ? connectionOf(account.serverId).url : null;
+  return url ? transportOf(getApi(url, token)) : null;
+}
+
+/**
+ * Sends what waits in the outbox, for every account on this device, each to
+ * its own server. Returns how many entries were sent.
+ */
 export function flushOutbox(): Promise<number> {
-  const s = useSessionStore.getState().session;
-  if (!s) return Promise.resolve(0);
   if (running) return running;
-  const api = getApi(s.serverUrl, s.token);
-  const sentItems: string[] = [];
-  running = flush(
-    outboxStore,
-    {
-      send: async (e: OutboxEntry) => {
-        await jf.updatePlayState(api, e.userId, e.itemId, { positionTicks: e.positionTicks, played: e.played, at: e.at });
-        sentItems.push(e.itemId);
-      },
+  running = flushByAccount(outboxStore, accountTransport, {
+    now: Date.now,
+    classify: (e) => {
+      const kind = describeError(e).kind;
+      return kind === 'notFound' || kind === 'forbidden' ? 'drop' : 'retry';
     },
-    {
-      now: Date.now,
-      classify: (e) => {
-        const kind = describeError(e).kind;
-        return kind === 'notFound' || kind === 'forbidden' ? 'drop' : 'retry';
-      },
-      scope: { serverId: s.serverId, userId: s.userId },
-    },
-  )
-    .then((n) => {
-      if (n > 0) {
-        const scope = { serverId: s.serverId, userId: s.userId };
-        void queryClient.invalidateQueries({ queryKey: queryKeys.resume(scope, 'Video') });
-        void queryClient.invalidateQueries({ queryKey: queryKeys.resume(scope, 'Audio') });
-        for (const id of sentItems) void queryClient.invalidateQueries({ queryKey: queryKeys.item(scope, id) });
-        if (__DEV__) console.log(`[outbox] sent ${n} offline play report(s)`);
+  })
+    .then((results) => {
+      let total = 0;
+      for (const { account, sent } of results) {
+        total += sent;
+        if (sent > 0) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.resume(account, 'Video') });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.resume(account, 'Audio') });
+          void queryClient.invalidateQueries({ queryKey: [...queryKeys.all(account), 'item'] });
+        }
       }
-      return n;
+      if (__DEV__ && total) console.log(`[outbox] sent ${total} offline play report(s)`);
+      return total;
     })
     .finally(() => {
       running = null;
     });
   return running;
+}
+
+/** True when entries of an account other than the active one wait (their server is probed in the background). */
+export function hasOtherAccountEntries(): boolean {
+  const s = useSessionStore.getState().session;
+  return outboxStore.read().some((e) => !s || e.serverId !== s.serverId || e.userId !== s.userId);
 }

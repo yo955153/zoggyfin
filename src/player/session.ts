@@ -25,7 +25,7 @@ import { controlGate } from './control-gate';
 import { buildDeviceProfile } from './device-profile';
 import { getEngine } from './engine';
 import type { EngineEvent } from './engine-types';
-import { withOutbox } from './outbox-transport';
+import { isForeignDownload, outboxOnly, withOutbox } from './outbox-transport';
 import { ProgressReporter, type ProgressTransport, secondsToTicks, ticksToSecondsExact, toServerReport } from './progress-reporter';
 import { normalizeSegments } from './segments';
 import { setPlayerState, initialPlayerState, playerState, type NowPlaying } from './store';
@@ -52,10 +52,15 @@ function context(): Ctx {
   };
 }
 
-/** A completed download of this item for the signed-in server, or null. */
-function downloaded(itemId: string | null | undefined, serverId: string): DownloadRecord | null {
+/** A completed download of this item, from any saved server, or null. It plays from the device. */
+function downloaded(itemId: string | null | undefined): DownloadRecord | null {
   const r = findDownload(itemId);
-  return r && r.state === 'completed' && (!r.serverId || r.serverId === serverId) && localFileFor(r.itemId) ? r : null;
+  return r && r.state === 'completed' && localFileFor(r.itemId) ? r : null;
+}
+
+/** True when the download is from a server that is not the active one: no server calls for it. */
+function foreign(r: DownloadRecord): boolean {
+  return isForeignDownload(r, useSessionStore.getState().session?.serverId);
 }
 
 /** The stream plan for a downloaded file: the file itself, with its saved subtitles. */
@@ -215,12 +220,12 @@ class VideoSession {
     this.lastRequest = request;
     setPlayerState({ ...initialPlayerState, status: 'loading', presentation: 'full' });
     try {
-      const { api, userId, serverId } = context();
-      const local = downloaded(request.item.Id, serverId);
+      const local = downloaded(request.item.Id);
       if (local) {
         await this.playLocal(id, local, request);
         return;
       }
+      const { api, userId } = context();
       const target = await jf.resolvePlayable(api, userId, request.item);
       if (!target?.Id) throw new Error('Nothing to play here yet.');
       // The full item has chapters, trickplay info and the user's position.
@@ -242,9 +247,10 @@ class VideoSession {
 
   /** Plays a downloaded file. The server is asked for the saved position only when it answers. */
   private async playLocal(id: number, r: DownloadRecord, request: PlayRequest): Promise<void> {
-    const { api, userId } = context();
+    const other = foreign(r);
     let item: BaseItemDto = r.item;
-    if (!isOffline()) {
+    if (!isOffline() && !other) {
+      const { api, userId } = context();
       try {
         const fresh = await Promise.race([
           jf.getItem(api, userId, r.itemId),
@@ -270,7 +276,7 @@ class VideoSession {
         plan,
         segments: [],
         chapters: chaptersOf(item.Chapters, ticksToSecondsExact(item.RunTimeTicks)),
-        trickplay: isOffline() ? null : pickTrickplay(item.Trickplay, plan.mediaSourceId),
+        trickplay: isOffline() || other ? null : pickTrickplay(item.Trickplay, plan.mediaSourceId),
         bitrateChoice: null,
         bitrate: 0,
         next: queue[0] ?? null,
@@ -292,7 +298,7 @@ class VideoSession {
     });
     const rate = playerState().rate;
     if (rate !== 1) this.engine.setRate(rate);
-    this.reporter = this.makeReporter(api, item);
+    this.reporter = this.localReporter(r, item);
     this.reporter.start({ itemId: r.itemId, mediaSourceId: plan.mediaSourceId, playSessionId: null, playMethod: 'DirectPlay', canSeek: true });
     this.watchAppState();
     const def = plan.subtitles.find((sub) => sub.isDefault);
@@ -300,9 +306,25 @@ class VideoSession {
   }
 
   /**
+   * The reporter of a download: the active server (with the outbox when it
+   * does not answer), or for another server's download only the outbox,
+   * tagged with that server and user.
+   */
+  private localReporter(r: DownloadRecord, item: BaseItemDto): ProgressReporter {
+    if (!foreign(r)) return this.makeReporter(context().api, item);
+    return new ProgressReporter(
+      outboxOnly({ serverId: r.serverId, userId: r.userId, runTimeTicks: item.RunTimeTicks ?? null }),
+      this.snapshot,
+      undefined,
+      undefined,
+      (e) => console.warn('[player] progress report failed', describeError(e).title),
+    );
+  }
+
+  /**
    * Plays a file the server did not plan: this device's download, or a
-   * nearby host's file (watch together). Needs no server. Progress goes to
-   * the server only for a download of the signed-in server.
+   * nearby host's file (watch together). Needs no server. Progress of a
+   * download goes to its own server (see `localReporter`).
    */
   async playSource(src: { item: BaseItemDto; uri: string; startSeconds: number; autoplay: boolean; record: DownloadRecord | null }): Promise<void> {
     const id = ++this.loadId;
@@ -348,8 +370,8 @@ class VideoSession {
     });
     this.engine.load({ uri: src.uri, isHls: false, startSeconds: src.startSeconds, title: item.Name ?? 'Video', subtitle: subtitleLine(item), autoplay: src.autoplay });
     const s = useSessionStore.getState().session;
-    if (r && s && (!r.serverId || r.serverId === s.serverId)) {
-      this.reporter = this.makeReporter(context().api, item);
+    if (r && s) {
+      this.reporter = this.localReporter(r, item);
       this.reporter.start({ itemId: r.itemId, mediaSourceId: plan.mediaSourceId, playSessionId: null, playMethod: 'DirectPlay', canSeek: true });
       this.watchAppState();
     }

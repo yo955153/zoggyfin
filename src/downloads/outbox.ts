@@ -153,3 +153,41 @@ export function migrateOutbox(raw: unknown): OutboxEntry[] {
       !!e && typeof e === 'object' && typeof e.itemId === 'string' && typeof e.serverId === 'string' && typeof e.positionTicks === 'number',
   );
 }
+
+// ---- Routing by account ----------------------------------------------------------
+
+export interface OutboxAccount {
+  serverId: string;
+  userId: string;
+}
+
+/** The accounts that have entries waiting, in the order of their oldest entry. */
+export function pendingAccounts(entries: readonly OutboxEntry[]): OutboxAccount[] {
+  const out: OutboxAccount[] = [];
+  for (const e of [...entries].sort((a, b) => a.at - b.at)) {
+    if (!out.some((a) => a.serverId === e.serverId && a.userId === e.userId)) out.push({ serverId: e.serverId, userId: e.userId });
+  }
+  return out;
+}
+
+/**
+ * Sends the entries of every account through that account's own transport.
+ * `transportFor` returns null when the account's server does not answer (or
+ * the account is not signed in here); its entries then stay. An entry never
+ * goes through the transport of another account, so one server's progress
+ * (and token) never reaches another server. Returns the count sent per account.
+ */
+export async function flushByAccount(
+  store: OutboxStore,
+  transportFor: (account: OutboxAccount) => Promise<OutboxTransport | null>,
+  opts: { now: () => number; classify: (e: unknown) => ErrorClass },
+): Promise<{ account: OutboxAccount; sent: number }[]> {
+  const results: { account: OutboxAccount; sent: number }[] = [];
+  for (const account of pendingAccounts(store.read())) {
+    if (!due(store.read(), opts.now(), account).length) continue;
+    const transport = await transportFor(account);
+    if (!transport) continue;
+    results.push({ account, sent: await flush(store, transport, { ...opts, scope: account }) });
+  }
+  return results;
+}

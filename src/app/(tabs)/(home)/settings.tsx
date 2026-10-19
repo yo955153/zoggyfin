@@ -219,8 +219,8 @@ function DownloadsSection() {
   const quality = usePlaybackSettings((st) => st.downloadQuality);
   const update = usePlaybackSettings((st) => st.update);
   const [open, setOpen] = useState(false);
-  const { appBytes, groups } = useDownloadLists();
-  const count = groups.reduce((n, g) => n + g.records.length, 0);
+  const { appBytes, sections } = useDownloadLists();
+  const count = sections.reduce((n, sec) => n + sec.count, 0);
   const label = DOWNLOAD_QUALITY_OPTIONS.find((o) => o.value === quality)?.label ?? 'Original';
   return (
     <Group title="Downloads" footer="Original keeps the file as it is on the server when this device can play it. Other choices ask the server for a smaller copy of videos. Music downloads keep the original file.">

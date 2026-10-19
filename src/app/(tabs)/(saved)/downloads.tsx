@@ -17,12 +17,11 @@ import {
   etaSeconds,
   fraction,
   useDiskSpace,
-  type OtherServerDownloads,
   removeServerDownloads,
+  type ServerSection,
   useDownloadLists,
 } from '@/downloads';
-import { useAccounts } from '@/auth/session-store';
-import { switchAccount } from '@/features/servers/actions';
+import { useServerNames } from '@/features/servers/use-server-names';
 import { OfflineBanner } from '@/features/offline/offline-banner';
 import { confirmDestructive } from '@/lib/confirm';
 import { formatBytes, formatEta, formatSpeed } from '@/lib/format';
@@ -44,8 +43,8 @@ export default function DownloadsScreen() {
   const root = useRootScreenOptions();
   // The iPad sidebar floats over the content: center the column in the space beside it.
   const sidebar = useSidebarInset();
-  const { inProgress, groups, appBytes, others } = useDownloadLists();
-  const empty = inProgress.length === 0 && groups.length === 0 && others.length === 0;
+  const { inProgress, sections, appBytes } = useDownloadLists();
+  const empty = inProgress.length === 0 && sections.length === 0;
   const allPaused = inProgress.length > 0 && inProgress.every((r) => r.state === 'paused' || r.state === 'failed');
 
   return (
@@ -103,24 +102,10 @@ export default function DownloadsScreen() {
                 </View>
               </Animated.View>
             ) : null}
-            {groups.length ? (
-              <Animated.View layout={LinearTransition.duration(motion.duration.base)} style={s.section}>
-                <View style={s.sectionHead}>
-                  <Text style={s.sectionTitle} accessibilityRole="header">
-                    {`ON THIS DEVICE · ${groups.reduce((n, g) => n + g.records.length, 0)}`}
-                  </Text>
-                </View>
-                <View style={s.card}>
-                  {groups.map((g, i) => (
-                    <Animated.View key={g.id} entering={FadeIn.duration(motion.duration.base)} exiting={FadeOut.duration(motion.duration.fast)}>
-                      <GroupRow group={g} last={i === groups.length - 1} />
-                    </Animated.View>
-                  ))}
-                </View>
-                <Text style={s.footer}>Swipe left on a row to delete it. Downloads play with no connection.</Text>
-              </Animated.View>
-            ) : null}
-            {others.length ? <OtherServers others={others} /> : null}
+            {sections.map((sec) => (
+              <ServerDownloads key={sec.serverId} section={sec} titled={sections.length > 1} />
+            ))}
+            {sections.length ? <Text style={s.footer}>Swipe left on a row to delete it. Downloads of every server play with no connection.</Text> : null}
           </View>
         )}
       </ScrollView>
@@ -268,50 +253,43 @@ const GROUP_WORDS: Record<string, [string, string]> = {
 };
 
 /**
- * Downloads of the other saved servers stay on the device. They show here
- * under their server name; switch to that server to play them.
+ * The completed downloads of one server. With more than one server, the
+ * header names the server, and a server that is not the active one has a
+ * Delete button for all its downloads. Every download plays from the device,
+ * whatever account is active.
  */
-function OtherServers({ others }: { others: OtherServerDownloads[] }) {
+function ServerDownloads({ section, titled }: { section: ServerSection; titled: boolean }) {
   const s = useStyles(makeStyles);
-  const { servers } = useAccounts();
+  const nameOf = useServerNames();
+  const name = nameOf(section.serverId);
+  const remove = async () => {
+    const ok = await confirmDestructive(
+      `Delete the downloads of ${name}?`,
+      `${section.count} ${section.count === 1 ? 'item' : 'items'} (${formatBytes(section.bytes)}) are removed from this device. Nothing changes on the server.`,
+      'Delete',
+    );
+    if (ok) await removeServerDownloads(section.serverId);
+  };
   return (
-    <View style={s.section}>
+    <Animated.View layout={LinearTransition.duration(motion.duration.base)} style={s.section}>
       <View style={s.sectionHead}>
-        <Text style={s.sectionTitle} accessibilityRole="header">
-          OTHER SERVERS
+        <Text style={s.sectionTitle} accessibilityRole="header" numberOfLines={1}>
+          {titled ? `${name.toUpperCase()} · ${section.count}` : `ON THIS DEVICE · ${section.count}`}
         </Text>
+        {titled && !section.active ? (
+          <Touchable onPress={() => void remove()} radius={8} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Delete the downloads of ${name}`}>
+            <Text style={s.otherDelete}>Delete</Text>
+          </Touchable>
+        ) : null}
       </View>
       <View style={s.card}>
-        {others.map((o, i) => {
-          const server = servers.find((sv) => sv.id === o.serverId);
-          const user = server?.users[0];
-          const name = server?.name ?? 'A removed server';
-          const remove = async () => {
-            if (!(await confirmDestructive(`Delete the downloads of ${name}?`, `${o.count} ${o.count === 1 ? 'item' : 'items'} (${formatBytes(o.bytes)}) are removed from this device.`, 'Delete'))) return;
-            await removeServerDownloads(o.serverId);
-          };
-          return (
-            <View key={o.serverId} style={[s.otherRow, i < others.length - 1 && s.otherLine]}>
-              <View style={s.otherText}>
-                <Text style={s.otherName} numberOfLines={1}>
-                  {name}
-                </Text>
-                <Text style={s.otherMeta}>{`${o.count} ${o.count === 1 ? 'item' : 'items'} · ${formatBytes(o.bytes)}`}</Text>
-              </View>
-              {server && user ? (
-                <Touchable onPress={() => switchAccount({ serverId: server.id, userId: user.userId })} radius={8} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Switch to ${name}`}>
-                  <Text style={s.link}>Switch</Text>
-                </Touchable>
-              ) : null}
-              <Touchable onPress={() => void remove()} radius={8} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Delete the downloads of ${name}`}>
-                <Text style={s.otherDelete}>Delete</Text>
-              </Touchable>
-            </View>
-          );
-        })}
+        {section.groups.map((g, i) => (
+          <Animated.View key={g.id} entering={FadeIn.duration(motion.duration.base)} exiting={FadeOut.duration(motion.duration.fast)}>
+            <GroupRow group={g} last={i === section.groups.length - 1} />
+          </Animated.View>
+        ))}
       </View>
-      <Text style={s.footer}>Downloads of other servers stay on this device. Switch to the server to play them.</Text>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -442,11 +420,6 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   link: { ...font(type.subheadline), fontWeight: '600' as const, color: c.accent },
   footer: { ...font(type.footnote), color: c.text2, marginHorizontal: spacing.lg },
   card: { backgroundColor: c.surface, borderRadius: radius.lg, overflow: 'hidden' as const, borderCurve: 'continuous' as const },
-  otherRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  otherLine: { borderBottomWidth: sizes.hairline, borderBottomColor: c.separator },
-  otherText: { flex: 1, gap: 2 },
-  otherName: { ...font(type.body), color: c.text },
-  otherMeta: { ...font(type.footnote), color: c.text2 },
   otherDelete: { ...font(type.subheadline), fontWeight: '600' as const, color: c.danger },
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.md, paddingLeft: spacing.lg, minHeight: scaled(76), backgroundColor: c.surface },
   rowActive: { backgroundColor: c.surface3 },
