@@ -104,11 +104,11 @@ export function LoadingState({ style, rows = 6 }: { style?: ViewStyle; rows?: nu
 export function DetailSkeleton() {
   const s = useStyles(makeStyles);
   const l = useLayout();
-  const hero = Math.round(Math.min(l.width * (9 / 16), 420));
+  const hero = Math.round(Math.min(l.contentWidth * (9 / 16), 420));
   return (
     <Delayed>
       <View accessibilityLabel="Loading" accessibilityRole="progressbar">
-        <SkeletonBlock width={l.width} height={hero} />
+        <SkeletonBlock width={l.contentWidth} height={hero} />
         <View style={[s.detail, { paddingHorizontal: l.gutter }]}>
           <SkeletonBlock width="70%" height={scaled(28)} radius={8} style={s.selfCenter} />
           <SkeletonBlock width="45%" height={sizes.skeletonBar} radius={6} style={s.selfCenter} />

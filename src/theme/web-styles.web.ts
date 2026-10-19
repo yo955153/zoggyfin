@@ -3,7 +3,27 @@
  * fixed CSS; this moves it to a floating bar at the bottom (like the iOS 26
  * tab bar in the design mockups) and themes it with the active tokens.
  */
+import { Asset } from 'expo-asset';
+
 const ID = 'zoggyfin-web-styles';
+
+/**
+ * Noto Sans Arabic, bundled with the app (no font CDN). The unicode range
+ * keeps the browser from loading it until a page shows Arabic text.
+ */
+const ARABIC_FACES: [weight: number, module: number][] = [
+  [400, require('@expo-google-fonts/noto-sans-arabic/400Regular/NotoSansArabic_400Regular.ttf') as number],
+  [600, require('@expo-google-fonts/noto-sans-arabic/600SemiBold/NotoSansArabic_600SemiBold.ttf') as number],
+  [700, require('@expo-google-fonts/noto-sans-arabic/700Bold/NotoSansArabic_700Bold.ttf') as number],
+];
+const ARABIC_RANGE = 'U+0600-06FF, U+0750-077F, U+0870-08FF, U+FB50-FDFF, U+FE70-FEFF, U+200C-200F';
+
+function arabicFontFaces(): string {
+  return ARABIC_FACES.map(
+    ([weight, mod]) =>
+      `@font-face { font-family: 'Noto Sans Arabic'; font-style: normal; font-weight: ${weight}; font-display: swap; src: url('${Asset.fromModule(mod).uri}') format('truetype'); unicode-range: ${ARABIC_RANGE}; }`,
+  ).join('\n');
+}
 
 export function applyWebStyles(vars: Record<string, string>): void {
   if (typeof document === 'undefined') return;
@@ -17,6 +37,7 @@ export function applyWebStyles(vars: Record<string, string>): void {
     .map(([k, val]) => `--zf-${k}: ${val};`)
     .join(' ');
   el.textContent = `
+${arabicFontFaces()}
 :root { ${v} }
 html, body { background: var(--zf-bg); color-scheme: var(--zf-scheme); }
 ::selection { background: var(--zf-accentSoft); }

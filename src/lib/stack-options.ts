@@ -27,6 +27,18 @@ export function useStackOptions(): NativeStackNavigationOptions {
   return useMemo(() => stackOptionsFor(t), [t]);
 }
 
+/**
+ * Options for a tab stack. On iPad the content starts after a visible
+ * sidebar (`inset`), so nothing sits under it.
+ */
+export function useTabStackOptions(inset: number): NativeStackNavigationOptions {
+  const base = useStackOptions();
+  return useMemo(
+    () => (inset > 0 ? { ...base, contentStyle: [base.contentStyle, { paddingLeft: inset }] } : base),
+    [base, inset],
+  );
+}
+
 /** For a tab's first screen: a large title, like the iOS apps. */
 export function useRootScreenOptions(): NativeStackNavigationOptions {
   const { c } = useTheme();

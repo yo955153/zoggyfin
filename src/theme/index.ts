@@ -9,6 +9,7 @@ import { Dimensions, type ImageStyle, Platform, StyleSheet, type TextStyle, useW
 import { isTV } from '@/platform/tv';
 
 import { layoutFor, type LayoutInfo, tv, tvScale } from './layout';
+import { useSidebarInset } from './sidebar-inset';
 import {
   arabicLineHeightFactor,
   type ColorScheme,
@@ -127,7 +128,11 @@ export function scriptStyle(text: string | null | undefined, base: TextStyle, st
 /** Window layout: breakpoint, gutter, tile sizes. TV gets the 10-foot sizes. */
 export function useLayout(): LayoutInfo & { width: number; height: number; fontScale: number } {
   const { width, height, fontScale } = useWindowDimensions();
-  return useMemo(() => ({ ...layoutFor(width, { tv: isTV }), width, height, fontScale }), [width, height, fontScale]);
+  const sidebar = useSidebarInset();
+  return useMemo(
+    () => ({ ...layoutFor(width, isTV ? { tv: true } : { sidebar }), width, height, fontScale }),
+    [width, height, fontScale, sidebar],
+  );
 }
 
 /**

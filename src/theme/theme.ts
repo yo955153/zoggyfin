@@ -289,8 +289,11 @@ export type TypeName = keyof typeof type;
 export const fontFamily = {
   /** React Native on Apple: undefined = system font (SF Pro / SF Arabic). */
   native: undefined,
-  /** Web: system first, then fonts with full Arabic coverage. */
-  web: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Arabic', system-ui, 'Segoe UI', 'Noto Sans', 'Noto Sans Arabic', 'IBM Plex Sans Arabic', sans-serif",
+  /**
+   * Web: the Apple system font first. Elsewhere the bundled Noto Sans Arabic
+   * (Arabic characters only, see web-styles.web.ts) comes before system-ui.
+   */
+  web: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Arabic', 'Noto Sans Arabic', system-ui, 'Segoe UI', 'Noto Sans', sans-serif",
   webMono: "ui-monospace, 'SF Mono', Menlo, monospace",
 } as const;
 
