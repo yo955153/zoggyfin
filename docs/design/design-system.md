@@ -541,8 +541,8 @@ Disabled: 40 % opacity, `accessibilityState={{ disabled: true }}`, no press feed
 - Only in the desktop app. Nothing shows in a browser or on iPhone and iPad.
 - Place: bottom trailing, over the content, 16 pt from the edge, and above the mini player
   (84 pt from the bottom). Width 340 (less in a narrow window). It does not block the page.
-- Card: `material.chrome` glass (`glassFallback` on web), radius 14, `floating` shadow,
-  16-pt padding. Leading badge 29 × 29 (radius 7) on `accentSoft` with an `accent` glyph;
+- Card: solid `surface` with a hairline `separator` border (not glass: the notes must stay
+  legible over artwork), radius 14, `floating` shadow, 16-pt padding. Leading badge 29 × 29 (radius 7) on `accentSoft` with an `accent` glyph;
   on an error, `surface3` with a `danger` glyph.
 - Text: title `headline` ("Zoggyfin 0.1.2 is available"), then `footnote` `text2`
   ("You have version 0.1.1."). Release notes as bullets in `subheadline`, at most 4 lines,

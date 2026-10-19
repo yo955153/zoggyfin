@@ -4,6 +4,12 @@ Each section is the notes of one release. `pnpm desktop:publish` puts the sectio
 version into `latest.json` (the update card shows it) and into the GitHub release.
 Write one short line per item.
 
+## 0.1.1 (2026-10-19)
+
+- The update card has a solid background, so the notes are easy to read over artwork
+- An update error shows one Close button
+- Updates install in place, and Zoggyfin restarts once with one Dock icon
+
 ## 0.1.0 (2026-10-19)
 
 - The first release of Zoggyfin for Mac (Apple silicon, macOS 13 or later)

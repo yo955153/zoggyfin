@@ -18,7 +18,6 @@ import Animated, { FadeOut, ReduceMotion, useAnimatedStyle, useSharedValue, with
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { Touchable } from '@/components/touchable';
-import { Glass } from '@/features/player/glass';
 import {
   closeUpdateCard,
   installUpdate,
@@ -101,7 +100,7 @@ function UpdateCard({ state }: { state: UpdateState }) {
   return (
     <View pointerEvents="box-none" style={[s.host, { right: l.gutter, bottom: BOTTOM_CLEARANCE }]}>
       <Animated.View exiting={FadeOut.duration(motion.duration.fast)} style={[s.shadow, style]}>
-        <Glass variant="regular" scheme="auto" style={s.card}>
+        <View style={s.card}>
           <View
             ref={cardRef}
             style={s.inner}
@@ -121,7 +120,7 @@ function UpdateCard({ state }: { state: UpdateState }) {
                   {subtitleFor(state)}
                 </Text>
               </View>
-              {phase.kind === 'current' || (phase.kind === 'error' && !offer) ? (
+              {phase.kind === 'current' ? (
                 <Touchable
                   onPress={closeUpdateCard}
                   hitSlop={8}
@@ -189,7 +188,7 @@ function UpdateCard({ state }: { state: UpdateState }) {
               </View>
             ) : null}
           </View>
-        </Glass>
+        </View>
       </Animated.View>
     </View>
   );
@@ -248,7 +247,15 @@ function iconFor(state: UpdateState) {
 const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
   host: { position: 'absolute' as const, zIndex: 900, alignItems: 'flex-end' as const, left: spacing.lg },
   shadow: { borderRadius: radius.lg, width: '100%' as const, maxWidth: scaled(CARD_WIDTH), ...shadow('floating') },
-  card: { borderRadius: radius.lg, overflow: 'hidden' as const, borderCurve: 'continuous' as const },
+  // Solid, not glass: the notes must stay legible over artwork.
+  card: {
+    borderRadius: radius.lg,
+    overflow: 'hidden' as const,
+    borderCurve: 'continuous' as const,
+    backgroundColor: c.surface,
+    borderWidth: sizes.hairline,
+    borderColor: c.separator,
+  },
   inner: { padding: spacing.lg, gap: spacing.md },
   header: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: spacing.md },
   badge: {
