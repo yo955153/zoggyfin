@@ -30,6 +30,13 @@ import { playerState, setPlayerState, usePlayerStore } from '@/player/store';
 import { chapterAt, formatTime } from '@/player/timeline';
 import { MAX_BITRATE, QUALITY_OPTIONS, qualityLabel, usePlaybackSettings } from '@/settings/playback';
 import { breakpointFor, layout } from '@/theme/theme';
+import { TogetherSheetHost } from '@/features/together/together-sheet';
+import { TogetherPill } from '@/features/together/together-pill';
+import { useSessionStore } from '@/auth/session-store';
+import { features } from '@/platform/tv';
+import { nearbySupported } from '@/together/nearby';
+import { openTogetherSheet } from '@/together/store';
+import { syncPlaySupported } from '@/together/syncplay';
 
 import { AirPlayButton } from './airplay-button';
 import { Glass } from './glass';
@@ -85,6 +92,8 @@ export function PlayerScreen() {
   const buffered = usePlayerStore((s) => s.buffered);
   const rate = usePlayerStore((s) => s.rate);
   const settings = usePlaybackSettings();
+  const signedIn = useSessionStore((x) => !!x.session);
+  const togetherAvailable = features.watchTogether && (nearbySupported || (syncPlaySupported && signedIn));
   const server = useImageServer();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -298,8 +307,15 @@ export function PlayerScreen() {
         ...(now.plan.isLocal
           ? [
               {
-                title: 'Quality · Downloaded',
-                rows: [{ key: 'local', label: 'Plays the file on this device', selected: true, onPress: () => undefined }],
+                title: now.plan.fromPeer ? 'Quality · Nearby' : 'Quality · Downloaded',
+                rows: [
+                  {
+                    key: 'local',
+                    label: now.plan.fromPeer ? "Streams the host's file" : 'Plays the file on this device',
+                    selected: true,
+                    onPress: () => undefined,
+                  },
+                ],
               },
             ]
           : [
@@ -381,6 +397,9 @@ export function PlayerScreen() {
             <Glass style={styles.pill}>
               <AirPlayButton onOpen={wake} />
               {s.pipSupported ? <PillButton icon="pip.enter" label="Picture in Picture" onPress={() => s.startPip()} /> : null}
+              {togetherAvailable ? (
+                <PillButton icon="person.2" label="Watch together" onPress={() => openTogetherSheet('player', null)} />
+              ) : null}
               <PillButton icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} />
               <PillButton icon="gearshape" label="Quality and speed" onPress={() => setSheet('settings')} />
               {Platform.OS === 'web' ? (
@@ -388,6 +407,7 @@ export function PlayerScreen() {
               ) : null}
             </Glass>
           </View>
+          <TogetherPill top={insets.top + spacing.sm + player.closeSize + spacing.sm} left={sideInset} onPress={() => openTogetherSheet('player', null)} />
 
           {!scrubbing && status !== 'error' ? (
             <View style={styles.center} pointerEvents="box-none">
@@ -496,6 +516,7 @@ export function PlayerScreen() {
 
       <PlayerSheet visible={sheet === 'tracks'} title="Audio & Subtitles" sections={trackSections} onClose={() => setSheet(null)} />
       <PlayerSheet visible={sheet === 'settings'} title="Playback" sections={settingsSections} onClose={() => setSheet(null)} />
+      <TogetherSheetHost where="player" />
     </KeyInput>
   );
 }

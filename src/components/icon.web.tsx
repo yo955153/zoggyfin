@@ -88,6 +88,9 @@ import {
   Wifi,
   Globe,
   UserPlus,
+  Lock,
+  Users,
+  UserX,
 } from 'lucide-react';
 
 import { type IconName, isIconName } from './icon-names';
@@ -202,6 +205,10 @@ const LUCIDE: Record<IconName, Glyph> = {
   wifi: { icon: Wifi },
   globe: { icon: Globe },
   'person.badge.plus': { icon: UserPlus },
+  'person.2': { icon: Users },
+  'person.2.fill': { icon: Users },
+  'person.2.slash': { icon: UserX },
+  'lock.fill': { icon: Lock },
 };
 
 export function Icon({ name, size, color, weight }: IconProps) {

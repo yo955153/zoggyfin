@@ -2,8 +2,9 @@
  * Development builds only: drives watch together from a link, so two
  * simulators can run the spike measurements without taps, for example
  * `xcrun simctl openurl <device> "zoggyfin://together-lab?do=host&item=<id>"`.
- * Actions: host, browse, join, accept, play, pause, seek (to=seconds),
- * rate (to=rate), only (to=1|0), stop, stats. Release builds show nothing.
+ * Actions: host, browse, join (stream=1 to stream even with a
+ * local copy), accept, play, pause, seek (to=seconds), rate (to=rate), only
+ * (to=1|0), stop, stats, spjoin (group=SyncPlay group Id), spleave. Release builds show nothing.
  */
 import { router, useLocalSearchParams } from 'expo-router';
 import { File, Paths } from 'expo-file-system';
@@ -13,6 +14,7 @@ import { Platform, Text, View } from 'react-native';
 import { downloadedItem } from '@/downloads';
 import { videoSession } from '@/player/session';
 import { nearby } from '@/together/nearby';
+import { syncPlay } from '@/together/syncplay';
 import { togetherState, useTogetherStore } from '@/together/store';
 
 async function run(action: string, params: Record<string, string | undefined>): Promise<string> {
@@ -54,6 +56,13 @@ async function run(action: string, params: Record<string, string | undefined>): 
     case 'only':
       n.setOnlyHostControls(params.to === '1');
       return 'policy';
+    case 'spjoin':
+      if (!params.group) return 'no group';
+      await syncPlay().join(params.group);
+      return 'joined group';
+    case 'spleave':
+      await syncPlay().leave();
+      return 'left group';
     case 'stop':
       await n.stopAll();
       return 'stopped';
@@ -81,7 +90,7 @@ export default function TogetherLab() {
     void run(params.do ?? '', params).then((r) => {
       setResult(r);
       console.log('[together-lab]', params.do, r);
-      if (params.do !== 'stats' && params.do !== 'host' && params.do !== 'join') setTimeout(() => (router.canGoBack() ? router.back() : router.replace('/')), 300);
+      if (params.do !== 'stats' && params.do !== 'host' && params.do !== 'join' && params.do !== 'spjoin') setTimeout(() => (router.canGoBack() ? router.back() : router.replace('/')), 300);
     });
     // Run once per link.
     // eslint-disable-next-line react-hooks/exhaustive-deps

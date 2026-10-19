@@ -109,6 +109,10 @@ export const ANDROID_SYMBOLS = {
   wifi: 'wifi',
   globe: 'public',
   'person.badge.plus': 'person_add',
+  'person.2': 'group',
+  'person.2.fill': 'group',
+  'person.2.slash': 'group_off',
+  'lock.fill': 'lock',
 } as const satisfies Record<string, AndroidSymbol>;
 
 export type IconName = keyof typeof ANDROID_SYMBOLS;

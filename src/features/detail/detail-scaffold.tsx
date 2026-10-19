@@ -21,6 +21,7 @@ import { ProgressRing } from '@/components/progress-ring';
 import { useDownloadStatus } from '@/downloads';
 import { Touchable } from '@/components/touchable';
 import { useItemActions } from '@/features/actions/use-item-actions';
+import { TogetherSheetHost, useTogetherEntry } from '@/features/together/together-sheet';
 import { buildImageUrl, imageSource } from '@/images/image-url';
 import { formatClock, playedFraction } from '@/lib/format';
 import { isTV } from '@/platform/tv';
@@ -114,6 +115,7 @@ export function DetailScaffold<Row>({
   const reduced = useReducedMotion();
   const player = usePlayer();
   const { actions, run } = useItemActions(item);
+  const together = useTogetherEntry(item);
   const download = useDownloadStatus(item.Id);
   const [sheet, setSheet] = useState(false);
   const pull = usePullRefresh(onRefresh);
@@ -177,6 +179,7 @@ export function DetailScaffold<Row>({
   if (playlistAction && item.Type !== 'Playlist') secondary.push({ icon: 'text.badge.plus', label: 'Playlist', a11y: 'Add to playlist', onPress: () => run(playlistAction) });
   if (playedAction) secondary.push({ icon: 'checkmark', label: 'Played', active: played, onPress: () => run(playedAction) });
   if (favAction) secondary.push({ icon: favorite ? 'heart.fill' : 'heart', label: 'Favourite', active: favorite, onPress: () => run(favAction) });
+  if (together) secondary.push({ icon: 'person.2', label: 'Together', a11y: 'Watch together', onPress: together });
   for (const a of extraActions ?? []) secondary.push(a);
   secondary.push({ icon: 'ellipsis', label: 'More', onPress: () => setSheet(true) });
 
@@ -328,6 +331,7 @@ export function DetailScaffold<Row>({
         }
       />
       <ItemActionSheet item={item} visible={sheet} onClose={() => setSheet(false)} />
+      <TogetherSheetHost where="item" />
     </>
   );
 }
