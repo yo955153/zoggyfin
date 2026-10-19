@@ -47,6 +47,8 @@ export interface StreamPlan {
   burnedSubtitle: boolean;
   /** A downloaded file on this device: no server stream, no track or quality switches. */
   isLocal?: boolean;
+  /** The file streams from a nearby host (watch together). Implies `isLocal` rules. */
+  fromPeer?: boolean;
 }
 
 export interface PlaybackInfoInput {

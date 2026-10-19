@@ -12,6 +12,8 @@ export interface EngineSource {
   title: string;
   subtitle?: string;
   artworkUri?: string;
+  /** Start playing when ready (default true). False loads paused at `startSeconds`. */
+  autoplay?: boolean;
 }
 
 export type EngineStatus = 'idle' | 'loading' | 'ready' | 'error';

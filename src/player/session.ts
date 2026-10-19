@@ -21,6 +21,7 @@ import { isOffline } from '@/lib/online';
 import { bitrateFor, usePlaybackSettings } from '@/settings/playback';
 
 import { mediaCapabilities } from './capabilities';
+import { controlGate } from './control-gate';
 import { buildDeviceProfile } from './device-profile';
 import { getEngine } from './engine';
 import type { EngineEvent } from './engine-types';
@@ -116,6 +117,7 @@ interface LoadOptions {
   subtitleIndex?: number | null;
   bitrateChoice?: number | null;
   forceStream?: boolean;
+  autoplay?: boolean;
 }
 
 class VideoSession {
@@ -136,8 +138,8 @@ class VideoSession {
     switch (e.type) {
       case 'status':
         if (e.status === 'error') {
-          setPlayerState({ status: 'error', error: e.error ?? 'The video could not be played.' });
           if (this.recoverAfterAddressSwitch()) break;
+          setPlayerState({ status: 'error', error: e.error ?? 'The video could not be played.' });
           void this.reporter?.stop({ positionTicks: secondsToTicks(st.position) });
         } else if (e.status === 'loading') setPlayerState({ status: st.status === 'loading' ? 'loading' : 'buffering' });
         else if (e.status === 'ready') setPlayerState({ status: 'ready' });
@@ -231,7 +233,7 @@ class VideoSession {
           : target === request.item || target.Id === request.item.Id
             ? resume
             : ticksToSecondsExact(target.UserData?.PlaybackPositionTicks);
-      await this.load(id, item, request.queue ?? [], { startSeconds: start });
+      await this.load(id, item, request.queue ?? [], { startSeconds: start, autoplay: request.autoplay });
     } catch (e) {
       if (id !== this.loadId) return;
       setPlayerState({ status: 'error', error: describeError(e).title });
@@ -279,12 +281,78 @@ class VideoSession {
       duration: ticksToSecondsExact(item.RunTimeTicks),
       cues: null,
     });
-    this.engine.load({ uri, isHls: false, startSeconds: start, title: item.Name ?? 'Video', subtitle: subtitleLine(item), artworkUri: undefined });
+    this.engine.load({
+      uri,
+      isHls: false,
+      startSeconds: start,
+      title: item.Name ?? 'Video',
+      subtitle: subtitleLine(item),
+      artworkUri: undefined,
+      autoplay: request.autoplay,
+    });
     const rate = playerState().rate;
     if (rate !== 1) this.engine.setRate(rate);
     this.reporter = this.makeReporter(api, item);
     this.reporter.start({ itemId: r.itemId, mediaSourceId: plan.mediaSourceId, playSessionId: null, playMethod: 'DirectPlay', canSeek: true });
     this.watchAppState();
+    const def = plan.subtitles.find((sub) => sub.isDefault);
+    if (def) void this.selectSubtitle(def.index);
+  }
+
+  /**
+   * Plays a file the server did not plan: this device's download, or a
+   * nearby host's file (watch together). Needs no server. Progress goes to
+   * the server only for a download of the signed-in server.
+   */
+  async playSource(src: { item: BaseItemDto; uri: string; startSeconds: number; autoplay: boolean; record: DownloadRecord | null }): Promise<void> {
+    const id = ++this.loadId;
+    await this.finishCurrent();
+    if (id !== this.loadId) return;
+    this.lastRequest = null;
+    const r = src.record;
+    const item = r?.item ?? src.item;
+    const plan: StreamPlan = r
+      ? localPlan(r, src.uri)
+      : {
+          url: src.uri,
+          isHls: false,
+          playMethod: 'DirectPlay',
+          mediaSourceId: item.MediaSources?.[0]?.Id ?? '',
+          playSessionId: null,
+          audio: [],
+          subtitles: [],
+          audioIndex: null,
+          subtitleIndex: null,
+          burnedSubtitle: false,
+          isLocal: true,
+          fromPeer: true,
+        };
+    setPlayerState({
+      ...initialPlayerState,
+      presentation: 'full',
+      now: {
+        kind: 'video',
+        item,
+        queue: [],
+        plan,
+        segments: [],
+        chapters: chaptersOf(item.Chapters, ticksToSecondsExact(item.RunTimeTicks)),
+        trickplay: null,
+        bitrateChoice: null,
+        bitrate: 0,
+        next: null,
+      },
+      status: 'loading',
+      position: src.startSeconds,
+      duration: ticksToSecondsExact(item.RunTimeTicks),
+    });
+    this.engine.load({ uri: src.uri, isHls: false, startSeconds: src.startSeconds, title: item.Name ?? 'Video', subtitle: subtitleLine(item), autoplay: src.autoplay });
+    const s = useSessionStore.getState().session;
+    if (r && s && (!r.serverId || r.serverId === s.serverId)) {
+      this.reporter = this.makeReporter(context().api, item);
+      this.reporter.start({ itemId: r.itemId, mediaSourceId: plan.mediaSourceId, playSessionId: null, playMethod: 'DirectPlay', canSeek: true });
+      this.watchAppState();
+    }
     const def = plan.subtitles.find((sub) => sub.isDefault);
     if (def) void this.selectSubtitle(def.index);
   }
@@ -346,6 +414,7 @@ class VideoSession {
       title: item.Name ?? 'Video',
       subtitle: subtitleLine(item),
       artworkUri: artworkUrl(item, server),
+      autoplay: opts.autoplay,
     });
     const rate = playerState().rate;
     if (rate !== 1) this.engine.setRate(rate);
@@ -385,6 +454,26 @@ class VideoSession {
     });
   }
 
+  /** The stream URL that was reloaded after an address switch, so a second failure shows the error. */
+  private recovered: string | null = null;
+
+  /**
+   * The app moved to another address of the server while this stream played
+   * (`servers/connection.ts`). The stream keeps its old address until it
+   * fails; then it starts again on the new address at the same position.
+   * A transcode needs a new session for that, which `reload` asks for.
+   */
+  private recoverAfterAddressSwitch(): boolean {
+    const now = playerState().now;
+    const s = useSessionStore.getState().session;
+    if (!now || now.plan.isLocal || !s || !now.plan.url) return false;
+    if (now.plan.url.startsWith(`${s.serverUrl}/`) || this.recovered === now.plan.url) return false;
+    this.recovered = now.plan.url;
+    if (__DEV__) console.log('[player] the server address changed: the stream starts again on the new address');
+    void this.reload({});
+    return true;
+  }
+
   /** Reloads the current item at the current position with new stream options. */
   private async reload(opts: Omit<LoadOptions, 'startSeconds'>): Promise<void> {
     const st = playerState();
@@ -418,21 +507,43 @@ class VideoSession {
   }
 
   togglePlay(): void {
-    if (playerState().playing) this.engine.pause();
-    else this.engine.play();
+    if (playerState().playing) this.pause();
+    else this.play_();
   }
 
   play_(): void {
+    if (controlGate.intercept({ action: 'play' })) return;
     this.engine.play();
   }
 
   pause(): void {
+    if (controlGate.intercept({ action: 'pause' })) return;
     this.engine.pause();
   }
 
   seekTo(seconds: number): void {
     const { duration } = playerState();
     const target = Math.max(0, duration > 0 ? Math.min(seconds, duration - 0.5) : seconds);
+    if (controlGate.intercept({ action: 'seek', position: target })) return;
+    this.directSeek(target);
+  }
+
+  /**
+   * Player changes that skip the control gate. Watch together uses them to
+   * apply the group's commands, so a remote command does not echo.
+   */
+  readonly direct = {
+    play: () => this.engine.play(),
+    pause: () => this.engine.pause(),
+    seek: (seconds: number) => this.directSeek(seconds),
+    rate: (rate: number) => {
+      this.engine.setRate(rate);
+      setPlayerState({ rate });
+    },
+    position: () => this.engine.position || playerState().position,
+  };
+
+  private directSeek(target: number): void {
     this.engine.seekTo(target);
     setPlayerState({ position: target });
     this.reporter?.tick('Seek');
@@ -443,28 +554,8 @@ class VideoSession {
   }
 
   setRate(rate: number): void {
-    this.engine.setRate(rate);
-  /** The stream URL that was reloaded after an address switch, so a second failure shows the error. */
-  private recovered: string | null = null;
-
-  /**
-   * The app moved to another address of the server while this stream played
-   * (`servers/connection.ts`). The stream keeps its old address until it
-   * fails; then it starts again on the new address at the same position.
-   * A transcode needs a new session for that, which `reload` asks for.
-   */
-  private recoverAfterAddressSwitch(): boolean {
-    const now = playerState().now;
-    const s = useSessionStore.getState().session;
-    if (!now || now.plan.isLocal || !s || !now.plan.url) return false;
-    if (now.plan.url.startsWith(`${s.serverUrl}/`) || this.recovered === now.plan.url) return false;
-    this.recovered = now.plan.url;
-    if (__DEV__) console.log('[player] the server address changed: the stream starts again on the new address');
-    void this.reload({});
-    return true;
-  }
-
-    setPlayerState({ rate });
+    if (controlGate.intercept({ action: 'rate', rate })) return;
+    this.direct.rate(rate);
   }
 
   toggleMuted(): void {
@@ -564,7 +655,8 @@ class VideoSession {
 
   private async onEnded() {
     const now = playerState().now;
-    if (now?.next && usePlaybackSettings.getState().autoplayNext) {
+    // In a watch-together session the group decides what plays next.
+    if (now?.next && usePlaybackSettings.getState().autoplayNext && !controlGate.active) {
       await this.playNext();
       return;
     }

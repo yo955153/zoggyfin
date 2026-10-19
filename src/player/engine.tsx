@@ -77,6 +77,10 @@ class WebEngine implements VideoEngine {
     const begin = () => {
       if (token !== this.loadToken) return;
       if (start) v.currentTime = start;
+      if (source.autoplay === false) {
+        this.emit({ type: 'status', status: 'ready' });
+        return;
+      }
       v.play().catch(() => this.emit({ type: 'playing', playing: false }));
     };
     const nativeHls = v.canPlayType('application/vnd.apple.mpegurl') !== '';
@@ -93,7 +97,7 @@ class WebEngine implements VideoEngine {
           if (data.fatal) this.emit({ type: 'status', status: 'error', error: `Stream error: ${data.details}` });
         });
         hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
-          if (token !== this.loadToken) return;
+          if (token !== this.loadToken || source.autoplay === false) return;
           v.play().catch(() => this.emit({ type: 'playing', playing: false }));
         });
         hls.loadSource(source.uri);

@@ -49,7 +49,7 @@ class NativeEngine implements VideoEngine {
         if (status === 'readyToPlay' && this.pendingStart !== null) {
           const start = this.pendingStart;
           this.pendingStart = null;
-          if (start > 0.5) p.currentTime = start;
+          if (start > 0.5 || !this.pendingPlay) p.currentTime = start;
           if (this.pendingPlay) p.play();
           this.pendingPlay = false;
         }
@@ -72,7 +72,7 @@ class NativeEngine implements VideoEngine {
   load(source: EngineSource): void {
     const p = this.ensurePlayer();
     this.pendingStart = source.startSeconds;
-    this.pendingPlay = true;
+    this.pendingPlay = source.autoplay !== false;
     p.replace({
       uri: source.uri,
       contentType: source.isHls ? 'hls' : 'progressive',

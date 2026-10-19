@@ -20,6 +20,8 @@ export interface PlayRequest {
    * pass 0 to start over.
    */
   startPositionTicks?: number;
+  /** Video: false loads the item paused (watch together starts it for the group). */
+  autoplay?: boolean;
 }
 
 export interface PlayerController {
