@@ -1,7 +1,7 @@
 import * as Application from 'expo-application';
 import { router, Stack } from 'expo-router';
 import { useState } from 'react';
-import { Platform, ScrollView, Switch, Text, View } from 'react-native';
+import { Linking, Platform, ScrollView, Switch, Text, View } from 'react-native';
 
 import { clearQueryCache } from '@/api/query-client';
 import { useApi } from '@/api/use-api';
@@ -89,8 +89,9 @@ export default function SettingsScreen() {
               icon="square.stack"
               label="App version"
               value={`${Application.nativeApplicationVersion ?? id.version}${Application.nativeBuildVersion ? ` (${Application.nativeBuildVersion})` : ''}`}
-              last
             />
+            <SettingsRow icon="lock.fill" label="Privacy policy" onPress={() => void Linking.openURL('https://zoggyfin.zog-tech.com/privacy')} />
+            <SettingsRow icon="info.circle" label="Help and support" onPress={() => void Linking.openURL('https://zoggyfin.zog-tech.com/support')} last />
           </Group>
 
           {__DEV__ ? <DevSection /> : null}

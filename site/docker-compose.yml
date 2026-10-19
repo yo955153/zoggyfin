@@ -1,0 +1,12 @@
+name: zoggyfin-site
+
+services:
+  web:
+    image: nginx:1.27-alpine
+    container_name: zoggyfin-site
+    restart: unless-stopped
+    ports:
+      - "8798:80"
+    volumes:
+      - ./public:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro

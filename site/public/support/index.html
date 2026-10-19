@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support · Zoggyfin</title>
+<meta name="description" content="Help for Zoggyfin, the client app for Jellyfin media servers.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Cpath d='M26 92 C 34 66, 52 38, 82 22 C 86 20, 90 23, 88 28 C 80 48, 82 70, 104 92 Z' fill='%23FF7A59'/%3E%3Crect x='14' y='100' width='100' height='7' rx='3.5' fill='%23FF7A59'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#0B0B0E;--surface:#16161A;--line:#2A2A31;--text:#F2F2F5;--muted:#A1A1AA;--accent:#FF7A59;color-scheme:dark light}
+@media (prefers-color-scheme:light){:root{--bg:#FFFFFF;--surface:#F2F2F5;--line:#E4E4E8;--text:#111114;--muted:#55555E;--accent:#B53A17}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Noto Sans",sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:32px 20px 64px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:40px}
+header a{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;font-weight:600;font-size:22px;letter-spacing:-0.01em}
+nav{margin-left:auto;display:flex;gap:18px;font-size:15px}
+nav a{color:var(--muted);text-decoration:none}
+nav a:hover,nav a[aria-current]{color:var(--text)}
+h1{font-size:34px;line-height:1.2;letter-spacing:-0.02em;margin:0 0 8px}
+h2{font-size:21px;margin:36px 0 8px;letter-spacing:-0.01em}
+p,li{color:var(--text)}
+.lede{font-size:20px;color:var(--muted);margin:0 0 28px}
+.muted{color:var(--muted)}
+a{color:var(--accent)}
+ul{padding-left:22px}
+li{margin:6px 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin:24px 0}
+.card h2{margin-top:0}
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+footer a{color:var(--muted)}
+@media (max-width:480px){h1{font-size:28px}nav{gap:14px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><a href="/"><svg viewBox="0 0 128 128" width="36" height="36" aria-hidden="true"><defs><linearGradient id="fin" x1="0.15" y1="1" x2="0.85" y2="0"><stop offset="0" stop-color="#FF6A4D"/><stop offset="1" stop-color="#FFA270"/></linearGradient></defs><path d="M26 92 C 34 66, 52 38, 82 22 C 86 20, 90 23, 88 28 C 80 48, 82 70, 104 92 Z" fill="url(#fin)"/><rect x="14" y="100" width="70" height="7" rx="3.5" fill="#FF7A59"/><rect x="92" y="100" width="22" height="7" rx="3.5" fill="#FF7A59" opacity="0.45"/></svg>zoggyfin</a><nav><a href="/privacy">Privacy</a><a href="/support" aria-current="page">Support</a></nav></header>
+<main>
+<h1>Support</h1>
+<p class="lede">Help for Zoggyfin on iPhone and iPad.</p>
+<div class="card"><h2>Contact</h2><p>Send an email to <a href="mailto:admin@zog-tech.com">admin@zog-tech.com</a>. Tell us your device, your iOS version, the app version (Settings &rarr; App version) and your Jellyfin server version. We answer in English.</p></div>
+
+<h2>What do I need?</h2>
+<p>You need a Jellyfin server (version 10.11 or later) and a user account on it. Zoggyfin is only a client: it plays the media that is on your server. To try the app without a server, use the public Jellyfin demo server: address <code>https://demo.jellyfin.org/stable</code>, user name <code>demo</code>, no password.</p>
+
+<h2>Sign in</h2>
+<ul>
+<li>Enter the server address with <code>http://</code> or <code>https://</code> and the port, for example <code>http://10.0.0.20:8096</code>.</li>
+<li>You can also sign in with Quick Connect. Approve the code in the Jellyfin web app of the same user.</li>
+<li>If the server is not reachable, check that your device is on the same network or that the internet address of the server is correct.</li>
+</ul>
+
+<h2>Home and internet addresses</h2>
+<p>A server can have more than one address. Open Settings, then the server, to add addresses. The app uses the first address that answers. With the Wi-Fi rule, the app uses the home address on your home Wi-Fi. This needs location access, because iOS gives the Wi-Fi name only with it. The app does not use your location.</p>
+
+<h2>Playback</h2>
+<ul>
+<li>The server plays files directly when the device can open them. Other files are converted by the server, so the server needs enough power for that.</li>
+<li>If a video does not start, set a lower quality in the player or in Settings &rarr; Playback.</li>
+<li>Picture in Picture, AirPlay and background audio work from the player controls.</li>
+</ul>
+
+<h2>Downloads</h2>
+<p>Tap the download button on a movie, an episode, a season, an album or a playlist. The Downloads tab shows the queue, the progress and the space used. Downloads continue in the background. Downloaded items play without a connection, and the app sends your progress to the server later.</p>
+
+<h2>Watch together</h2>
+<p>Use SyncPlay to watch with other users of the same server, or use Nearby to watch with a device on the same network. The other device must accept local network access.</p>
+
+<h2>Privacy</h2>
+<p>Zoggyfin collects no data. Read the <a href="/privacy">privacy policy</a>.</p>
+</main>
+<footer>&copy; 2026 Zog Tech, Inc. Zoggyfin is open source under the MPL-2.0. It is not affiliated with the Jellyfin project. Contact: <a href="mailto:admin@zog-tech.com">admin@zog-tech.com</a></footer>
+</div>
+</body>
+</html>
