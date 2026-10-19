@@ -15,7 +15,8 @@
           "NSAllowsArbitraryLoads": true
         },
         "NSLocalNetworkUsageDescription": "Zoggyfin connects to your Jellyfin server on the local network.",
-        "CADisableMinimumFrameDurationOnPhone": true
+        "CADisableMinimumFrameDurationOnPhone": true,
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -112,6 +113,12 @@
         "projectId": "d419963f-c3a0-4c69-8653-01ac1df4262e"
       }
     },
-    "owner": "admin.zogtech"
+    "owner": "admin.zogtech",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d419963f-c3a0-4c69-8653-01ac1df4262e"
+    }
   }
 }
