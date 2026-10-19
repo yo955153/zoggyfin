@@ -7,6 +7,8 @@ import { createVideoPlayer, isPictureInPictureSupported, type VideoPlayer, Video
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
 
+import { setAutoPictureInPicture } from '@/native/zoggyfin-native';
+
 import type { EngineListener, EngineSource, EngineStatus, VideoEngine } from './engine-types';
 
 class NativeEngine implements VideoEngine {
@@ -15,8 +17,33 @@ class NativeEngine implements VideoEngine {
   private pendingStart: number | null = null;
   private pendingPlay = false;
   private subscriptions: { remove(): void }[] = [];
+  private playing = false;
+  /**
+   * True once the current source is ready. Android: a player made with no
+   * source prepares an empty timeline, ExoPlayer ends it at once and
+   * expo-video sends `playToEnd`, which arrives after the real source is set.
+   */
+  private sourceReady = false;
+  private viewMounted = false;
+
   /** The mounted view, for Picture in Picture. */
-  view: VideoView | null = null;
+  get view(): VideoView | null {
+    return this.mountedView;
+  }
+  set view(v: VideoView | null) {
+    this.mountedView = v;
+    this.viewMounted = v !== null;
+    this.updateAutoPip();
+  }
+  private mountedView: VideoView | null = null;
+
+  /**
+   * Android 8 to 11 have no automatic Picture in Picture: the native module
+   * enters it on Home while a video plays on screen. No effect on iOS.
+   */
+  private updateAutoPip() {
+    setAutoPictureInPicture(this.viewMounted && this.playing);
+  }
 
   get pipSupported(): boolean {
     try {
@@ -46,6 +73,7 @@ class NativeEngine implements VideoEngine {
     this.subscriptions = [
       p.addListener('statusChange', ({ status, error }) => {
         const map: Record<string, EngineStatus> = { idle: 'idle', loading: 'loading', readyToPlay: 'ready', error: 'error' };
+        if (status === 'readyToPlay') this.sourceReady = true;
         if (status === 'readyToPlay' && this.pendingStart !== null) {
           const start = this.pendingStart;
           this.pendingStart = null;
@@ -55,12 +83,18 @@ class NativeEngine implements VideoEngine {
         }
         this.emit({ type: 'status', status: map[status] ?? 'idle', error: error?.message });
       }),
-      p.addListener('playingChange', ({ isPlaying }) => this.emit({ type: 'playing', playing: isPlaying })),
+      p.addListener('playingChange', ({ isPlaying }) => {
+        this.playing = isPlaying;
+        this.updateAutoPip();
+        this.emit({ type: 'playing', playing: isPlaying });
+      }),
       p.addListener('timeUpdate', ({ currentTime, bufferedPosition }) =>
         this.emit({ type: 'time', position: currentTime, buffered: Math.max(0, bufferedPosition) }),
       ),
       p.addListener('sourceLoad', ({ duration }) => this.emit({ type: 'duration', duration })),
-      p.addListener('playToEnd', () => this.emit({ type: 'ended' })),
+      p.addListener('playToEnd', () => {
+        if (this.sourceReady) this.emit({ type: 'ended' });
+      }),
       p.addListener('playbackRateChange', ({ playbackRate }) => this.emit({ type: 'rate', rate: playbackRate })),
       p.addListener('mutedChange', ({ muted }) => this.emit({ type: 'muted', muted })),
     ];
@@ -73,6 +107,7 @@ class NativeEngine implements VideoEngine {
     const p = this.ensurePlayer();
     this.pendingStart = source.startSeconds;
     this.pendingPlay = source.autoplay !== false;
+    this.sourceReady = false;
     p.replace({
       uri: source.uri,
       contentType: source.isHls ? 'hls' : 'progressive',
@@ -92,6 +127,8 @@ class NativeEngine implements VideoEngine {
     this.subscriptions.forEach((s) => s.remove());
     this.subscriptions = [];
     this.player = null;
+    this.playing = false;
+    this.updateAutoPip();
     this.playerListeners.forEach((l) => l());
     try {
       p.pause();

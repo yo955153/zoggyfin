@@ -8,3 +8,9 @@ export function excludeFromBackup(_path: string): boolean {
 }
 
 export const hasNativeKeyInput = false;
+
+export function androidDecoders(): null {
+  return null;
+}
+
+export function setAutoPictureInPicture(_enabled: boolean): void {}

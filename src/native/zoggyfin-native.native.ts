@@ -4,6 +4,8 @@
  */
 import { requireOptionalNativeModule } from 'expo';
 
+import type { AndroidDecoders, DecoderInfo } from '@/player/device-profile';
+
 interface ZoggyfinNativeModule {
   isHardwareDecodeSupported(codec: string): boolean;
   excludeFromBackup?(path: string): boolean;
@@ -29,3 +31,46 @@ export function excludeFromBackup(path: string): boolean {
 }
 
 export const hasNativeKeyInput = mod !== null;
+
+interface ZoggyfinAndroidModule {
+  decoders(): Record<string, unknown>;
+  setAutoPictureInPicture(enabled: boolean): void;
+}
+
+/** The Android part of the module (decoders, Picture in Picture on Home). Null on iOS and in older builds. */
+const android = requireOptionalNativeModule<ZoggyfinAndroidModule>('ZoggyfinAndroid');
+
+function decoderInfo(v: unknown): DecoderInfo | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const o = v as Record<string, unknown>;
+  return { hardware: o.hardware === true, software: o.software === true, maxLevel: typeof o.maxLevel === 'number' ? o.maxLevel : 0, tenBit: o.tenBit === true };
+}
+
+/** The decoders of an Android device (MediaCodecList). Null when the build has no module. */
+export function androidDecoders(): AndroidDecoders | null {
+  if (!android) return null;
+  try {
+    const raw = android.decoders();
+    const codecs: AndroidDecoders['codecs'] = {};
+    for (const [key, value] of Object.entries(raw)) {
+      const info = decoderInfo(value);
+      if (info) codecs[key] = info;
+    }
+    const hdr = Array.isArray(raw.hdr) ? raw.hdr.filter((x): x is string => typeof x === 'string') : [];
+    return { codecs, hdr, sdk: typeof raw.sdk === 'number' ? raw.sdk : 0 };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Android 8 to 11: Picture in Picture starts on Home while this is true.
+ * Android 12 and later use expo-video's `startsPictureInPictureAutomatically`.
+ */
+export function setAutoPictureInPicture(enabled: boolean): void {
+  try {
+    android?.setAutoPictureInPicture(enabled);
+  } catch {
+    // An older build: no Picture in Picture on Home.
+  }
+}

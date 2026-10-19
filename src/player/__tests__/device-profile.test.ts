@@ -1,6 +1,13 @@
 import type { CodecProfile, DeviceProfile } from '@/api/types';
 
-import { appleCapabilities, buildDeviceProfile, mpvCapabilities, webCapabilities } from '../device-profile';
+import {
+  type AndroidDecoders,
+  appleCapabilities,
+  buildDeviceProfile,
+  exoCapabilities,
+  mpvCapabilities,
+  webCapabilities,
+} from '../device-profile';
 
 const opts = { maxBitrate: 20_000_000 };
 
@@ -120,5 +127,59 @@ describe('mpv device profile (desktop app)', () => {
   it('carries the bitrate limit and an HLS fallback', () => {
     expect(profile.MaxStaticBitrate).toBe(120_000_000);
     expect(profile.TranscodingProfiles?.[0]?.Protocol).toBe('hls');
+  });
+});
+
+describe('ExoPlayer device profile (Android)', () => {
+  const d = (hardware: boolean, maxLevel = 0, tenBit = false) => ({ hardware, software: !hardware, maxLevel, tenBit });
+  /** A 2017 phone: HEVC and VP9 in hardware, no AV1, an HDR10 display, no Dolby audio. */
+  const phone: AndroidDecoders = {
+    codecs: { h264: d(true, 52), hevc: d(true, 153, true), vp9: d(true), av1: undefined, aac: d(false), mp3: d(false), flac: d(false), opus: d(false) },
+    hdr: ['hdr10', 'hlg'],
+    sdk: 28,
+  };
+  const profile = buildDeviceProfile(exoCapabilities(phone), opts);
+
+  it('direct plays mp4 and mkv with the hardware video codecs', () => {
+    const [mp4, mkv, webm] = videoDirect(profile);
+    expect(mp4).toMatchObject({ Container: 'mp4,m4v,mov', VideoCodec: 'h264,hevc', AudioCodec: 'aac,mp3,flac' });
+    expect(mkv).toMatchObject({ Container: 'mkv', VideoCodec: 'h264,hevc,vp9', AudioCodec: 'aac,mp3,flac,opus' });
+    expect(webm).toMatchObject({ Container: 'webm', VideoCodec: 'vp9', AudioCodec: 'opus' });
+    expect(profile.Name).toBe('Zoggyfin (ExoPlayer)');
+  });
+
+  it('leaves out AV1 and Dolby audio with no decoder', () => {
+    const all = videoDirect(profile).map((p) => `${p.VideoCodec} ${p.AudioCodec}`).join(' ');
+    expect(all).not.toMatch(/av1|ac3|eac3/);
+    expect(profile.TranscodingProfiles?.[0]?.AudioCodec).toBe('aac,mp3');
+  });
+
+  it('uses the decoder levels and the HDR types of the display', () => {
+    const h264 = codec(profile, 'h264')?.Conditions?.find((c) => c.Property === 'VideoLevel');
+    expect(h264?.Value).toBe('52');
+    const hevc = codec(profile, 'hevc');
+    expect(hevc?.Conditions?.find((c) => c.Property === 'VideoLevel')?.Value).toBe('153');
+    const ranges = (hevc?.Conditions?.find((c) => c.Property === 'VideoRangeType')?.Value ?? '').split('|');
+    expect(ranges).toEqual(expect.arrayContaining(['SDR', 'HDR10', 'HLG', 'DOVIWithHDR10']));
+    expect(ranges).not.toContain('DOVI');
+    expect(ranges).not.toContain('HDR10Plus');
+    // No hvc1 rule: ExoPlayer plays hev1 too.
+    expect(hevc?.Conditions?.some((c) => c.Property === 'VideoCodecTag')).toBe(false);
+  });
+
+  it('adds AC3 and E-AC3 when the device decodes them', () => {
+    const dolby = exoCapabilities({ ...phone, codecs: { ...phone.codecs, ac3: d(false), eac3: d(false) } });
+    expect(dolby.audioCodecs).toEqual(expect.arrayContaining(['ac3', 'eac3']));
+    expect(dolby.hlsAudioCodecs).toEqual(['aac', 'mp3', 'ac3', 'eac3']);
+  });
+
+  it('is conservative with no decoder report (a build without the native module)', () => {
+    const caps = exoCapabilities(null);
+    expect(caps.videoCodecs).toEqual(['h264', 'hevc']);
+    expect(caps.hevcRanges).toBe('SDR|DOVIWithSDR');
+    expect(caps.hevcTenBit).toBe(false);
+    const p = buildDeviceProfile(caps, opts);
+    expect(codec(p, 'hevc')?.Conditions?.find((c) => c.Property === 'VideoBitDepth')?.Value).toBe('8');
+    expect(p.TranscodingProfiles?.[0]).toMatchObject({ Container: 'mp4', Protocol: 'hls', VideoCodec: 'hevc,h264' });
   });
 });

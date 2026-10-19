@@ -20,8 +20,9 @@ export interface MediaCapabilities {
   /**
    * `apple` is AVPlayer (iPhone, iPad, Mac). `web` is a browser `<video>` element.
    * `mpv` is libmpv in the desktop app: it direct plays almost every file.
+   * `exo` is ExoPlayer (Media3) on Android, through expo-video.
    */
-  engine: 'apple' | 'web' | 'mpv';
+  engine: 'apple' | 'web' | 'mpv' | 'exo';
   /** Video codecs the device can direct play. */
   videoCodecs: readonly VideoCodec[];
   /** Audio codecs the device can direct play. */
@@ -34,6 +35,14 @@ export interface MediaCapabilities {
   hlsVideoCodecs: readonly VideoCodec[];
   hlsAudioCodecs: readonly AudioCodec[];
   maxAudioChannels: number;
+  /** The highest H.264 level the decoder plays, in server numbers (5.1 is 51). Default: 52 for AVPlayer, else 51. */
+  h264Level?: number;
+  /** The highest HEVC level, in server numbers (5.1 is 153). Default: 183. */
+  hevcLevel?: number;
+  /** HEVC video ranges the device shows correctly, `|`-separated. Default: the AVPlayer list. */
+  hevcRanges?: string;
+  /** False when the HEVC decoder plays 8-bit video only. Default: true. */
+  hevcTenBit?: boolean;
 }
 
 export interface ProfileOptions {
@@ -117,6 +126,76 @@ function mpvProfile(caps: MediaCapabilities, options: ProfileOptions): DevicePro
   };
 }
 
+/** One decoder family, from MediaCodecList (modules/zoggyfin-native, Android). */
+export interface DecoderInfo {
+  hardware: boolean;
+  software: boolean;
+  /** Server numbers: H.264 5.1 is 51, HEVC 5.1 is 153. 0 when unknown. */
+  maxLevel: number;
+  tenBit: boolean;
+}
+
+/** The decoders of an Android device and the HDR types of its display. */
+export interface AndroidDecoders {
+  codecs: Partial<Record<string, DecoderInfo>>;
+  /** `hdr10`, `hdr10Plus`, `hlg`, `dolbyVision`. */
+  hdr: readonly string[];
+  sdk: number;
+}
+
+/**
+ * ExoPlayer (Android). With no decoder report (a build without the native
+ * module) the answer is conservative: H.264 and HEVC in SDR, no Dolby audio.
+ * Video codecs other than H.264 count only with a hardware decoder: the
+ * software decoders are too slow for full HD on most phones.
+ */
+export function exoCapabilities(report: AndroidDecoders | null): MediaCapabilities {
+  const has = (k: string) => {
+    const d = report?.codecs[k];
+    return !!d && (d.hardware || d.software);
+  };
+  const hw = (k: string) => !!report?.codecs[k]?.hardware;
+  const video: VideoCodec[] = ['h264'];
+  const hevc = report ? hw('hevc') : true;
+  if (hevc) video.push('hevc');
+  if (hw('vp9')) video.push('vp9');
+  if (hw('av1')) video.push('av1');
+  const audio: AudioCodec[] = ['aac', 'mp3'];
+  if (!report || has('flac')) audio.push('flac');
+  if (!report || has('opus')) audio.push('opus');
+  if (has('alac')) audio.push('alac');
+  if (has('ac3')) audio.push('ac3');
+  if (has('eac3')) audio.push('eac3');
+  const hlsAudio = (['aac', 'mp3', 'ac3', 'eac3'] as const).filter((c) => audio.includes(c));
+  const hdr = report?.hdr ?? [];
+  const tenBit = report ? !!report.codecs.hevc?.tenBit : false;
+  const ranges = ['SDR'];
+  if (tenBit && hdr.includes('hdr10')) ranges.push('HDR10', 'DOVIWithHDR10');
+  if (tenBit && hdr.includes('hdr10Plus')) ranges.push('HDR10Plus', 'DOVIWithHDR10Plus');
+  if (tenBit && hdr.includes('hlg')) ranges.push('HLG', 'DOVIWithHLG');
+  ranges.push('DOVIWithSDR');
+  // Dolby Vision profile 5 has no fallback layer: only with a Dolby Vision decoder and display.
+  if (has('dolbyVision') && hdr.includes('dolbyVision')) ranges.push('DOVI');
+  const level = (k: string, fallback: number) => {
+    const n = report?.codecs[k]?.maxLevel ?? 0;
+    return n > 0 ? n : fallback;
+  };
+  return {
+    engine: 'exo',
+    videoCodecs: video,
+    audioCodecs: audio,
+    containers: ['mp4', 'm4v', 'mov', 'mkv', 'webm'],
+    hls: true,
+    hlsVideoCodecs: hevc ? ['hevc', 'h264'] : ['h264'],
+    hlsAudioCodecs: hlsAudio,
+    maxAudioChannels: 6,
+    h264Level: level('h264', 51),
+    hevcLevel: level('hevc', 153),
+    hevcRanges: ranges.join('|'),
+    hevcTenBit: tenBit,
+  };
+}
+
 /** A probe answer: true when the browser says it can play the MIME type. */
 export type CanPlay = (mime: string) => boolean;
 
@@ -183,7 +262,7 @@ function codecProfiles(caps: MediaCapabilities): CodecProfile[] {
       Conditions: [
         cond('EqualsAny', 'VideoProfile', 'high|main|baseline|constrained baseline'),
         cond('EqualsAny', 'VideoRangeType', 'SDR'),
-        cond('LessThanEqual', 'VideoLevel', caps.engine === 'apple' ? '52' : '51'),
+        cond('LessThanEqual', 'VideoLevel', String(caps.h264Level ?? (caps.engine === 'apple' ? 52 : 51))),
         cond('LessThanEqual', 'VideoBitDepth', '8'),
         cond('NotEquals', 'IsInterlaced', 'true'),
       ],
@@ -199,8 +278,9 @@ function codecProfiles(caps: MediaCapabilities): CodecProfile[] {
       Codec: 'hevc',
       Conditions: [
         cond('EqualsAny', 'VideoProfile', 'main|main 10'),
-        cond('EqualsAny', 'VideoRangeType', HEVC_RANGES),
-        cond('LessThanEqual', 'VideoLevel', '183'),
+        cond('EqualsAny', 'VideoRangeType', caps.hevcRanges ?? HEVC_RANGES),
+        cond('LessThanEqual', 'VideoLevel', String(caps.hevcLevel ?? 183)),
+        ...(caps.hevcTenBit === false ? [cond('LessThanEqual', 'VideoBitDepth', '8')] : []),
         cond('NotEquals', 'IsInterlaced', 'true'),
         // AVPlayer only opens HEVC in mp4 with the `hvc1` (or Dolby Vision `dvh1`) sample entry, not `hev1`.
         ...(caps.engine === 'apple' ? [cond('EqualsAny', 'VideoCodecTag', 'hvc1|dvh1', true)] : []),
@@ -231,6 +311,27 @@ const SUBTITLES: SubtitleProfile[] = [
   { Format: 'vobsub', Method: 'Encode' },
 ];
 
+/** Containers ExoPlayer reads for each video codec. */
+function exoDirectPlay(caps: MediaCapabilities): DirectPlayProfile[] {
+  const join = (xs: readonly string[]) => xs.join(',');
+  const notOpus = caps.audioCodecs.filter((c) => c !== 'opus');
+  const out: DirectPlayProfile[] = [
+    {
+      Container: 'mp4,m4v,mov',
+      Type: 'Video',
+      VideoCodec: join(caps.videoCodecs.filter((c) => c !== 'vp9')),
+      AudioCodec: join(notOpus),
+    },
+    { Container: 'mkv', Type: 'Video', VideoCodec: join(caps.videoCodecs), AudioCodec: join(caps.audioCodecs) },
+  ];
+  const webmVideo = caps.videoCodecs.filter((c) => c === 'vp9' || c === 'av1');
+  if (webmVideo.length) {
+    // Every Android version that Zoggyfin supports decodes Opus.
+    out.push({ Container: 'webm', Type: 'Video', VideoCodec: join(webmVideo), AudioCodec: 'opus' });
+  }
+  return out;
+}
+
 const AUDIO_CONTAINERS: Partial<Record<AudioCodec, string>> = {
   mp3: 'mp3',
   aac: 'aac,m4a,m4b',
@@ -239,10 +340,17 @@ const AUDIO_CONTAINERS: Partial<Record<AudioCodec, string>> = {
   opus: 'ogg,opus,webm',
 };
 
+const PROFILE_NAMES: Record<MediaCapabilities['engine'], string> = {
+  apple: 'Zoggyfin (AVPlayer)',
+  web: 'Zoggyfin (Web)',
+  mpv: 'Zoggyfin (mpv)',
+  exo: 'Zoggyfin (ExoPlayer)',
+};
+
 export function buildDeviceProfile(caps: MediaCapabilities, options: ProfileOptions): DeviceProfile {
   if (caps.engine === 'mpv') return mpvProfile(caps, options);
   const join = (xs: readonly string[]) => xs.join(',');
-  const directPlay: DirectPlayProfile[] = [
+  const directPlay: DirectPlayProfile[] = caps.engine === 'exo' ? exoDirectPlay(caps) : [
     {
       Container: join(caps.containers.filter((c) => c !== 'webm')),
       Type: 'Video',
@@ -250,7 +358,7 @@ export function buildDeviceProfile(caps: MediaCapabilities, options: ProfileOpti
       AudioCodec: join(caps.audioCodecs.filter((c) => c !== 'opus')),
     },
   ];
-  if (caps.containers.includes('webm')) {
+  if (caps.engine !== 'exo' && caps.containers.includes('webm')) {
     directPlay.push({
       Container: 'webm',
       Type: 'Video',
@@ -289,7 +397,7 @@ export function buildDeviceProfile(caps: MediaCapabilities, options: ProfileOpti
   ];
 
   return {
-    Name: caps.engine === 'apple' ? 'Zoggyfin (AVPlayer)' : 'Zoggyfin (Web)',
+    Name: PROFILE_NAMES[caps.engine],
     MaxStreamingBitrate: options.maxBitrate,
     MaxStaticBitrate: options.maxBitrate,
     MusicStreamingTranscodingBitrate: 320_000,
