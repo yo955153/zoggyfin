@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import type { BaseItemDto } from '@/api/types';
+import { useSessionStore } from '@/auth/session-store';
 import { features } from '@/platform/tv';
 
 import { files } from './files';
@@ -17,12 +18,17 @@ import { fileUri, localImageUri, localMediaUri } from './local';
 import { downloadManager } from './manager';
 import { isDownloadable } from './plan';
 import { downloadsState, statusOf, useDownloadsStore } from './store';
-import { buildLists, type DownloadGroupView } from './lists';
+import { buildLists, type DownloadGroupView, forServer, onServer, otherServers, type OtherServerDownloads } from './lists';
 import type { DownloadRecord, DownloadStatus } from './types';
 
 export type { DownloadCollection, DownloadRecord, DownloadState, DownloadStatus, LocalSubtitle } from './types';
 export { DOWNLOAD_SCHEMA_VERSION } from './types';
-export { buildLists, type DownloadGroupView, searchDownloads } from './lists';
+export { buildLists, type DownloadGroupView, onServer, type OtherServerDownloads, searchDownloads } from './lists';
+
+/** The active server's Id: downloads of other servers stay on the device but do not show in its lists. */
+function activeServerId(): string | null {
+  return useSessionStore.getState().session?.serverId ?? null;
+}
 export { DOWNLOAD_QUALITY_OPTIONS, isDownloadable } from './plan';
 export { etaSeconds, fraction } from './state-machine';
 export { chooseMedia, fileUri, localImageUri, localMediaUri } from './local';
@@ -78,10 +84,11 @@ export function localExtraUri(record: DownloadRecord, file: string): string | nu
 export function downloadedChildren(containerId: string | null | undefined): BaseItemDto[] | null {
   if (!containerId) return null;
   const s = downloadsState();
+  const serverId = activeServerId();
   const c = s.collections[containerId];
-  const list = c
+  const list = c && onServer(c, serverId)
     ? c.itemIds.map((id) => s.records[id])
-    : Object.values(s.records)
+    : Object.values(forServer(s.records, serverId))
         .filter((r) => r.group.id === containerId)
         .sort((a, b) => a.sort - b.sort);
   const items = list.filter((r): r is DownloadRecord => !!r && r.state === 'completed').map((r) => r.item);
@@ -106,15 +113,37 @@ export function useLocalImage(id: string | null | undefined, variant: 'poster' |
   return useDownloadsStore((s) => {
     if (!id || !downloadsSupported) return null;
     const holder = s.records[id] ?? s.collections[id];
-    return holder ? localImageUri(holder, s.documentsDir, variant) : null;
+    return holder && onServer(holder, activeServerId()) ? localImageUri(holder, s.documentsDir, variant) : null;
   });
 }
 
-/** In progress (queue order) and Downloaded (grouped by show or album), for the Downloads tab. */
-export function useDownloadLists(): { inProgress: DownloadRecord[]; groups: DownloadGroupView[]; appBytes: number; activeCount: number } {
+/**
+ * In progress (queue order) and Downloaded (grouped by show or album) of the
+ * active server, for the Downloads tab. `appBytes` counts every server, for
+ * the storage bar; `others` sums up the downloads of the other servers.
+ */
+export function useDownloadLists(): {
+  inProgress: DownloadRecord[];
+  groups: DownloadGroupView[];
+  appBytes: number;
+  activeCount: number;
+  others: OtherServerDownloads[];
+} {
   const records = useDownloadsStore((s) => s.records);
   const collections = useDownloadsStore((s) => s.collections);
-  return useMemo(() => buildLists(records, collections), [records, collections]);
+  const serverId = useSessionStore((s) => s.session?.serverId ?? null);
+  return useMemo(() => {
+    const lists = buildLists(forServer(records, serverId), forServer(collections, serverId));
+    const appBytes = Object.values(records).reduce((n, r) => n + r.bytesDone, 0);
+    return { ...lists, appBytes, others: otherServers(records, serverId) };
+  }, [records, collections, serverId]);
+}
+
+/** Deletes every download of a server (when the user removes the server). */
+export async function removeServerDownloads(serverId: string): Promise<void> {
+  for (const r of Object.values(downloadsState().records)) {
+    if (r.serverId === serverId) await downloadManager.remove(r.itemId);
+  }
 }
 
 /** Free and total bytes on the device, read again every 10 s while shown. Null on web. */

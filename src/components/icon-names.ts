@@ -106,6 +106,9 @@ export const ANDROID_SYMBOLS = {
   'icloud.slash': 'cloud_off',
   internaldrive: 'hard_drive',
   'pause.circle': 'pause_circle',
+  wifi: 'wifi',
+  globe: 'public',
+  'person.badge.plus': 'person_add',
 } as const satisfies Record<string, AndroidSymbol>;
 
 export type IconName = keyof typeof ANDROID_SYMBOLS;

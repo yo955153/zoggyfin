@@ -5,6 +5,7 @@ import type { SearchBarCommands } from 'react-native-screens';
 
 import { useSearch } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
+import { useSessionStore } from '@/auth/session-store';
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
@@ -63,9 +64,10 @@ export default function SearchScreen() {
   const q = useSearch(term);
   const offline = useOffline();
   const records = useDownloadsStore((st) => st.records);
+  const serverId = useSessionStore((st) => st.session?.serverId);
   // Offline (or the server cannot be reached): search what is on this device.
   const localOnly = offline || (!!q.error && !q.data && isNetworkError(q.error));
-  const localResults = useMemo(() => (localOnly ? searchDownloads(records, term) : []), [localOnly, records, term]);
+  const localResults = useMemo(() => (localOnly ? searchDownloads(records, term, serverId) : []), [localOnly, records, term, serverId]);
   const results = localOnly ? localResults : q.data;
   const all = useMemo(() => groupSearchResults(results ?? []), [results]);
   const sections = useMemo(() => filterSections(all, filter), [all, filter]);

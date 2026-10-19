@@ -3,7 +3,7 @@ import { PixelRatio, Text, View } from 'react-native';
 
 import type { Session } from '@/auth/session-store';
 import { initials } from '@/images/generated-art';
-import { buildUserImageUrl } from '@/images/image-url';
+import { buildUserImageUrl, imageSource } from '@/images/image-url';
 import { createStyles, type AppTheme, fallbackArt, font, mediaColors, type, useStyles } from '@/theme';
 
 /** The user's picture, or initials on the generated-art colour of the user name. */
@@ -11,13 +11,14 @@ export function Avatar({ session, size }: { session: Session; size: number }) {
   const s = useStyles(makeStyles);
   const box = { width: size, height: size, borderRadius: size / 2 };
   if (session.userImageTag) {
+    const server = { baseUrl: session.serverUrl, token: session.token, serverId: session.serverId };
     const uri = buildUserImageUrl(
-      { baseUrl: session.serverUrl, token: session.token },
+      server,
       session.userId,
       session.userImageTag,
       size * PixelRatio.get(),
     );
-    return <Image source={{ uri }} style={[box, s.bg]} contentFit="cover" recyclingKey={uri} accessibilityIgnoresInvertColors />;
+    return <Image source={imageSource(uri, server)} style={[box, s.bg]} contentFit="cover" recyclingKey={`${session.serverId}.${session.userId}`} accessibilityIgnoresInvertColors />;
   }
   const art = fallbackArt(session.userName, session.userId);
   return (

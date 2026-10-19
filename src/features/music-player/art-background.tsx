@@ -6,6 +6,7 @@ import { useReducedMotion } from 'react-native-reanimated';
 
 import { useImageServer } from '@/api/use-api';
 import type { BaseItemDto } from '@/api/types';
+import { imageSource } from '@/images/image-url';
 import { resolveImage } from '@/images/resolve-image';
 
 /**
@@ -22,7 +23,7 @@ export const ArtBackground = memo(function ArtBackground({ item }: { item: BaseI
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {img.kind === 'remote' ? (
         <Image
-          source={{ uri: img.uri }}
+          source={imageSource(img.uri, server)}
           placeholder={img.blurhash ? { blurhash: img.blurhash } : undefined}
           style={styles.blur}
           contentFit="cover"

@@ -1,5 +1,5 @@
 import { generatedArt, iconForType } from '../generated-art';
-import { bucketSize, buildImageUrl, buildTrickplayUrl, buildUserImageUrl } from '../image-url';
+import { bucketSize, buildImageUrl, buildTrickplayUrl, buildUserImageUrl, imageCacheKey, imageSource } from '../image-url';
 
 const server = { baseUrl: 'https://jf.example.com/base', token: 'abc' };
 
@@ -74,5 +74,31 @@ describe('initials', () => {
     expect(initials('jane')).toBe('J');
     expect(initials('www.example.net - www.sample.com')).toBe('WW');
     expect(initials('')).toBe('');
+  });
+});
+
+describe('imageCacheKey', () => {
+  const lan = { baseUrl: 'http://192.0.2.10:8096', token: 'abc', serverId: 'srv' };
+  const wan = { baseUrl: 'https://jf.example.com/base', token: 'abc', serverId: 'srv' };
+  const req = { itemId: 'item1', type: 'Primary' as const, tag: 't1', width: 200 };
+
+  it('is the same for both addresses of a server', () => {
+    const a = imageCacheKey(buildImageUrl(lan, req), lan);
+    const b = imageCacheKey(buildImageUrl(wan, req), wan);
+    expect(a).toBe(b);
+    expect(a).toBe('srv:/Items/item1/Images/Primary?tag=t1&fillWidth=200&quality=90');
+  });
+  it('leaves out the token', () => {
+    const other = { ...lan, token: 'another-token' };
+    expect(imageCacheKey(buildImageUrl(other, req), other)).toBe(imageCacheKey(buildImageUrl(lan, req), lan));
+    expect(imageCacheKey(buildImageUrl(lan, req), lan)).not.toContain('abc');
+  });
+  it('differs between servers', () => {
+    const b = { ...lan, serverId: 'srv2' };
+    expect(imageCacheKey(buildImageUrl(b, req), b)).not.toBe(imageCacheKey(buildImageUrl(lan, req), lan));
+  });
+  it('has no key for local files', () => {
+    expect(imageCacheKey('file:///downloads/a/primary.jpg', lan)).toBeUndefined();
+    expect(imageSource('file:///x.jpg', lan)).toEqual({ uri: 'file:///x.jpg' });
   });
 });

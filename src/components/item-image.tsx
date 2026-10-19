@@ -7,6 +7,7 @@ import type { BaseItemDto } from '@/api/types';
 import { Icon } from '@/components/icon';
 import { useLocalImage } from '@/downloads';
 import { generatedArt, initials } from '@/images/generated-art';
+import { imageSource } from '@/images/image-url';
 import { type ImageVariant, type ResolvedImage, resolveImage } from '@/images/resolve-image';
 import { createStyles, type AppTheme, font, mediaColors, motion, radius, scaled, scriptStyle, type, useStyles } from '@/theme';
 
@@ -90,7 +91,7 @@ export const ItemImage = memo(function ItemImage({
   return (
     <View style={[s.box, box, style]} accessibilityIgnoresInvertColors>
       <Image
-        source={{ uri: shown.uri }}
+        source={imageSource(shown.uri, server)}
         placeholder={shown.blurhash ? { blurhash: shown.blurhash } : undefined}
         placeholderContentFit="cover"
         contentFit="cover"

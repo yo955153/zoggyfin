@@ -43,11 +43,46 @@ export function buildLists(records: Record<string, DownloadRecord>, collections:
   return { inProgress, groups, appBytes, activeCount };
 }
 
+/**
+ * True when a download belongs to the server. Records with no server Id
+ * (from the first phase) count for every server.
+ */
+export function onServer(r: Pick<DownloadRecord, 'serverId'>, serverId: string | null | undefined): boolean {
+  return !serverId || !r.serverId || r.serverId === serverId;
+}
+
+/** Only the records (and collections) of one server. Pure. */
+export function forServer<T extends Pick<DownloadRecord, 'serverId'>>(all: Record<string, T>, serverId: string | null | undefined): Record<string, T> {
+  if (!serverId) return all;
+  const out: Record<string, T> = {};
+  for (const [k, v] of Object.entries(all)) if (onServer(v, serverId)) out[k] = v;
+  return out;
+}
+
+export interface OtherServerDownloads {
+  serverId: string;
+  count: number;
+  bytes: number;
+}
+
+/** Completed and waiting downloads of the other servers, by server, largest first. Pure. */
+export function otherServers(records: Record<string, DownloadRecord>, serverId: string | null | undefined): OtherServerDownloads[] {
+  const by = new Map<string, OtherServerDownloads>();
+  for (const r of Object.values(records)) {
+    if (onServer(r, serverId)) continue;
+    const o = by.get(r.serverId) ?? { serverId: r.serverId, count: 0, bytes: 0 };
+    o.count += 1;
+    o.bytes += r.bytesDone;
+    by.set(r.serverId, o);
+  }
+  return [...by.values()].sort((a, b) => b.bytes - a.bytes);
+}
+
 /** Downloaded items that match a search term, grouped like server results. Pure. */
-export function searchDownloads(records: Record<string, DownloadRecord>, term: string): BaseItemDto[] {
+export function searchDownloads(records: Record<string, DownloadRecord>, term: string, serverId?: string | null): BaseItemDto[] {
   const t = term.trim().toLowerCase();
   if (t.length < 2) return [];
-  return Object.values(records)
+  return Object.values(forServer(records, serverId))
     .filter((r) => r.state === 'completed')
     .filter((r) =>
       [r.item.Name, r.item.Album, r.item.AlbumArtist, r.item.SeriesName, ...(r.item.Artists ?? [])]

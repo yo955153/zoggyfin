@@ -1,15 +1,18 @@
 /**
- * Server reachability. The app is "offline" when the signed-in server does
- * not answer /System/Ping, whatever the cause (no network, a plane, the
- * server is down). Checks run at start, when the network changes, when the
- * app comes to the front, and every 30 s while offline.
+ * Server reachability. The app is "offline" when no address of the
+ * signed-in server answers, whatever the cause (no network, a plane, the
+ * server is down). Each check also picks the address to use
+ * (`servers/connection.ts`). Checks run at start, when the network changes
+ * (web: the online event), when the app comes to the front, after a request
+ * with no answer, and every 30 s while offline (2 minutes while online).
  */
 import * as Network from 'expo-network';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { create } from 'zustand';
 
-import { ping } from '@/api/jellyfin';
+import { setNetworkErrorHandler } from '@/api/client';
 import { useSessionStore } from '@/auth/session-store';
+import { checkConnection } from '@/servers/connection';
 
 interface OnlineState {
   /** null until the first check. */
@@ -30,14 +33,13 @@ export function isOffline(): boolean {
   return useOnlineStore.getState().reachable === false;
 }
 
-let checking: Promise<boolean> | null = null;
-
-/** Pings the server now. Concurrent calls share one request. */
+/** Checks the server's addresses now. Concurrent calls share one check (see `checkConnection`). */
 export function checkServer(): Promise<boolean> {
   const s = useSessionStore.getState().session;
   if (!s) return Promise.resolve(true);
-  checking ??= ping(s.serverUrl).then((ok) => {
-    checking = null;
+  return checkConnection(s.serverId).then((ok) => {
+    // The account changed while the check ran: its result is not about this one.
+    if (useSessionStore.getState().session?.serverId !== s.serverId) return ok;
     const prev = useOnlineStore.getState();
     useOnlineStore.setState({
       reachable: ok,
@@ -46,7 +48,6 @@ export function checkServer(): Promise<boolean> {
     });
     return ok;
   });
-  return checking;
 }
 
 /** A request failed with a network error: check again soon, the server may be gone. */
@@ -60,11 +61,22 @@ export function startReachability(): void {
   if (started) return;
   started = true;
   void checkServer();
+  setNetworkErrorHandler(reportNetworkError);
   try {
     Network.addNetworkStateListener(() => void checkServer());
   } catch {
     // Web without the Network Information API: the timer and AppState still run.
   }
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.addEventListener('online', () => void checkServer());
+    window.addEventListener('offline', () => void checkServer());
+  }
+  // A switch to another account: forget the old result and check the new server.
+  useSessionStore.subscribe((st, prev) => {
+    if (st.session?.serverId === prev.session?.serverId && st.session?.userId === prev.session?.userId) return;
+    useOnlineStore.setState({ reachable: null, checkedAt: 0 });
+    void checkServer();
+  });
   AppState.addEventListener('change', (st) => {
     if (st === 'active') void checkServer();
   });

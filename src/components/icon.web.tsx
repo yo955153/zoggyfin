@@ -85,6 +85,9 @@ import {
   CirclePause,
   Pencil,
   Plus,
+  Wifi,
+  Globe,
+  UserPlus,
 } from 'lucide-react';
 
 import { type IconName, isIconName } from './icon-names';
@@ -196,6 +199,9 @@ const LUCIDE: Record<IconName, Glyph> = {
   'icloud.slash': { icon: CloudOff },
   internaldrive: { icon: HardDrive },
   'pause.circle': { icon: CirclePause },
+  wifi: { icon: Wifi },
+  globe: { icon: Globe },
+  'person.badge.plus': { icon: UserPlus },
 };
 
 export function Icon({ name, size, color, weight }: IconProps) {

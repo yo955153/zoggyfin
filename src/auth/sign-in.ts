@@ -1,4 +1,3 @@
-import { queryClient } from '@/api/query-client';
 import type { AuthenticationResult } from '@/api/types';
 
 import { type Session, useSessionStore } from './session-store';
@@ -24,7 +23,6 @@ export function completeSignIn(server: ServerInfo, result: AuthenticationResult)
     userImageTag: user.PrimaryImageTag ?? null,
     token: result.AccessToken,
   };
-  // A fresh account starts with a clean cache.
-  queryClient.clear();
+  // The query cache is per account (see app/_layout.tsx), so nothing is cleared here.
   useSessionStore.getState().signIn(session);
 }

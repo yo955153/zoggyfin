@@ -137,6 +137,7 @@ class VideoSession {
       case 'status':
         if (e.status === 'error') {
           setPlayerState({ status: 'error', error: e.error ?? 'The video could not be played.' });
+          if (this.recoverAfterAddressSwitch()) break;
           void this.reporter?.stop({ positionTicks: secondsToTicks(st.position) });
         } else if (e.status === 'loading') setPlayerState({ status: st.status === 'loading' ? 'loading' : 'buffering' });
         else if (e.status === 'ready') setPlayerState({ status: 'ready' });
@@ -443,6 +444,26 @@ class VideoSession {
 
   setRate(rate: number): void {
     this.engine.setRate(rate);
+  /** The stream URL that was reloaded after an address switch, so a second failure shows the error. */
+  private recovered: string | null = null;
+
+  /**
+   * The app moved to another address of the server while this stream played
+   * (`servers/connection.ts`). The stream keeps its old address until it
+   * fails; then it starts again on the new address at the same position.
+   * A transcode needs a new session for that, which `reload` asks for.
+   */
+  private recoverAfterAddressSwitch(): boolean {
+    const now = playerState().now;
+    const s = useSessionStore.getState().session;
+    if (!now || now.plan.isLocal || !s || !now.plan.url) return false;
+    if (now.plan.url.startsWith(`${s.serverUrl}/`) || this.recovered === now.plan.url) return false;
+    this.recovered = now.plan.url;
+    if (__DEV__) console.log('[player] the server address changed: the stream starts again on the new address');
+    void this.reload({});
+    return true;
+  }
+
     setPlayerState({ rate });
   }
 

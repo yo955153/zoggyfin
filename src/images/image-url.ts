@@ -14,6 +14,29 @@ export interface ServerContext {
   baseUrl: string;
   /** The access token. Images carry it as `ApiKey=` because image views cannot send headers. */
   token: string | null;
+  /** The server Id. It names cached images, so a switch to another address of the server keeps them. */
+  serverId?: string;
+}
+
+/**
+ * The disk cache key of a server image: the server Id and the path and query
+ * without the host and without `ApiKey`. The same image through the internal
+ * or the external address (or for another user) is one cache entry.
+ * Undefined for URLs that are not on the server (local files).
+ */
+export function imageCacheKey(uri: string, server: Pick<ServerContext, 'baseUrl' | 'serverId'> | null | undefined): string | undefined {
+  if (!server || !uri.startsWith(`${server.baseUrl}/`)) return undefined;
+  const rest = uri
+    .slice(server.baseUrl.length)
+    .replace(/([?&])ApiKey=[^&]*&?/, '$1')
+    .replace(/[?&]$/, '');
+  return `${server.serverId ?? 'jellyfin'}:${rest}`;
+}
+
+/** An expo-image source with the stable cache key. */
+export function imageSource(uri: string, server: Pick<ServerContext, 'baseUrl' | 'serverId'> | null | undefined): { uri: string; cacheKey?: string } {
+  const cacheKey = imageCacheKey(uri, server);
+  return cacheKey ? { uri, cacheKey } : { uri };
 }
 
 export interface ImageRequest {

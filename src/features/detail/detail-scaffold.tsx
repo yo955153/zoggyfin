@@ -21,7 +21,7 @@ import { ProgressRing } from '@/components/progress-ring';
 import { useDownloadStatus } from '@/downloads';
 import { Touchable } from '@/components/touchable';
 import { useItemActions } from '@/features/actions/use-item-actions';
-import { buildImageUrl } from '@/images/image-url';
+import { buildImageUrl, imageSource } from '@/images/image-url';
 import { formatClock, playedFraction } from '@/lib/format';
 import { isTV } from '@/platform/tv';
 import { usePlayer } from '@/player';
@@ -369,7 +369,7 @@ function Title({ item, centered, big }: { item: BaseItemDto; centered: boolean; 
       : null;
   const image = uri ? (
     <Image
-      source={{ uri }}
+      source={imageSource(uri, server)}
       style={s.logo}
       contentFit="contain"
       contentPosition={centered ? 'center' : 'left'}

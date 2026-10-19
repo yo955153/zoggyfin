@@ -16,7 +16,8 @@ import { describeError } from '@/api/errors';
 import * as jf from '@/api/jellyfin';
 import type { BaseItemDto } from '@/api/types';
 import { clientIdentity } from '@/auth/identity';
-import { useSessionStore } from '@/auth/session-store';
+import { findServer, startUrl } from '@/auth/accounts';
+import { tokenFor, useSessionStore } from '@/auth/session-store';
 import { type ImageVariant, resolveImage } from '@/images/resolve-image';
 import { randomId } from '@/lib/id';
 import { toast } from '@/lib/toast';
@@ -43,17 +44,43 @@ interface Ctx {
   authHeader: string;
 }
 
-function context(): Ctx {
-  const s = useSessionStore.getState().session;
-  if (!s) throw new Error('Sign in to download.');
+/**
+ * The account a download runs for: the active one, or (`owner`) the account
+ * that queued the record. Downloads of a saved account go on after a switch
+ * to another account; they use that server's last address.
+ */
+function context(owner?: Pick<DownloadRecord, 'serverId' | 'userId'>): Ctx {
+  const st = useSessionStore.getState();
+  const s = st.session;
   const identity = clientIdentity();
+  if (!owner || (s && s.serverId === owner.serverId && s.userId === owner.userId)) {
+    if (!s) throw new Error('Sign in to download.');
+    return {
+      api: getApi(s.serverUrl, s.token),
+      userId: s.userId,
+      serverId: s.serverId,
+      server: { baseUrl: s.serverUrl, token: s.token, deviceId: identity.deviceId },
+      authHeader: buildAuthHeader(identity, s.token),
+    };
+  }
+  const server = findServer(st.accounts, owner.serverId);
+  const url = server ? startUrl(server) : null;
+  const token = tokenFor(owner);
+  if (!server || !url || !token) throw new Error('Sign in to this server again to download.');
   return {
-    api: getApi(s.serverUrl, s.token),
-    userId: s.userId,
-    serverId: s.serverId,
-    server: { baseUrl: s.serverUrl, token: s.token, deviceId: identity.deviceId },
-    authHeader: buildAuthHeader(identity, s.token),
+    api: getApi(url, token),
+    userId: owner.userId,
+    serverId: owner.serverId,
+    server: { baseUrl: url, token, deviceId: identity.deviceId },
+    authHeader: buildAuthHeader(identity, token),
   };
+}
+
+/** The accounts signed in on this device, as `serverId.userId`. */
+function signedInOwners(): Set<string> {
+  const out = new Set<string>();
+  for (const s of useSessionStore.getState().accounts.servers) for (const u of s.users) out.add(`${s.id}.${u.userId}`);
+  return out;
 }
 
 function apply(itemId: string, e: DownloadEvent, soon = true): DownloadRecord | null {
@@ -199,7 +226,10 @@ class DownloadManager {
     const now = Date.now();
     const list = Object.values(downloadsState().records);
     for (const r of dueForRetry(list, now)) apply(r.itemId, { type: 'autoRetry', now });
-    for (const r of pickToStart(Object.values(downloadsState().records), MAX_PARALLEL)) void this.begin(r.itemId);
+    // A queued download of a user who signed out waits; it starts when that user signs in again.
+    const owners = signedInOwners();
+    const ready = Object.values(downloadsState().records).filter((r) => r.state !== 'queued' || owners.has(`${r.serverId}.${r.userId}`));
+    for (const r of pickToStart(ready, MAX_PARALLEL)) void this.begin(r.itemId);
   }
 
   private async begin(itemId: string): Promise<void> {
@@ -211,7 +241,7 @@ class DownloadManager {
     }
     this.preparing.add(itemId);
     try {
-      const ctx = context();
+      const ctx = context(r);
       const plan = await this.prepare(r, ctx);
       const cur = downloadsState().records[itemId];
       if (!cur || cur.state !== 'downloading') return;
@@ -290,7 +320,7 @@ class DownloadManager {
       }
       let extras: Partial<DownloadRecord> = {};
       try {
-        extras = await this.saveExtras(r, context());
+        extras = await this.saveExtras(r, context(r));
       } catch (e) {
         // Extras are best effort: the media plays without them.
         console.warn('[downloads] extras failed', describeError(e).title);

@@ -178,10 +178,29 @@ class AudioSession {
         void this.onQueueEnd();
         break;
       case 'error':
+        if (this.recoverAfterAddressSwitch()) break;
         setPlayerState({ status: 'error', error: e.message });
         break;
     }
   };
+
+  /** The track URL that was started again after an address switch, so a second failure shows the error. */
+  private recovered: string | null = null;
+
+  /**
+   * The app moved to another address of the server (`servers/connection.ts`).
+   * The track keeps its old address until it fails; then it starts again on
+   * the new address at the same position.
+   */
+  private recoverAfterAddressSwitch(): boolean {
+    const url = playerState().now?.plan.url;
+    const s = useSessionStore.getState().session;
+    if (!url || !s || !/^https?:/i.test(url) || url.startsWith(`${s.serverUrl}/`) || this.recovered === url) return false;
+    this.recovered = url;
+    const position = this.engine.loaded ? this.engine.position : playerState().position;
+    void this.startCurrent({ autoplay: true, startSeconds: position });
+    return true;
+  }
 
   /** Logs the silence between two tracks: when the next track really started minus when the last one should have ended. */
   private measureGap(key: string | null, position: number, duration: number) {

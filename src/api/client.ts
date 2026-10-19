@@ -29,19 +29,36 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
   onUnauthorized = handler;
 }
 
+/** Called when a request fails with no answer (lost connection, timeout): the app checks the addresses again. */
+let onNetworkError: (() => void) | null = null;
+
+export function setNetworkErrorHandler(handler: (() => void) | null): void {
+  onNetworkError = handler;
+}
+
+function isNoAnswer(error: unknown): boolean {
+  if (!isAxiosError(error) || error.response) return false;
+  return error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
+}
+
 /** True when a URL is on the given server, so its credentials may go with it. */
 function isForServer(url: string | undefined, baseUrl: string): boolean {
   if (!url) return false;
   return url === baseUrl || url.startsWith(`${baseUrl}/`) || url.startsWith(`${baseUrl}?`);
 }
 
-function makeAxios(baseUrl: string, token: string | null): AxiosInstance {
+/** The base URL of one Api. It changes when the app switches to another address of the same server. */
+interface Target {
+  baseUrl: string;
+}
+
+function makeAxios(target: Target, token: string | null): AxiosInstance {
   // An instance of our own, so these interceptors never see unrelated requests.
   const instance = createAxios({ timeout: REQUEST_TIMEOUT_MS });
   instance.interceptors.request.use((config) => {
     if (devOffline()) throw offlineError();
     const url = config.baseURL ? `${config.baseURL}${config.url ?? ''}` : config.url;
-    if (isForServer(url, baseUrl)) {
+    if (isForServer(url, target.baseUrl)) {
       config.headers.set('Authorization', buildAuthHeader(clientIdentity(), token));
     } else {
       config.headers.delete('Authorization');
@@ -52,24 +69,37 @@ function makeAxios(baseUrl: string, token: string | null): AxiosInstance {
     if (token && isAxiosError(error) && error.response?.status === 401) {
       onUnauthorized?.();
     }
+    if (token && isNoAnswer(error)) onNetworkError?.();
     return Promise.reject(error);
   });
   return instance;
 }
 
-const cache = new Map<string, Api>();
+const cache = new Map<string, { api: Api; target: Target }>();
 
-/** Returns an SDK `Api` for a server and token. The same pair returns the same instance. */
+/**
+ * Returns an SDK `Api` for a server and token. A signed-in account has one
+ * instance (keyed by its token): when the app picks another address of the
+ * same server, the instance moves to it, so code that holds the instance
+ * (a progress reporter, a download) sends its next request to the new
+ * address. The caller passes only addresses whose server Id was checked.
+ */
 export function getApi(baseUrl: string, token: string | null): Api {
-  const key = `${baseUrl}|${token ?? ''}`;
-  let api = cache.get(key);
-  if (!api) {
-    api = getSdk().createApi(baseUrl, token ?? undefined, makeAxios(baseUrl, token));
-    cache.set(key, api);
+  const key = token ? `t|${token}` : `u|${baseUrl}`;
+  const hit = cache.get(key);
+  if (hit) {
+    if (hit.target.baseUrl !== baseUrl) {
+      hit.target.baseUrl = baseUrl;
+      hit.api.update({ basePath: baseUrl });
+    }
+    return hit.api;
   }
+  const target: Target = { baseUrl };
+  const api = getSdk().createApi(baseUrl, token ?? undefined, makeAxios(target, token));
+  cache.set(key, { api, target });
   return api;
 }
 
 export function dropApi(baseUrl: string, token: string | null): void {
-  cache.delete(`${baseUrl}|${token ?? ''}`);
+  cache.delete(token ? `t|${token}` : `u|${baseUrl}`);
 }

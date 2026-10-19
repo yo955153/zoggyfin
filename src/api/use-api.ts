@@ -28,7 +28,7 @@ export function useApi(): ApiContext {
       session,
       userId: session.userId,
       scope: { serverId: session.serverId, userId: session.userId },
-      server: { baseUrl: session.serverUrl, token: session.token },
+      server: { baseUrl: session.serverUrl, token: session.token, serverId: session.serverId },
     }),
     [session],
   );
@@ -38,7 +38,7 @@ export function useApi(): ApiContext {
 export function useImageServer(): ServerContext | null {
   const session = useSession();
   return useMemo(
-    () => (session ? { baseUrl: session.serverUrl, token: session.token } : null),
+    () => (session ? { baseUrl: session.serverUrl, token: session.token, serverId: session.serverId } : null),
     [session],
   );
 }
