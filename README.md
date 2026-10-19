@@ -19,8 +19,26 @@ Early development. Phase 1 ("Foundation") is in place:
 - Every tile has a picture: server art when it exists, generated art when it does not.
 - A persisted query cache, so a cold start shows the last content at once.
 
-Playback and downloads are not in yet. The Play button shows a notice.
-The design is in [docs/specs](docs/specs/).
+Phase 2 ("Video") adds the video player:
+
+- The server direct-plays what the device can open (mp4, m4v, mov with H.264, HEVC and,
+  with a hardware decoder, AV1) and sends HLS for the rest. The device profile is in
+  `src/player/device-profile.ts`.
+- Full-screen player with play/pause, skip back and forward, a scrubber with trickplay
+  preview and chapter marks, audio and subtitle tracks, quality, playback speed,
+  Skip Intro / Skip Credits, a next-episode countdown, double-tap to seek and swipe down
+  to minimize.
+- Picture in Picture, AirPlay, background audio, lock-screen controls, a mini player.
+- Resume and Start Over on item pages. Progress goes to the server every 10 seconds and
+  on pause, seek and stop.
+- Keyboard: Space play/pause, ←/→ seek, Shift+←/→ 30 s, F full screen (web), M mute,
+  C subtitles, Esc close. On iPad and Mac this works with a hardware keyboard.
+
+Music playback and downloads are not in yet.
+The design is in [docs/specs](docs/specs/) and [docs/design](docs/design/).
+
+The native app includes a small local module, `modules/zoggyfin-native`, that reports
+hardware decoders and hardware keyboard presses. It builds with the app.
 
 ## Run a development build
 
