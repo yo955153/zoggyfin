@@ -16,6 +16,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api", "protocol-asset"] }
 tauri-plugin-window-state = "2"
+# Updates from a signed latest.json (src/update.rs).
+tauri-plugin-updater = "2"
+# One instance: a second start (Finder, `open -n`, a terminal) focuses the running window.
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "http2", "system-proxy"] }
@@ -33,6 +37,8 @@ objc2-core-foundation = "0.3"
 objc2-core-graphics = "0.3"
 objc2-media-player = { version = "0.3", features = ["block2", "objc2-app-kit", "objc2-core-foundation"] }
 block2 = "0.6"
+# src/update.rs: the original path of a translocated app (Security framework).
+core-foundation = "0.10"
 
 [profile.dev]
 debug = 0
@@ -43,3 +49,7 @@ codegen-units = 1
 lto = "thin"
 opt-level = "s"
 strip = true
+# Never "abort": wry catches the Objective-C exception that WebKit throws for a cancelled
+# request by unwinding through Rust frames. With "abort" the app quits there (ZogNotes 0.1.0
+# crashed so). src/lib.rs refuses to build a release with "abort".
+panic = "unwind"

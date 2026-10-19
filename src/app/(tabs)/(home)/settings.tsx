@@ -14,11 +14,13 @@ import { DOWNLOAD_QUALITY_OPTIONS, downloadsSupported, useDownloadLists } from '
 import { openAddServer, signOutUser } from '@/features/servers/actions';
 import { ConnectionStatus } from '@/features/servers/connection-status';
 import { ActionRow, Group, InfoRow, makeSettingsStyles, SettingsRow, webSwitchColors } from '@/features/settings/rows';
+import { UpdateSettingsRow } from '@/features/updates/update-row';
 import { confirmDestructive as confirm } from '@/lib/confirm';
 import { devOffline, setDevOffline } from '@/lib/dev-offline';
 import { checkServer } from '@/lib/online';
 import { formatBytes } from '@/lib/format';
 import { toast } from '@/lib/toast';
+import { appVersion } from '@/platform/desktop';
 import { isTV } from '@/platform/tv';
 import { APPEARANCE_OPTIONS, useAppearance } from '@/settings/appearance';
 import { QUALITY_OPTIONS, qualityLabel, SKIP_OPTIONS, usePlaybackSettings } from '@/settings/playback';
@@ -88,8 +90,12 @@ export default function SettingsScreen() {
             <InfoRow
               icon="square.stack"
               label="App version"
-              value={`${Application.nativeApplicationVersion ?? id.version}${Application.nativeBuildVersion ? ` (${Application.nativeBuildVersion})` : ''}`}
+              value={
+                appVersion ??
+                `${Application.nativeApplicationVersion ?? id.version}${Application.nativeBuildVersion ? ` (${Application.nativeBuildVersion})` : ''}`
+              }
             />
+            <UpdateSettingsRow />
             <SettingsRow icon="lock.fill" label="Privacy policy" onPress={() => void Linking.openURL('https://zoggyfin.zog-tech.com/privacy')} />
             <SettingsRow icon="info.circle" label="Help and support" onPress={() => void Linking.openURL('https://zoggyfin.zog-tech.com/support')} last />
           </Group>

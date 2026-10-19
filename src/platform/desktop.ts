@@ -9,7 +9,8 @@
  *
  * The Rust side calls `window.__zoggyfinDesktop.mpv(event)` for libmpv
  * events, `.menu(command)` for menu items, `.download(event)` for download
- * progress and `.remote(command)` for the media keys and Now Playing.
+ * progress, `.remote(command)` for the media keys and Now Playing, and
+ * `.update(event)` for the download progress of an app update.
  */
 import { router } from 'expo-router';
 
@@ -24,11 +25,16 @@ type DesktopWindow = Window & {
     menu(command: string): void;
     download(event: DownloadEvent): void;
     remote(command: RemoteCommand): void;
+    update(event: AppUpdateEvent): void;
   };
   /** Set by the desktop app before the page loads when libmpv started. */
   __ZOGGYFIN_MPV__?: boolean;
   /** The app data folder (absolute path), set by the desktop app before the page loads. */
   __ZOGGYFIN_DATA_DIR__?: string;
+  /** The app version (tauri.conf.json), set by the desktop app before the page loads. */
+  __ZOGGYFIN_VERSION__?: string;
+  /** True in release builds: the app looks for updates by itself. */
+  __ZOGGYFIN_AUTO_UPDATE__?: boolean;
 };
 
 function tauri(): TauriInternals | null {
@@ -44,6 +50,12 @@ export const hasMpv: boolean = isDesktop && (window as DesktopWindow).__ZOGGYFIN
 
 /** The app data folder (an absolute path) in the desktop app, else null. Downloads live under it. */
 export const dataDir: string | null = (isDesktop && (window as DesktopWindow).__ZOGGYFIN_DATA_DIR__) || null;
+
+/** The version of the desktop app, else null. */
+export const appVersion: string | null = (isDesktop && (window as DesktopWindow).__ZOGGYFIN_VERSION__) || null;
+
+/** True when the desktop app looks for updates by itself (release builds). */
+export const autoUpdate: boolean = isDesktop && (window as DesktopWindow).__ZOGGYFIN_AUTO_UPDATE__ === true;
 
 export function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const t = tauri();
@@ -93,6 +105,25 @@ export type RemoteCommand =
   | { command: 'seek'; position: number };
 
 const remoteListeners = new Set<(c: RemoteCommand) => void>();
+
+/** The download progress of an app update (`desktop/src-tauri/src/update.rs`). */
+export type AppUpdateEvent = { type: 'progress'; done: number; total: number };
+
+const updateListeners = new Set<(e: AppUpdateEvent) => void>();
+
+/** App update events. Returns the unsubscribe function. */
+export function onUpdateEvent(listener: (e: AppUpdateEvent) => void): () => void {
+  updateListeners.add(listener);
+  return () => updateListeners.delete(listener);
+}
+
+const menuListeners = new Set<(command: string) => void>();
+
+/** Menu commands that a module handles itself (for example "check-updates"). */
+export function onMenuCommand(listener: (command: string) => void): () => void {
+  menuListeners.add(listener);
+  return () => menuListeners.delete(listener);
+}
 
 /** What the system shows in Now Playing for libmpv video. */
 export interface NowPlayingInfo {
@@ -154,6 +185,7 @@ export const desktopWindow = {
 
 /** Menu items that the web app handles. Space stays with the page (play/pause). */
 function onMenu(command: string): void {
+  menuListeners.forEach((l) => l(command));
   switch (command) {
     case 'settings':
       router.navigate('/settings');
@@ -248,6 +280,7 @@ if (isDesktop && typeof window !== 'undefined') {
     menu: onMenu,
     download: (event) => downloadListeners.forEach((l) => l(event)),
     remote: (command) => remoteListeners.forEach((l) => l(command)),
+    update: (event) => updateListeners.forEach((l) => l(event)),
   };
   installChrome();
   // A page reload leaves libmpv as it was: stop what played before.

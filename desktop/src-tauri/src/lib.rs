@@ -1,6 +1,12 @@
 //! Zoggyfin desktop: the Expo web build in a Tauri window. Video plays
 //! through libmpv (`mpv`), drawn under the transparent web view; the web app
 //! draws the player controls. Menus send commands to the web app.
+//! Updates: `update.rs` (signed latest.json, install in place, relaunch of the same bundle).
+
+// wry catches WebKit's Objective-C exceptions by unwinding through Rust frames; a release
+// built with panic = "abort" quits there instead. See Cargo.toml.
+#[cfg(all(not(debug_assertions), panic = "abort"))]
+compile_error!("build the release with panic = \"unwind\" (Cargo.toml [profile.release])");
 
 #[cfg(debug_assertions)]
 mod debug;
@@ -9,6 +15,8 @@ mod downloads;
 mod media_macos;
 mod menu;
 mod mpv;
+#[cfg(target_os = "macos")]
+mod update;
 
 use std::sync::Arc;
 
@@ -56,8 +64,21 @@ fn now_playing_update(info: serde_json::Value) {
 fn now_playing_clear() {}
 
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
+        // First: a second start of the app (Finder, `open -n`, a terminal) quits at once and
+        // brings the running window to the front.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build());
+    #[cfg(target_os = "macos")]
+    let builder = builder.manage(update::PendingUpdate::default());
+    let app = builder
         .manage(mpv::MpvState::default())
         .manage(media_state())
         .menu(menu::build)
@@ -85,12 +106,24 @@ pub fn run() {
             downloads::files_disk_space,
             now_playing_update,
             now_playing_clear,
+            #[cfg(target_os = "macos")]
+            update::update_check,
+            #[cfg(target_os = "macos")]
+            update::update_download,
+            #[cfg(target_os = "macos")]
+            update::update_install_and_relaunch,
             #[cfg(debug_assertions)]
             debug::debug_log,
             #[cfg(all(debug_assertions, target_os = "macos"))]
             debug::debug_now_playing,
         ])
         .setup(|app| {
+            // A release build that runs from a disk image, App Translocation or ~/Downloads
+            // offers to move to Applications first, and then starts from there.
+            #[cfg(all(target_os = "macos", not(debug_assertions)))]
+            if update::offer_move_to_applications(app.handle()) {
+                std::process::exit(0);
+            }
             let handle = app.handle();
             let data_dir = handle.path().app_data_dir()?;
             app.manage::<downloads::DownloadsState>(Arc::new(downloads::Downloads::new(data_dir.clone())));
@@ -112,8 +145,12 @@ pub fn run() {
                 .clone();
             let window = WebviewWindowBuilder::from_config(handle, &config)?
                 .initialization_script(format!(
-                    "window.__ZOGGYFIN_MPV__ = {with_mpv}; window.__ZOGGYFIN_DATA_DIR__ = {};",
-                    serde_json::json!(data_dir.to_string_lossy())
+                    "window.__ZOGGYFIN_MPV__ = {with_mpv}; window.__ZOGGYFIN_DATA_DIR__ = {}; \
+                     window.__ZOGGYFIN_VERSION__ = {}; window.__ZOGGYFIN_AUTO_UPDATE__ = {};",
+                    serde_json::json!(data_dir.to_string_lossy()),
+                    serde_json::json!(handle.package_info().version.to_string()),
+                    // Debug builds do not look for updates by themselves (a menu check still works).
+                    cfg!(all(target_os = "macos", not(debug_assertions)))
                 ))
                 .build()?;
             if with_mpv {

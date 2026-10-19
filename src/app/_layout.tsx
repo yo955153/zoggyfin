@@ -19,8 +19,10 @@ import { ToastHost } from '@/components/toast-host';
 import { downloads, downloadsSupported } from '@/downloads';
 import { setNoAccountOpen, useNoAccountStore } from '@/features/offline/use-offline-entries';
 import { AddToPlaylistHost } from '@/features/playlists/add-to-playlist';
+import { UpdateCardHost } from '@/features/updates/update-card';
 import { startOfflineServices } from '@/features/offline/bootstrap';
 import { toast } from '@/lib/toast';
+import { startUpdateChecks } from '@/platform/updates';
 import { audioSession } from '@/player/audio/session';
 import { mediaColors, useTheme } from '@/theme';
 import { AppThemeProvider } from '@/theme/provider';
@@ -78,6 +80,8 @@ function Root({ session }: { session: boolean }) {
   useEffect(() => {
     if (downloadsSupported) void downloads.init();
   }, []);
+  // Desktop app only: look for a new version soon after start and every few hours.
+  useEffect(() => startUpdateChecks(), []);
   // Bring back the last audio queue (paused) after a restart.
   useEffect(() => {
     if (!session) return;
@@ -122,6 +126,7 @@ function Root({ session }: { session: boolean }) {
               </Stack.Protected>
             </Stack>
             {session ? <AddToPlaylistHost /> : null}
+            <UpdateCardHost />
             <ToastHost />
           </View>
   );

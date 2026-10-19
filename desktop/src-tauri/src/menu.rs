@@ -23,6 +23,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         true,
         &[
             &PredefinedMenuItem::about(app, Some("About Zoggyfin"), Some(about))?,
+            &MenuItem::with_id(app, "check-updates", "Check for Updates…", true, None::<&str>)?,
             &sep()?,
             &MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?,
             &sep()?,
@@ -109,7 +110,7 @@ pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
         "reload" => {
             let _ = window.eval("window.location.reload()");
         }
-        "settings" | "search" | "home" | "library" | "music" | "back" => {
+        "settings" | "check-updates" | "search" | "home" | "library" | "music" | "back" => {
             let _ = window.set_focus();
             crate::send_to_web(&window, id);
         }
