@@ -56,6 +56,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "2.12.3",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.3.0",
     "eslint": "^9.39.5",
@@ -69,7 +70,9 @@
     "ios": "expo run:ios",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
+    "desktop:build": "expo export --platform web && tauri build --bundles app --config desktop/src-tauri/tauri.conf.json"
   },
   "private": true,
   "license": "MPL-2.0",

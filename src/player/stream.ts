@@ -31,6 +31,8 @@ export interface SubtitleOption {
   isText: boolean;
   /** WebVTT URL for text subtitles delivered as an external file. */
   url: string | null;
+  /** A separate subtitle file on the server, not a stream inside the video file. */
+  isExternal?: boolean;
 }
 
 export interface StreamPlan {
@@ -149,6 +151,7 @@ export function subtitleOptions(server: StreamServer, source: MediaSource): Subt
         isForced: !!s.IsForced,
         isText,
         url: delivery ? withStreamAuth(absolute(server.baseUrl, delivery), server.token) : null,
+        isExternal: !!s.IsExternal,
       };
     });
 }

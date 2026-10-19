@@ -17,8 +17,11 @@ export type VideoCodec = 'h264' | 'hevc' | 'av1' | 'vp9';
 export type AudioCodec = 'aac' | 'ac3' | 'eac3' | 'mp3' | 'flac' | 'alac' | 'opus';
 
 export interface MediaCapabilities {
-  /** `apple` is AVPlayer (iPhone, iPad, Mac). `web` is a browser `<video>` element. */
-  engine: 'apple' | 'web';
+  /**
+   * `apple` is AVPlayer (iPhone, iPad, Mac). `web` is a browser `<video>` element.
+   * `mpv` is libmpv in the desktop app: it direct plays almost every file.
+   */
+  engine: 'apple' | 'web' | 'mpv';
   /** Video codecs the device can direct play. */
   videoCodecs: readonly VideoCodec[];
   /** Audio codecs the device can direct play. */
@@ -54,6 +57,63 @@ export function appleCapabilities(hardware: { av1: boolean; hevc: boolean }): Me
     hlsVideoCodecs: hardware.hevc ? ['hevc', 'h264'] : ['h264'],
     hlsAudioCodecs: ['aac', 'ac3', 'eac3', 'mp3'],
     maxAudioChannels: 6,
+  };
+}
+
+/**
+ * libmpv (desktop app): FFmpeg decodes almost every codec and container, and
+ * libmpv draws every subtitle format itself (ASS, PGS, DVD).
+ */
+export function mpvCapabilities(): MediaCapabilities {
+  return {
+    engine: 'mpv',
+    videoCodecs: ['h264', 'hevc', 'av1', 'vp9'],
+    audioCodecs: ['aac', 'ac3', 'eac3', 'mp3', 'flac', 'alac', 'opus'],
+    containers: ['mkv', 'mp4', 'm4v', 'mov', 'webm', 'avi', 'ts', 'm2ts'],
+    hls: true,
+    hlsVideoCodecs: ['hevc', 'h264'],
+    hlsAudioCodecs: ['aac', 'ac3', 'eac3', 'mp3'],
+    maxAudioChannels: 8,
+  };
+}
+
+/** Subtitle formats libmpv draws from the file or from a separate file. */
+const MPV_TEXT_SUBTITLES = ['ass', 'ssa', 'srt', 'subrip', 'vtt', 'webvtt', 'mov_text', 'smi', 'sub', 'ttml'];
+const MPV_IMAGE_SUBTITLES = ['pgssub', 'pgs', 'dvdsub', 'dvbsub', 'vobsub', 'sup'];
+
+/**
+ * The libmpv profile: direct play for every container and codec (an empty
+ * list means "any" to the server), subtitles stay in the file. HLS is only a
+ * fallback when the bitrate limit is lower than the file's bitrate.
+ */
+function mpvProfile(caps: MediaCapabilities, options: ProfileOptions): DeviceProfile {
+  const subtitles: SubtitleProfile[] = [
+    ...[...MPV_TEXT_SUBTITLES, ...MPV_IMAGE_SUBTITLES].map((Format): SubtitleProfile => ({ Format, Method: 'Embed' })),
+    ...[...MPV_TEXT_SUBTITLES, ...MPV_IMAGE_SUBTITLES].map((Format): SubtitleProfile => ({ Format, Method: 'External' })),
+  ];
+  return {
+    Name: 'Zoggyfin (mpv)',
+    MaxStreamingBitrate: options.maxBitrate,
+    MaxStaticBitrate: options.maxBitrate,
+    MusicStreamingTranscodingBitrate: 320_000,
+    DirectPlayProfiles: [{ Type: 'Video' }, { Type: 'Audio' }],
+    TranscodingProfiles: [
+      {
+        Container: 'mp4',
+        Type: 'Video',
+        Protocol: 'hls',
+        Context: 'Streaming',
+        VideoCodec: caps.hlsVideoCodecs.join(','),
+        AudioCodec: caps.hlsAudioCodecs.join(','),
+        MaxAudioChannels: String(caps.maxAudioChannels),
+        MinSegments: 2,
+        BreakOnNonKeyFrames: true,
+      },
+      { Container: 'mp3', Type: 'Audio', Protocol: 'http', Context: 'Streaming', AudioCodec: 'mp3', MaxAudioChannels: '2' },
+    ],
+    ContainerProfiles: [],
+    CodecProfiles: [],
+    SubtitleProfiles: subtitles,
   };
 }
 
@@ -180,6 +240,7 @@ const AUDIO_CONTAINERS: Partial<Record<AudioCodec, string>> = {
 };
 
 export function buildDeviceProfile(caps: MediaCapabilities, options: ProfileOptions): DeviceProfile {
+  if (caps.engine === 'mpv') return mpvProfile(caps, options);
   const join = (xs: readonly string[]) => xs.join(',');
   const directPlay: DirectPlayProfile[] = [
     {

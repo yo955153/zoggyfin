@@ -7,6 +7,9 @@ import type HlsJs from 'hls.js';
 import { type ComponentRef, useEffect, useRef } from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
 
+import { hasMpv, mpv, showVideoThrough } from '@/platform/desktop';
+
+import { MpvEngine } from './engine-mpv';
 import type { EngineListener, EngineSource, VideoEngine } from './engine-types';
 
 type MediaSessionAction = 'play' | 'pause' | 'seekbackward' | 'seekforward' | 'seekto' | 'nexttrack' | 'previoustrack';
@@ -211,7 +214,14 @@ function webEngine(): WebEngine {
   return engine;
 }
 
+let mpvEngine: MpvEngine | null = null;
+
+/** The HTML video element, or libmpv in the desktop app. */
 export function getEngine(): VideoEngine {
+  if (hasMpv) {
+    mpvEngine ??= new MpvEngine();
+    return mpvEngine;
+  }
   return webEngine();
 }
 
@@ -225,16 +235,26 @@ function mountVideo(node: HTMLElement): () => void {
 }
 
 function setFit(fill: boolean) {
+  if (hasMpv) {
+    // Fill crops the video to the window, like `object-fit: cover`.
+    void mpv.set('panscan', fill ? 1 : 0).catch(() => undefined);
+    return;
+  }
   const v = webEngine().video;
   if (v) v.style.objectFit = fill ? 'cover' : 'contain';
 }
 
-/** Moves the one video element into this view while it is mounted. */
+/**
+ * Moves the one video element into this view while it is mounted. In the
+ * desktop app, libmpv draws the video under the page and this view lets it
+ * show through.
+ */
 export function VideoSurface({ fill, style }: { fill: boolean; style?: StyleProp<ViewStyle> }) {
   const host = useRef<ComponentRef<typeof View>>(null);
   useEffect(() => {
     const node = host.current as unknown as HTMLElement | null;
-    return node ? mountVideo(node) : undefined;
+    if (!node) return undefined;
+    return hasMpv ? showVideoThrough(node) : mountVideo(node);
   }, []);
   useEffect(() => setFit(fill), [fill]);
   return <View ref={host} style={style} />;

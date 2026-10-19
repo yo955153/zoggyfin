@@ -437,6 +437,8 @@ class VideoSession {
       subtitle: subtitleLine(item),
       artworkUri: artworkUrl(item, server),
       autoplay: opts.autoplay,
+      audioIndex: plan.audioIndex,
+      streams: { audio: plan.audio.map((a) => a.index), subtitles: plan.subtitles.filter((x) => !x.isExternal).map((x) => x.index) },
     });
     const rate = playerState().rate;
     if (rate !== 1) this.engine.setRate(rate);
@@ -453,7 +455,7 @@ class VideoSession {
 
     if (!sameItem) {
       void this.loadExtras(id, api, userId, item, source.HasSegments !== false, queue);
-      const def = plan.subtitles.find((s) => s.index === source.DefaultSubtitleStreamIndex && s.isText);
+      const def = plan.subtitles.find((s) => s.index === source.DefaultSubtitleStreamIndex && (s.isText || this.engineTracks(plan)));
       if (def && opts.subtitleIndex === undefined) void this.selectSubtitle(def.index);
     }
   }
@@ -598,9 +600,20 @@ class VideoSession {
     this.engine.toggleFullscreen?.(element);
   }
 
+  /** The engine switches tracks inside this file itself (libmpv, direct play). */
+  private engineTracks(plan: StreamPlan): boolean {
+    return !!this.engine.tracks && plan.playMethod === 'DirectPlay';
+  }
+
   async selectAudio(index: number): Promise<void> {
     const now = playerState().now;
     if (!now || now.plan.audioIndex === index) return;
+    if (this.engineTracks(now.plan)) {
+      this.engine.tracks?.selectAudio(index);
+      setPlayerState({ now: { ...now, plan: { ...now.plan, audioIndex: index } } });
+      this.reporter?.tick('AudioTrackChange');
+      return;
+    }
     // A direct-played file plays its default track: another track needs a remux from the server.
     const def = now.plan.audio.find((a) => a.isDefault) ?? now.plan.audio[0];
     const forceStream = audioSwitchNeedsStream(now.plan, index) && now.plan.playMethod !== 'Transcode' && def?.index !== index;
@@ -613,6 +626,15 @@ class VideoSession {
     const now = playerState().now;
     if (!now) return;
     const option = index === null ? null : now.plan.subtitles.find((s) => s.index === index);
+    if (this.engineTracks(now.plan)) {
+      // The engine draws every subtitle format itself (ASS styling, PGS pictures).
+      this.engine.tracks?.selectSubtitle(
+        option ? { index: option.index, url: option.isExternal ? option.url : null, label: option.label, language: option.language } : null,
+      );
+      setPlayerState({ cues: null });
+      this.setPlanSubtitle(option ? option.index : null);
+      return;
+    }
     if (!option) {
       setPlayerState({ cues: null });
       if (now.plan.burnedSubtitle) await this.reload({ subtitleIndex: null });

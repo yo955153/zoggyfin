@@ -1,6 +1,6 @@
 import type { CodecProfile, DeviceProfile } from '@/api/types';
 
-import { appleCapabilities, buildDeviceProfile, webCapabilities } from '../device-profile';
+import { appleCapabilities, buildDeviceProfile, mpvCapabilities, webCapabilities } from '../device-profile';
 
 const opts = { maxBitrate: 20_000_000 };
 
@@ -100,5 +100,25 @@ describe('web device profile', () => {
     const none = webCapabilities({ canPlay: () => false, canMse: () => false, nativeHls: false });
     expect(none.videoCodecs).toEqual(['h264']);
     expect(none.hls).toBe(false);
+  });
+});
+
+describe('mpv device profile (desktop app)', () => {
+  const profile = buildDeviceProfile(mpvCapabilities(), { maxBitrate: 120_000_000 });
+
+  it('direct plays every container and codec', () => {
+    expect(profile.DirectPlayProfiles).toEqual([{ Type: 'Video' }, { Type: 'Audio' }]);
+    expect(profile.CodecProfiles).toEqual([]);
+  });
+
+  it('keeps text and image subtitles in the file', () => {
+    const embed = (profile.SubtitleProfiles ?? []).filter((p) => p.Method === 'Embed').map((p) => p.Format);
+    expect(embed).toEqual(expect.arrayContaining(['ass', 'srt', 'subrip', 'pgssub', 'dvdsub']));
+    expect((profile.SubtitleProfiles ?? []).some((p) => p.Method === 'Encode')).toBe(false);
+  });
+
+  it('carries the bitrate limit and an HLS fallback', () => {
+    expect(profile.MaxStaticBitrate).toBe(120_000_000);
+    expect(profile.TranscodingProfiles?.[0]?.Protocol).toBe('hls');
   });
 });
