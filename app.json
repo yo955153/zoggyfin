@@ -14,13 +14,14 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
-        "NSLocalNetworkUsageDescription": "Zoggyfin connects to your Jellyfin server on the local network.",
+        "NSLocalNetworkUsageDescription": "Zoggyfin connects to your Jellyfin server on the local network and finds nearby devices to watch together.",
+        "NSBonjourServices": ["_zgf-together._tcp", "_zgf-together._udp", "_zgf-media._tcp"],
         "CADisableMinimumFrameDurationOnPhone": true,
         "ITSAppUsesNonExemptEncryption": false
-      }
       },
       "entitlements": {
         "com.apple.developer.networking.wifi-info": true
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -86,12 +87,12 @@
       ],
       "@kesha-antonov/react-native-background-downloader",
       [
-      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Zoggyfin reads the name of your Wi-Fi network to choose between the home and the internet address of your server. iOS gives the Wi-Fi name only with location access. Zoggyfin does not use or keep your location."
         }
       ],
+      [
         "expo-build-properties",
         {
           "android": {
