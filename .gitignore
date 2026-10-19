@@ -1,0 +1,26 @@
+.env.local
+.env*.local
+node_modules/
+.expo/
+dist/
+ios/
+android/
+*.log
+.DS_Store
+web-build/
+expo-env.d.ts
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+.metro-health-check*
+*.tsbuildinfo
+coverage/
+
+# Web runtime config (self-hosted builds); see public/config.example.json
+public/config.json
+.playwright-mcp/
