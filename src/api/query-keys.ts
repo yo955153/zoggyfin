@@ -65,8 +65,10 @@ export const queryKeys = {
     [...scopeKey(s), 'episodes', seriesId, seasonId] as const,
   children: (s: SessionScope, parentId: string, kind: string) =>
     [...scopeKey(s), 'children', parentId, kind] as const,
-  music: (s: SessionScope, libraryId: string, tab: string) =>
-    [...scopeKey(s), 'music', libraryId, tab] as const,
+  music: (s: SessionScope, libraryId: string, tab: string, options?: object) =>
+    [...scopeKey(s), 'music', libraryId, tab, options ?? {}] as const,
+  /** Recently and most played songs. Invalidated after audio playback. */
+  played: (s: SessionScope, libraryId: string, kind: string) => [...scopeKey(s), 'played', libraryId, kind] as const,
   similar: (s: SessionScope, itemId: string) => [...scopeKey(s), 'similar', itemId] as const,
   search: (s: SessionScope, term: string) =>
     [...scopeKey(s), 'search', term.trim().toLowerCase()] as const,

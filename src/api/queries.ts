@@ -98,17 +98,26 @@ export function useSimilar(itemId: string | undefined, enabled = true) {
   });
 }
 
-export function useMusicTab(libraryId: string | undefined, tab: jf.MusicTab, enabled = true) {
+export function useMusicTab(libraryId: string | undefined, tab: jf.MusicTab, options: jf.MusicOptions = jf.DEFAULT_MUSIC_OPTIONS, enabled = true) {
   const { api, userId, scope } = useApi();
   return useInfiniteQuery({
-    queryKey: queryKeys.music(scope, libraryId ?? '', tab),
-    queryFn: ({ pageParam }) => jf.getMusicPage(api, userId, libraryId ?? '', tab, pageParam, PAGE_SIZE),
+    queryKey: queryKeys.music(scope, libraryId ?? '', tab, options),
+    queryFn: ({ pageParam }) => jf.getMusicPage(api, userId, libraryId ?? '', tab, pageParam, PAGE_SIZE, options),
     initialPageParam: 0,
     getNextPageParam: (last) => {
       const next = last.startIndex + last.items.length;
       return last.items.length > 0 && next < last.total ? next : undefined;
     },
     enabled: enabled && !!libraryId,
+  });
+}
+
+export function usePlayedSongs(libraryId: string | undefined, kind: 'recent' | 'most') {
+  const { api, userId, scope } = useApi();
+  return useQuery({
+    queryKey: queryKeys.played(scope, libraryId ?? '', kind),
+    queryFn: () => jf.getPlayedSongs(api, userId, libraryId ?? '', kind),
+    enabled: !!libraryId,
   });
 }
 

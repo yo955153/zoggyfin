@@ -8,7 +8,9 @@ import { getArtistApi } from '@jellyfin/sdk/lib/utils/api/artist-api';
 import { getAuthenticationApi } from '@jellyfin/sdk/lib/utils/api/authentication-api';
 import { getFilterApi } from '@jellyfin/sdk/lib/utils/api/filter-api';
 import { getGenreApi } from '@jellyfin/sdk/lib/utils/api/genre-api';
+import { getInstantMixApi } from '@jellyfin/sdk/lib/utils/api/instant-mix-api';
 import { getLibraryApi } from '@jellyfin/sdk/lib/utils/api/library-api';
+import { getLyricApi } from '@jellyfin/sdk/lib/utils/api/lyric-api';
 import { getMediaInfoApi } from '@jellyfin/sdk/lib/utils/api/media-info-api';
 import { getMediaSegmentApi } from '@jellyfin/sdk/lib/utils/api/media-segment-api';
 import { getPersonApi } from '@jellyfin/sdk/lib/utils/api/person-api';
@@ -30,6 +32,7 @@ import type {
   ItemFields,
   ItemFilter,
   ItemSortBy,
+  LyricDto,
   MediaSegmentDto,
   PlaybackInfoDto,
   PlaybackInfoResponse,
@@ -299,7 +302,15 @@ export async function getSimilar(api: Api, userId: string, itemId: string): Prom
 
 // ---- Music ------------------------------------------------------------------------
 
-export type MusicTab = 'albums' | 'artists' | 'playlists' | 'songs' | 'genres';
+export type MusicTab = 'albums' | 'artists' | 'playlists' | 'songs' | 'genres' | 'audiobooks' | 'authors';
+
+export interface MusicOptions {
+  sortBy: ItemSortBy;
+  sortOrder: 'Ascending' | 'Descending';
+  favorites: boolean;
+}
+
+export const DEFAULT_MUSIC_OPTIONS: MusicOptions = { sortBy: 'SortName', sortOrder: 'Ascending', favorites: false };
 
 export async function getMusicPage(
   api: Api,
@@ -308,15 +319,29 @@ export async function getMusicPage(
   tab: MusicTab,
   startIndex: number,
   limit: number,
+  options: MusicOptions = DEFAULT_MUSIC_OPTIONS,
 ): Promise<Page> {
   const base = { userId, startIndex, limit, enableTotalRecordCount: true, ...tile };
+  const sortBy: ItemSortBy[] = options.sortBy === 'SortName' ? ['SortName'] : [options.sortBy, 'SortName'];
+  // The server wants one sort order per sort field.
+  const sortOrder: ('Ascending' | 'Descending')[] = sortBy.map((_, i) => (i === 0 ? options.sortOrder : 'Ascending'));
+  const filters: ItemFilter[] | undefined = options.favorites ? ['IsFavorite'] : undefined;
+  const isFavorite = options.favorites ? true : undefined;
   switch (tab) {
-    case 'artists': {
-      const res = await getArtistApi(api).getAlbumArtists({ ...base, fields: [...TILE_FIELDS, 'ItemCounts'], parentId: libraryId, sortBy: ['SortName'] });
+    case 'artists':
+    case 'authors': {
+      const res = await getArtistApi(api).getAlbumArtists({
+        ...base,
+        fields: [...TILE_FIELDS, 'ItemCounts'],
+        parentId: libraryId,
+        sortBy,
+        sortOrder,
+        isFavorite,
+      });
       return toPage(res.data);
     }
     case 'genres': {
-      const res = await getGenreApi(api).getGenres({ ...base, parentId: libraryId, sortBy: ['SortName'] });
+      const res = await getGenreApi(api).getGenres({ ...base, parentId: libraryId, sortBy, sortOrder, isFavorite });
       return toPage(res.data);
     }
     case 'playlists': {
@@ -325,7 +350,9 @@ export async function getMusicPage(
         ...base,
         includeItemTypes: ['Playlist'],
         recursive: true,
-        sortBy: ['SortName'],
+        sortBy,
+        sortOrder,
+        filters,
         mediaTypes: ['Audio'],
       });
       return toPage(res.data);
@@ -336,7 +363,22 @@ export async function getMusicPage(
         parentId: libraryId,
         includeItemTypes: ['Audio'],
         recursive: true,
-        sortBy: ['SortName'],
+        sortBy,
+        sortOrder,
+        filters,
+      });
+      return toPage(res.data);
+    }
+    case 'audiobooks': {
+      // Audiobook libraries hold AudioBook items, and folders or albums of chapters.
+      const res = await getLibraryApi(api).getItems({
+        ...base,
+        parentId: libraryId,
+        includeItemTypes: ['AudioBook', 'MusicAlbum'],
+        recursive: true,
+        sortBy,
+        sortOrder,
+        filters,
       });
       return toPage(res.data);
     }
@@ -347,10 +389,131 @@ export async function getMusicPage(
         parentId: libraryId,
         includeItemTypes: ['MusicAlbum'],
         recursive: true,
-        sortBy: ['SortName'],
+        sortBy,
+        sortOrder,
+        filters,
       });
       return toPage(res.data);
     }
+  }
+}
+
+/** "Recently played" and "Most played" songs in a library. */
+export async function getPlayedSongs(api: Api, userId: string, libraryId: string, kind: 'recent' | 'most'): Promise<BaseItemDto[]> {
+  const res = await getLibraryApi(api).getItems({
+    userId,
+    parentId: libraryId,
+    includeItemTypes: ['Audio', 'AudioBook'],
+    recursive: true,
+    filters: ['IsPlayed'],
+    sortBy: kind === 'recent' ? ['DatePlayed', 'SortName'] : ['PlayCount', 'DatePlayed'],
+    sortOrder: ['Descending', 'Descending'],
+    limit: 20,
+    enableTotalRecordCount: false,
+    ...tile,
+  });
+  return res.data.Items ?? [];
+}
+
+/**
+ * Every playable audio item under a container, in play order: an album's
+ * tracks, a playlist's entries, an artist's songs (album by album), a
+ * genre's songs, an audiobook folder's chapters.
+ */
+export async function getAudioTracks(api: Api, userId: string, item: BaseItemDto, libraryId?: string): Promise<BaseItemDto[]> {
+  const lib = getLibraryApi(api);
+  const id = item.Id ?? '';
+  const fields: ItemFields[] = [...TILE_FIELDS, 'MediaSources', 'Chapters', 'Genres'];
+  switch (item.Type) {
+    case 'Audio':
+    case 'AudioBook':
+      return [item];
+    case 'Playlist': {
+      const res = await getPlaylistApi(api).getPlaylistItems({ playlistId: id, userId, ...tile, fields });
+      return (res.data.Items ?? []).filter((i) => i.MediaType === 'Audio');
+    }
+    case 'MusicArtist': {
+      const res = await lib.getItems({
+        userId,
+        artistIds: [id],
+        includeItemTypes: ['Audio'],
+        recursive: true,
+        sortBy: ['ProductionYear', 'Album', 'ParentIndexNumber', 'IndexNumber', 'SortName'],
+        sortOrder: ['Descending', 'Ascending', 'Ascending', 'Ascending', 'Ascending'],
+        limit: 500,
+        ...tile,
+        fields,
+      });
+      return res.data.Items ?? [];
+    }
+    case 'MusicGenre':
+    case 'Genre': {
+      const res = await lib.getItems({
+        userId,
+        parentId: libraryId,
+        genreIds: [id],
+        includeItemTypes: ['Audio'],
+        recursive: true,
+        sortBy: ['Album', 'ParentIndexNumber', 'IndexNumber', 'SortName'],
+        limit: 500,
+        ...tile,
+        fields,
+      });
+      return res.data.Items ?? [];
+    }
+    default: {
+      // Albums and folders: the audio inside, in disc and track order.
+      const res = await lib.getItems({
+        userId,
+        parentId: id,
+        recursive: true,
+        mediaTypes: ['Audio'],
+        sortBy: ['ParentIndexNumber', 'IndexNumber', 'SortName'],
+        ...tile,
+        fields,
+      });
+      return res.data.Items ?? [];
+    }
+  }
+}
+
+/** Instant Mix: similar songs from a song, album, artist, playlist or genre. */
+export async function getInstantMix(api: Api, userId: string, item: BaseItemDto): Promise<BaseItemDto[]> {
+  const mix = getInstantMixApi(api);
+  const id = item.Id ?? '';
+  const common = { userId, limit: 100, ...tile, fields: [...TILE_FIELDS, 'MediaSources' as ItemFields] };
+  let res;
+  switch (item.Type) {
+    case 'MusicArtist':
+      res = await mix.getInstantMixFromArtists({ itemId: id, ...common });
+      break;
+    case 'MusicGenre':
+    case 'Genre':
+      res = await mix.getInstantMixFromMusicGenreById({ id, ...common });
+      break;
+    case 'MusicAlbum':
+      res = await mix.getInstantMixFromAlbum({ itemId: id, ...common });
+      break;
+    case 'Playlist':
+      res = await mix.getInstantMixFromPlaylist({ itemId: id, ...common });
+      break;
+    case 'Audio':
+      res = await mix.getInstantMixFromSong({ itemId: id, ...common });
+      break;
+    default:
+      res = await mix.getInstantMixFromItem({ itemId: id, ...common });
+  }
+  return (res.data.Items ?? []).filter((i) => i.MediaType === 'Audio' || i.Type === 'Audio');
+}
+
+/** Lyrics for a track, or null when it has none (the server answers 404). */
+export async function getLyrics(api: Api, itemId: string): Promise<LyricDto | null> {
+  try {
+    return (await getLyricApi(api).getLyrics({ itemId })).data;
+  } catch (e) {
+    const status = (e as { response?: { status?: number } }).response?.status;
+    if (status === 404) return null;
+    throw e;
   }
 }
 
