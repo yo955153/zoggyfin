@@ -19,6 +19,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { useImageServer } from '@/api/use-api';
 import { Icon, type IconName } from '@/components/icon';
+import { useHideDevToolsButton } from '@/lib/dev-tools';
 import { episodeLabel } from '@/lib/format';
 import { KeyInput } from '@/native/key-input';
 import { VideoSurface } from '@/player/engine';
@@ -74,6 +75,7 @@ type SheetKind = 'tracks' | 'settings' | null;
  * auto-hiding controls, skip and next-episode prompts, and the option sheets.
  */
 export function PlayerScreen() {
+  useHideDevToolsButton();
   const now = usePlayerStore((s) => s.now);
   const status = usePlayerStore((s) => s.status);
   const error = usePlayerStore((s) => s.error);
@@ -293,6 +295,14 @@ export function PlayerScreen() {
   const method = now?.plan.playMethod === 'Transcode' ? 'Transcoding' : now?.plan.playMethod === 'DirectStream' ? 'Direct stream' : 'Direct play';
   const settingsSections: SheetSection[] = now
     ? [
+        ...(now.plan.isLocal
+          ? [
+              {
+                title: 'Quality · Downloaded',
+                rows: [{ key: 'local', label: 'Plays the file on this device', selected: true, onPress: () => undefined }],
+              },
+            ]
+          : [
         {
           title: `Quality · ${method}`,
           rows: [
@@ -309,6 +319,7 @@ export function PlayerScreen() {
             }),
           ],
         },
+            ]),
         {
           title: 'Playback Speed',
           rows: SPEEDS.map((sp) => ({

@@ -15,17 +15,20 @@ import { queryKeys } from '@/api/query-keys';
 import type { BaseItemDto } from '@/api/types';
 import { clientIdentity } from '@/auth/identity';
 import { useSessionStore } from '@/auth/session-store';
+import { type DownloadRecord, findDownload, localExtraUri, localFileFor, readLocalText } from '@/downloads';
 import { resolveImage } from '@/images/resolve-image';
+import { isOffline } from '@/lib/online';
 import { bitrateFor, usePlaybackSettings } from '@/settings/playback';
 
 import { mediaCapabilities } from './capabilities';
 import { buildDeviceProfile } from './device-profile';
 import { getEngine } from './engine';
 import type { EngineEvent } from './engine-types';
-import { ProgressReporter, secondsToTicks, ticksToSecondsExact, toServerReport } from './progress-reporter';
+import { withOutbox } from './outbox-transport';
+import { ProgressReporter, type ProgressTransport, secondsToTicks, ticksToSecondsExact, toServerReport } from './progress-reporter';
 import { normalizeSegments } from './segments';
 import { setPlayerState, initialPlayerState, playerState, type NowPlaying } from './store';
-import { audioSwitchNeedsStream, pickSource, planStream, playbackInfoBody, type StreamServer } from './stream';
+import { audioOptions, audioSwitchNeedsStream, pickSource, planStream, playbackInfoBody, type StreamPlan, type StreamServer } from './stream';
 import { chaptersOf, pickTrickplay } from './timeline';
 import type { PlayRequest } from './types';
 import { parseVtt } from './vtt';
@@ -33,6 +36,7 @@ import { parseVtt } from './vtt';
 interface Ctx {
   api: Api;
   userId: string;
+  serverId: string;
   server: StreamServer;
 }
 
@@ -42,7 +46,41 @@ function context(): Ctx {
   return {
     api: getApi(s.serverUrl, s.token),
     userId: s.userId,
+    serverId: s.serverId,
     server: { baseUrl: s.serverUrl, token: s.token, deviceId: clientIdentity().deviceId },
+  };
+}
+
+/** A completed download of this item for the signed-in server, or null. */
+function downloaded(itemId: string | null | undefined, serverId: string): DownloadRecord | null {
+  const r = findDownload(itemId);
+  return r && r.state === 'completed' && (!r.serverId || r.serverId === serverId) && localFileFor(r.itemId) ? r : null;
+}
+
+/** The stream plan for a downloaded file: the file itself, with its saved subtitles. */
+function localPlan(r: DownloadRecord, uri: string): StreamPlan {
+  const source = r.item.MediaSources?.[0] ?? {};
+  const audio = r.method === 'original' ? audioOptions(source) : [];
+  return {
+    url: uri,
+    isHls: false,
+    playMethod: 'DirectPlay',
+    mediaSourceId: r.mediaSourceId,
+    playSessionId: null,
+    audio,
+    subtitles: r.subtitles.map((sub) => ({
+      index: sub.index,
+      label: sub.label,
+      language: sub.language,
+      isDefault: sub.isDefault,
+      isForced: sub.isForced,
+      isText: true,
+      url: localExtraUri(r, sub.file),
+    })),
+    audioIndex: audio.find((a) => a.isDefault)?.index ?? audio[0]?.index ?? null,
+    subtitleIndex: null,
+    burnedSubtitle: false,
+    isLocal: true,
   };
 }
 
@@ -145,9 +183,9 @@ class VideoSession {
     };
   };
 
-  private makeReporter(api: Api): ProgressReporter {
-    return new ProgressReporter(
-      {
+  private makeReporter(api: Api, item: BaseItemDto): ProgressReporter {
+    const s = useSessionStore.getState().session;
+    const transport: ProgressTransport = {
         start: (r) => jf.reportPlaybackStart(api, toServerReport(r)),
         progress: (r) => jf.reportPlaybackProgress(api, toServerReport(r)),
         stopped: (r) =>
@@ -157,7 +195,9 @@ class VideoSession {
             PlaySessionId: r.playSessionId,
             PositionTicks: r.positionTicks,
           }),
-      },
+    };
+    return new ProgressReporter(
+      s ? withOutbox(transport, { serverId: s.serverId, userId: s.userId, runTimeTicks: item.RunTimeTicks ?? null }) : transport,
       this.snapshot,
       undefined,
       undefined,
@@ -172,7 +212,12 @@ class VideoSession {
     this.lastRequest = request;
     setPlayerState({ ...initialPlayerState, status: 'loading', presentation: 'full' });
     try {
-      const { api, userId } = context();
+      const { api, userId, serverId } = context();
+      const local = downloaded(request.item.Id, serverId);
+      if (local) {
+        await this.playLocal(id, local, request);
+        return;
+      }
       const target = await jf.resolvePlayable(api, userId, request.item);
       if (!target?.Id) throw new Error('Nothing to play here yet.');
       // The full item has chapters, trickplay info and the user's position.
@@ -190,6 +235,57 @@ class VideoSession {
       if (id !== this.loadId) return;
       setPlayerState({ status: 'error', error: describeError(e).title });
     }
+  }
+
+  /** Plays a downloaded file. The server is asked for the saved position only when it answers. */
+  private async playLocal(id: number, r: DownloadRecord, request: PlayRequest): Promise<void> {
+    const { api, userId } = context();
+    let item: BaseItemDto = r.item;
+    if (!isOffline()) {
+      try {
+        const fresh = await Promise.race([
+          jf.getItem(api, userId, r.itemId),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]);
+        if (fresh) item = { ...r.item, UserData: fresh.UserData, Chapters: fresh.Chapters ?? r.item.Chapters, Trickplay: fresh.Trickplay };
+      } catch {
+        // Offline: the saved facts are enough.
+      }
+    }
+    if (id !== this.loadId) return;
+    const uri = localFileFor(r.itemId);
+    if (!uri) throw new Error('The downloaded file is missing. Download it again.');
+    const plan = localPlan(r, uri);
+    const start =
+      request.startPositionTicks !== undefined ? ticksToSecondsExact(request.startPositionTicks) : ticksToSecondsExact(item.UserData?.PlaybackPositionTicks);
+    const queue = request.queue ?? [];
+    setPlayerState({
+      now: {
+        kind: 'video',
+        item,
+        queue,
+        plan,
+        segments: [],
+        chapters: chaptersOf(item.Chapters, ticksToSecondsExact(item.RunTimeTicks)),
+        trickplay: isOffline() ? null : pickTrickplay(item.Trickplay, plan.mediaSourceId),
+        bitrateChoice: null,
+        bitrate: 0,
+        next: queue[0] ?? null,
+      },
+      status: 'loading',
+      error: null,
+      position: start,
+      duration: ticksToSecondsExact(item.RunTimeTicks),
+      cues: null,
+    });
+    this.engine.load({ uri, isHls: false, startSeconds: start, title: item.Name ?? 'Video', subtitle: subtitleLine(item), artworkUri: undefined });
+    const rate = playerState().rate;
+    if (rate !== 1) this.engine.setRate(rate);
+    this.reporter = this.makeReporter(api, item);
+    this.reporter.start({ itemId: r.itemId, mediaSourceId: plan.mediaSourceId, playSessionId: null, playMethod: 'DirectPlay', canSeek: true });
+    this.watchAppState();
+    const def = plan.subtitles.find((sub) => sub.isDefault);
+    if (def) void this.selectSubtitle(def.index);
   }
 
   private async load(id: number, item: BaseItemDto, queue: BaseItemDto[], opts: LoadOptions): Promise<void> {
@@ -253,7 +349,7 @@ class VideoSession {
     const rate = playerState().rate;
     if (rate !== 1) this.engine.setRate(rate);
 
-    this.reporter = this.makeReporter(api);
+    this.reporter = this.makeReporter(api, item);
     this.reporter.start({
       itemId: item.Id ?? '',
       mediaSourceId: plan.mediaSourceId,
@@ -292,6 +388,11 @@ class VideoSession {
   private async reload(opts: Omit<LoadOptions, 'startSeconds'>): Promise<void> {
     const st = playerState();
     if (!st.now) return;
+    if (st.now.plan.isLocal) {
+      // A downloaded file has its tracks inside; the server is not asked for another stream.
+      if (st.status === 'error' && this.lastRequest) void this.play({ ...this.lastRequest, startPositionTicks: secondsToTicks(st.position) });
+      return;
+    }
     const id = ++this.loadId;
     const position = this.engine.position || st.position;
     const now = st.now;
@@ -412,7 +513,7 @@ class VideoSession {
     if (!option?.url) return;
     try {
       const { api } = context();
-      const text = await jf.getText(api, option.url);
+      const text = option.url.startsWith('file://') ? (readLocalText(option.url) ?? '') : await jf.getText(api, option.url);
       if (playerState().now?.plan.subtitleIndex !== index) return;
       setPlayerState({ cues: parseVtt(text) });
     } catch (e) {

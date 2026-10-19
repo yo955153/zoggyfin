@@ -4,6 +4,8 @@
  */
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
+import { downloadedChildren, downloadedItem, serverOrLocal } from '@/downloads';
+
 import * as jf from './jellyfin';
 import { type LibraryQuery, queryKeys } from './query-keys';
 import { useApi } from './use-api';
@@ -34,7 +36,8 @@ export function useItem(itemId: string | undefined) {
   const { api, userId, scope } = useApi();
   return useQuery({
     queryKey: queryKeys.item(scope, itemId ?? ''),
-    queryFn: () => jf.getItem(api, userId, itemId ?? ''),
+    // With no server, a downloaded item still opens from its saved facts.
+    queryFn: () => serverOrLocal(() => jf.getItem(api, userId, itemId ?? ''), () => downloadedItem(itemId ?? '')),
     enabled: !!itemId,
   });
 }
@@ -75,7 +78,7 @@ export function useEpisodes(seriesId: string | undefined, seasonId: string | und
   const { api, userId, scope } = useApi();
   return useQuery({
     queryKey: queryKeys.episodes(scope, seriesId ?? '', seasonId ?? ''),
-    queryFn: () => jf.getEpisodes(api, userId, seriesId ?? '', seasonId ?? ''),
+    queryFn: () => serverOrLocal(() => jf.getEpisodes(api, userId, seriesId ?? '', seasonId ?? ''), () => downloadedChildren(seasonId)),
     enabled: !!seriesId && !!seasonId,
   });
 }
@@ -84,7 +87,10 @@ export function useChildren(parentId: string | undefined, kind: jf.ChildrenKind,
   const { api, userId, scope } = useApi();
   return useQuery({
     queryKey: queryKeys.children(scope, parentId ?? '', kind),
-    queryFn: () => jf.getChildren(api, userId, parentId ?? '', kind),
+    queryFn: () =>
+      kind === 'tracks' || kind === 'playlist' || kind === 'items'
+        ? serverOrLocal(() => jf.getChildren(api, userId, parentId ?? '', kind), () => downloadedChildren(parentId))
+        : jf.getChildren(api, userId, parentId ?? '', kind),
     enabled: enabled && !!parentId,
   });
 }

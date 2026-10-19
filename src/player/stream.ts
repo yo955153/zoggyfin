@@ -45,6 +45,8 @@ export interface StreamPlan {
   subtitleIndex: number | null;
   /** True when the server burns the chosen subtitle into the video. */
   burnedSubtitle: boolean;
+  /** A downloaded file on this device: no server stream, no track or quality switches. */
+  isLocal?: boolean;
 }
 
 export interface PlaybackInfoInput {

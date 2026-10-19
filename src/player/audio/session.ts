@@ -13,10 +13,13 @@ import { describeError } from '@/api/errors';
 import * as jf from '@/api/jellyfin';
 import { queryClient } from '@/api/query-client';
 import { queryKeys } from '@/api/query-keys';
-import type { BaseItemDto } from '@/api/types';
+import type { BaseItemDto, LyricDto } from '@/api/types';
 import { clientIdentity } from '@/auth/identity';
 import { useSessionStore } from '@/auth/session-store';
+import { chooseMedia, downloadedChildren, findDownload, localExtraUri, readLocalText, documentsDir, serverOrLocal } from '@/downloads';
+import { addToOutbox } from '@/downloads/outbox-store';
 import { resolveImage } from '@/images/resolve-image';
+import { isOffline } from '@/lib/online';
 import { randomId } from '@/lib/id';
 import { toast } from '@/lib/toast';
 import { bitrateFor, usePlaybackSettings } from '@/settings/playback';
@@ -25,6 +28,7 @@ import { storage } from '@/storage/kv';
 
 import { mediaCapabilities } from '../capabilities';
 import { buildDeviceProfile } from '../device-profile';
+import { withOutbox } from '../outbox-transport';
 import { ProgressReporter, secondsToTicks, ticksToSecondsExact, toServerReport } from '../progress-reporter';
 import { initialPlayerState, type NowPlaying, playerState, setPlayerState } from '../store';
 import type { StreamServer } from '../stream';
@@ -98,6 +102,8 @@ async function onCellular(): Promise<boolean> {
 const CONTAINERS = new Set(['MusicAlbum', 'MusicArtist', 'Playlist', 'MusicGenre', 'Genre', 'Folder', 'CollectionFolder']);
 
 function artwork(item: BaseItemDto, server: StreamServer): string | undefined {
+  const local = findDownload(item.Id);
+  if (local?.state === 'completed' && local.images.primary && isOffline()) return localExtraUri(local, local.images.primary) ?? undefined;
   try {
     const img = resolveImage(item, 'square', { width: 600, height: 600 }, { baseUrl: server.baseUrl, token: server.token });
     return img.kind === 'remote' && !img.crop ? img.uri : undefined;
@@ -279,11 +285,16 @@ class AudioSession {
   /** A long item played to its end: forget the local position and mark it played. */
   private async finishedLongItem(item: AudioItem) {
     this.positions.forget(item.Id);
+    let ids: { userId: string; serverId: string } | null = null;
     try {
-      const { api, userId } = context();
+      const { api, userId, serverId } = context();
+      ids = { userId, serverId };
+      if (isOffline()) throw new Error('Network Error');
       await jf.setPlayed(api, userId, item.Id, true);
     } catch (e) {
-      console.warn('[audio] mark played failed', describeError(e).title);
+      // Offline: the outbox marks it played when the server is back.
+      if (ids) addToOutbox({ ...ids, itemId: item.Id, positionTicks: 0, runTimeTicks: item.RunTimeTicks ?? null, played: true, at: Date.now() });
+      else console.warn('[audio] mark played failed', describeError(e).title);
     }
   }
 
@@ -291,13 +302,16 @@ class AudioSession {
 
   private trackFor(entry: QueueEntry<AudioItem> | null): EngineTrack | null {
     if (!entry) return null;
-    const { server, userId } = context();
+    const { server, userId, serverId } = context();
     const profile = buildDeviceProfile(mediaCapabilities(), { maxBitrate: this.bitrate || bitrateFor(usePlaybackSettings.getState(), false) });
     const playSessionId = randomId().replace(/-/g, '');
-    const url = universalAudioUrl(server, entry.item.Id, profile, { userId, maxBitrate: profile.MaxStreamingBitrate ?? this.bitrate, playSessionId });
-    const playMethod = predictPlayMethod(entry.item, profile, profile.MaxStreamingBitrate ?? this.bitrate);
-    this.tracks.set(entry.key, { playSessionId, playMethod, url });
-    return { key: entry.key, uri: url };
+    // A downloaded track plays from the device; the server URL is built only when it is not.
+    const choice = chooseMedia(findDownload(entry.item.Id), documentsDir(), serverId, () =>
+      universalAudioUrl(server, entry.item.Id, profile, { userId, maxBitrate: profile.MaxStreamingBitrate ?? this.bitrate, playSessionId }),
+    );
+    const playMethod = choice.kind === 'local' ? 'DirectPlay' : predictPlayMethod(entry.item, profile, profile.MaxStreamingBitrate ?? this.bitrate);
+    this.tracks.set(entry.key, { playSessionId, playMethod, url: choice.uri });
+    return { key: entry.key, uri: choice.uri };
   }
 
   private nowPlaying(entry: QueueEntry<AudioItem>, q: QueueState<AudioItem>): NowPlaying {
@@ -388,18 +402,20 @@ class AudioSession {
     } catch {
       return;
     }
-    const reporter = new ProgressReporter(
-      {
-        start: (r) => jf.reportPlaybackStart(api, toServerReport(r)),
-        progress: (r) => jf.reportPlaybackProgress(api, toServerReport(r)),
-        stopped: (r) =>
+    const ids = useSessionStore.getState().session;
+    const base = {
+        start: (r: Parameters<typeof toServerReport>[0]) => jf.reportPlaybackStart(api, toServerReport(r)),
+        progress: (r: Parameters<typeof toServerReport>[0]) => jf.reportPlaybackProgress(api, toServerReport(r)),
+        stopped: (r: Parameters<typeof toServerReport>[0]) =>
           jf.reportPlaybackStopped(api, {
             ItemId: r.itemId,
             MediaSourceId: r.mediaSourceId,
             PlaySessionId: r.playSessionId,
             PositionTicks: r.positionTicks,
           }),
-      },
+    };
+    const reporter = new ProgressReporter(
+      ids ? withOutbox(base, { serverId: ids.serverId, userId: ids.userId, runTimeTicks: entry.item.RunTimeTicks ?? null }) : base,
       () => {
         const st = playerState();
         return {
@@ -454,7 +470,10 @@ class AudioSession {
     setAudioState({ lyrics: { itemId, status: 'loading' } });
     try {
       const { api } = context();
-      const dto = await jf.getLyrics(api, itemId);
+      const local = findDownload(itemId);
+      const saved = local?.state === 'completed' && local.hasLyrics ? localExtraUri(local, 'lyrics.json') : null;
+      const text = saved ? readLocalText(saved) : null;
+      const dto = text ? (JSON.parse(text) as LyricDto) : await jf.getLyrics(api, itemId);
       const lyrics = fromLyricDto(dto);
       if (currentEntry(audioState().queue)?.item.Id !== itemId) return;
       setAudioState({ lyrics: lyrics ? { itemId, status: 'ready', lyrics } : { itemId, status: 'none' } });
@@ -550,7 +569,7 @@ class AudioSession {
         start = Math.max(0, request.index ?? request.list.findIndex((i) => i.Id === request.item.Id));
       } else if (CONTAINERS.has(request.item.Type ?? '')) {
         if (playerState().now?.kind !== 'audio') setPlayerState({ ...initialPlayerState, status: 'loading', presentation: 'mini', now: null });
-        items = await jf.getAudioTracks(api, userId, request.item);
+        items = await serverOrLocal(() => jf.getAudioTracks(api, userId, request.item), () => downloadedChildren(request.item.Id));
         ctxItem = request.item;
       } else {
         items = [request.item, ...(request.queue ?? [])];
@@ -588,7 +607,7 @@ class AudioSession {
   private async tracksOf(item: BaseItemDto): Promise<BaseItemDto[]> {
     if (!CONTAINERS.has(item.Type ?? '')) return [item];
     const { api, userId } = context();
-    return jf.getAudioTracks(api, userId, item);
+    return serverOrLocal(() => jf.getAudioTracks(api, userId, item), () => downloadedChildren(item.Id));
   }
 
   private async editQueue(item: BaseItemDto, how: 'next' | 'end') {
