@@ -118,10 +118,32 @@ Desktop app (first version, macOS on Apple Silicon):
 - `pnpm desktop:dev` and `pnpm desktop:build`. Development needs `brew install mpv`.
   See [desktop/README.md](desktop/README.md) for libmpv licenses, bundling and signing.
 
+Phase 5 ("Watch together"):
+
+- A "Watch together" button in the video player and a "Together" action on video item pages
+  open the session sheet. A "Together" indicator in the player shows the session; tap it to
+  open the sheet.
+- Nearby mode (iPhone, iPad, Mac; no internet and no Jellyfin server needed): the host shares
+  a downloaded video from any saved server. People nearby see the session, ask to join, and
+  the host accepts or declines. A guest plays its own download of the same item (same server
+  and item Id) or streams the host's file over the local or peer-to-peer link. Everyone can
+  play, pause, seek and change the speed, or the host turns on "Only the host controls".
+  The group waits while a member loads. Multipeer Connectivity carries the messages.
+- Internet mode: Jellyfin SyncPlay groups on the signed-in server, on native and the web.
+  Start a group with the current item, join a group, play, pause and seek for everyone,
+  next and previous item of the group queue, leave.
+- Sync: the host (nearby) or the server (SyncPlay) is the clock; each device measures its
+  clock offset with ping/pong and corrects drift with small speed changes or a seek. On two
+  simulators the median sync error was 4 ms (streamed) and 15 ms (own download). See
+  [docs/specs/watch-together-spike.md](docs/specs/watch-together-spike.md).
+- Not on TV. The web has SyncPlay only.
+
 The design is in [docs/specs](docs/specs/) and [docs/design](docs/design/).
 
 The native app includes a small local module, `modules/zoggyfin-native`, that reports
-hardware decoders and hardware keyboard presses and draws the system volume slider.
+hardware decoders and hardware keyboard presses, draws the system volume slider and runs
+nearby watch together (Multipeer Connectivity, a range server for the host's file and a
+loopback relay for the guest).
 It builds with the app.
 
 ## Run a development build

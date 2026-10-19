@@ -249,6 +249,46 @@ a plane).
 - **Later (separate phase)**: voice chat and messages in a session (Multipeer audio
   locally; WebRTC with a self-hosted signaling server such as LiveKit over the internet).
 
+### As built (phase 5)
+
+The spike results are in `docs/specs/watch-together-spike.md`.
+
+- **Code**: `src/together/` holds the pure logic (`protocol.ts` with a version field,
+  `clock.ts`, `drift.ts`, `machine.ts`, `room.ts` for the host, `follower.ts` and
+  `anchor-follower.ts` for the followers, `match.ts`, `syncplay-logic.ts`, all unit-tested)
+  and the controllers (`nearby.ts`, `syncplay.ts`). The native part is
+  `ZoggyfinTogetherModule` in `modules/zoggyfin-native`. The UI is in
+  `src/features/together/`.
+- **Player seam**: `src/player/control-gate.ts`. In a session the user's play, pause, seek
+  and speed controls go to the session; the session changes the player through
+  `videoSession().direct`, so a group command does not echo. Changes from outside the app
+  (lock screen, Picture in Picture) become group controls too. Autoplay of the next episode
+  is off in a session.
+- **Nearby transport**: the host advertises (service `zgf-together`), a guest browses and
+  sends a join request with a small context (name, "has a copy"); the host accepts or
+  declines. Messages are JSON over an encrypted MCSession. Clock pings go unreliable; all
+  other messages reliable.
+- **Media**: the guest's own download is used when it matches on server Id and item Id
+  (item Id only when a server Id is unknown). Downloads of every saved server count, and
+  nothing needs a sign-in or a server. Otherwise the host's file streams: the host runs an
+  HTTP range server (Network.framework, peer-to-peer allowed, Bonjour `_zgf-media._tcp`) and
+  shares one file at a random path; the guest's player reads it through a loopback relay
+  (`http://127.0.0.1:<port>/<token>/media.<ext>`). The media source id is not compared:
+  a download keeps one source.
+- **Group state**: the host sends an anchor (playing, rate, host time, position). A play
+  starts 300 ms in the future so all devices start together. The host re-anchors to its
+  own player every 2 s. While a member loads or buffers, the group waits.
+- **Drift**: above 150 ms (40 ms in the 8 s after a start or seek) a rate nudge of 3 % or
+  6 % that ends 10 ms past zero; above 1 s a seek. Each AVPlayer rate change costs about
+  20 ms, so the rate changes seldom.
+- **SyncPlay**: the server is the clock (`GET /GetUtcTime`, NTP style). Commands
+  (`Unpause`, `Pause`, `Seek`, `Stop`) become anchors on the server clock; the device
+  reports `Buffering` and `Ready`. The group queue loads its current item paused, and
+  Next / Previous move in the queue. Speed changes are not shared (SyncPlay has none).
+- **Deviations**: a guest needs the app signed in to open the player today (the sign-in
+  screen has no nearby entry yet). Audio items are not shared yet; nearby and SyncPlay
+  sessions are for video.
+
 ## Settings
 
 Servers and accounts (multiple), Quick Connect login, streaming quality (Wi-Fi /
