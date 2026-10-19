@@ -33,7 +33,7 @@ export function buildLists(records: Record<string, DownloadRecord>, collections:
         : r.group.type === 'Series'
           ? { Id: r.group.id, Name: r.group.name, Type: 'Series', ImageTags: r.item.SeriesPrimaryImageTag ? { Primary: r.item.SeriesPrimaryImageTag } : undefined }
           : r.item);
-    byGroup.set(r.group.id, { id: r.group.id, name: r.group.name, type: r.group.type, item, records: [r], bytes: r.bytesDone });
+    byGroup.set(r.group.id, { id: r.group.id, name: collection?.name ?? r.group.name, type: r.group.type, item, records: [r], bytes: r.bytesDone });
   }
   const groups = [...byGroup.values()]
     .map((g) => ({ ...g, records: g.records.sort((a, b) => a.sort - b.sort) }))

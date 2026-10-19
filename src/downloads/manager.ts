@@ -253,8 +253,15 @@ class DownloadManager {
       plan = audioPlan(ctx.server, full, profile, ctx.userId, randomId().replace(/-/g, ''));
     }
     const slim = slimForDownload(item);
+    // A song with no album tag: get the album name for its group from the album itself.
+    let group = r.group;
+    if (group.type === 'MusicAlbum' && !full.Album && full.AlbumId) {
+      const album = await jf.getItem(ctx.api, ctx.userId, full.AlbumId).catch(() => null);
+      if (album?.Name) group = { ...group, name: album.Name };
+    }
     patchRecord(r.itemId, (x) => ({
       ...x,
+      group,
       item: slim,
       mediaFile: plan.file,
       method: plan.method,
@@ -356,7 +363,8 @@ class DownloadManager {
           createdAt: old?.createdAt ?? Date.now(),
         };
         putCollection(collection);
-        for (const c of children) this.enqueue(c, ctx);
+        const group = item.Type === 'MusicAlbum' ? { id: item.Id, name: item.Name ?? 'Album', type: 'MusicAlbum' as const } : undefined;
+        for (const c of children) this.enqueue(c, ctx, group);
         files.ensureDir(dir);
         void fetchImages(item, dir, ctx, false).then((images) => {
           const cur = downloadsState().collections[collection.id];
@@ -374,7 +382,7 @@ class DownloadManager {
     }
   }
 
-  private enqueue(item: BaseItemDto, ctx: Ctx): void {
+  private enqueue(item: BaseItemDto, ctx: Ctx, group?: DownloadRecord['group']): void {
     const id = item.Id ?? '';
     const kind = mediaKindOf(item);
     if (!id || !kind) return;
@@ -392,7 +400,7 @@ class DownloadManager {
       userId: ctx.userId,
       kind,
       item: slimForDownload(item),
-      group: groupFor(item),
+      group: group ?? groupFor(item),
       sort: sortFor(item),
       state: 'queued',
       bytesTotal: null,
@@ -421,7 +429,16 @@ class DownloadManager {
     const before = downloadsState().records[itemId];
     const r = apply(itemId, { type: 'pause' });
     if (!r || r === before) return;
-    if (this.native.has(itemId)) await engine.pause(itemId);
+    if (this.native.has(itemId)) {
+      if (r.method === 'transcode') {
+        // A server transcode has no byte ranges, so it cannot continue where it stopped: stop it, and resume starts again.
+        this.native.delete(itemId);
+        await engine.stop(itemId);
+        patchRecord(itemId, (x) => ({ ...x, bytesDone: 0 }));
+      } else {
+        await engine.pause(itemId);
+      }
+    }
     this.tick();
   }
 
