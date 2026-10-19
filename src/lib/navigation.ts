@@ -1,0 +1,48 @@
+import { type Href, useRouter, useSegments } from 'expo-router';
+import { useCallback } from 'react';
+
+import type { BaseItemDto } from '@/api/types';
+
+/** Tab stacks that hold the shared detail routes. */
+export type TabGroup = '(home)' | '(library)' | '(music)' | '(search)';
+const GROUPS: readonly TabGroup[] = ['(home)', '(library)', '(music)', '(search)'];
+
+/** The tab the user is in, so a pushed detail page stays in that tab's stack. */
+export function useTabGroup(): TabGroup {
+  const segments = useSegments() as string[];
+  const found = segments.find((s): s is TabGroup => (GROUPS as readonly string[]).includes(s));
+  return found ?? '(home)';
+}
+
+/** The route for an item. User views go to the library grid; music libraries go to the music pager. */
+export function itemHref(group: TabGroup, item: BaseItemDto): Href | null {
+  if (!item.Id) return null;
+  const id = item.Id;
+  const name = item.Name ?? '';
+  if (item.Type === 'CollectionFolder' || item.Type === 'UserView') {
+    if (item.CollectionType === 'music') {
+      return { pathname: `/(tabs)/${group}/music/[id]`, params: { id, name } } as unknown as Href;
+    }
+    return { pathname: `/(tabs)/${group}/library/[id]`, params: { id, name } } as unknown as Href;
+  }
+  if (item.Type === 'MusicGenre' || item.Type === 'Genre') {
+    const libraryId = item.ParentId ?? '';
+    return { pathname: `/(tabs)/${group}/genre/[id]`, params: { id, name, libraryId } } as unknown as Href;
+  }
+  return {
+    pathname: `/(tabs)/${group}/item/[id]`,
+    params: { id, type: item.Type ?? '', name },
+  } as unknown as Href;
+}
+
+export function useOpenItem() {
+  const router = useRouter();
+  const group = useTabGroup();
+  return useCallback(
+    (item: BaseItemDto) => {
+      const href = itemHref(group, item);
+      if (href) router.push(href);
+    },
+    [router, group],
+  );
+}

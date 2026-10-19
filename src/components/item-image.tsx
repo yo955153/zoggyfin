@@ -8,7 +8,7 @@ import type { BaseItemDto } from '@/api/types';
 import { generatedArt } from '@/images/generated-art';
 import { type ImageVariant, type ResolvedImage, resolveImage } from '@/images/resolve-image';
 import { Icon } from '@/components/icon';
-import { colors, radius } from '@/theme';
+import { colors, motion, radius, spacing, type } from '@/theme';
 
 export interface ItemImageProps {
   item: BaseItemDto;
@@ -60,7 +60,7 @@ export const ItemImage = memo(function ItemImage({
   if (shown.kind === 'generated') {
     return (
       <View style={[box, style]} accessibilityIgnoresInvertColors>
-        <GeneratedArtView art={shown} width={width} height={height} showTitle={!hideArtTitle} />
+        <GeneratedArtView art={shown} width={width} height={height} showTitle={!hideArtTitle} showIcon={variant !== 'backdrop'} />
       </View>
     );
   }
@@ -73,7 +73,7 @@ export const ItemImage = memo(function ItemImage({
         placeholder={shown.blurhash ? { blurhash: shown.blurhash } : undefined}
         placeholderContentFit="cover"
         contentFit="cover"
-        transition={180}
+        transition={motion.imageFade}
         recyclingKey={shown.uri}
         cachePolicy="memory-disk"
         onError={() => setFailedUri(shown.uri)}
@@ -92,20 +92,22 @@ function GeneratedArtView({
   width,
   height,
   showTitle,
+  showIcon,
 }: {
   art: { colors: [string, string]; icon: string; title: string };
   width: number;
   height: number;
   showTitle: boolean;
+  showIcon: boolean;
 }) {
   const small = Math.min(width, height);
   const iconSize = Math.max(16, Math.min(44, small * 0.28));
   const showText = showTitle && small >= 70;
   return (
     <LinearGradient colors={art.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.art}>
-      <Icon name={art.icon} size={iconSize} color="rgba(255,255,255,0.55)" />
+      {showIcon ? <Icon name={art.icon} size={iconSize} color={colors.artIcon} /> : null}
       {showText ? (
-        <Text style={[styles.artTitle, { fontSize: small > 140 ? 15 : 12 }]} numberOfLines={3}>
+        <Text style={[styles.artTitle, small > 140 ? type.artTitleLarge : type.artTitleSmall]} numberOfLines={3}>
           {art.title}
         </Text>
       ) : null}
@@ -118,12 +120,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 10,
-    gap: 8,
+    padding: spacing.sm2,
+    gap: spacing.sm,
   },
   artTitle: {
-    color: 'rgba(255,255,255,0.92)',
-    fontWeight: '700',
+    ...type.artTitle,
+    color: colors.artText,
     textAlign: 'center',
   },
 });
