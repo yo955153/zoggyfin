@@ -1,19 +1,24 @@
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Text } from 'react-native';
 
 import { useViews } from '@/api/queries';
 import { Icon } from '@/components/icon';
 import { OptionSheet } from '@/components/option-sheet';
-import { EmptyState, ErrorState, LoadingState } from '@/components/states';
+import { EmptyState, ErrorState, GridSkeleton } from '@/components/states';
+import { Touchable } from '@/components/touchable';
 import { isAudioView } from '@/features/library/library-kind';
 import { MusicBrowser } from '@/features/music/music-browser';
 import { storage } from '@/storage/kv';
-import { colors, iconSize, spacing, type } from '@/theme';
+import { useRootScreenOptions } from '@/lib/stack-options';
+import { createStyles, type AppTheme, font, iconSize, spacing, type, useStyles, useTheme } from '@/theme';
 
 const KEY = 'music.library';
 
 export default function MusicScreen() {
+  const styles = useStyles(makeStyles);
+  const { c } = useTheme();
+  const root = useRootScreenOptions();
   const views = useViews();
   const audio = (views.data ?? []).filter(isAudioView);
   const [chosen, setChosen] = useState(() => storage.getString(KEY));
@@ -24,20 +29,21 @@ export default function MusicScreen() {
     <>
       <Stack.Screen
         options={{
+          ...root,
           title: audio.length > 1 ? (library?.Name ?? 'Music') : 'Music',
           headerRight:
             audio.length > 1
               ? () => (
-                  <Pressable onPress={() => setPicker(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Choose library" style={styles.pick}>
+                  <Touchable onPress={() => setPicker(true)} hitSlop={8} radius={8} accessibilityRole="button" accessibilityLabel="Choose music library" style={styles.pick}>
                     <Text style={styles.pickText}>Library</Text>
-                    <Icon name="chevron.down" size={iconSize.sm} color={colors.text} />
-                  </Pressable>
+                    <Icon name="chevron.down" size={iconSize.sm - 2} color={c.accent} weight="semibold" />
+                  </Touchable>
                 )
               : undefined,
         }}
       />
       {views.isPending ? (
-        <LoadingState />
+        <GridSkeleton shape="square" />
       ) : views.error && !views.data ? (
         <ErrorState error={views.error} onRetry={views.refetch} />
       ) : library?.Id ? (
@@ -60,7 +66,7 @@ export default function MusicScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  pick: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xs2 },
-  pickText: { ...type.bodyStrong, color: colors.text },
-});
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+  pick: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs, paddingHorizontal: spacing.xs + 2 },
+  pickText: { ...font(type.body), color: c.accent },
+}));

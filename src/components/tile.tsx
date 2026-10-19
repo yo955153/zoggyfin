@@ -1,13 +1,27 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { memo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import type { BaseItemDto } from '@/api/types';
-import { playedFraction, subtitleFor } from '@/lib/format';
 import { Icon } from '@/components/icon';
-import { colors, iconSize, radius, size, spacing, type } from '@/theme';
+import { playedFraction, remainingLabel, subtitleFor } from '@/lib/format';
+import { createStyles,
+  type AppTheme,
+  font,
+  iconSize,
+  mediaColors,
+  radius,
+  scaled,
+  scriptStyle,
+  sizes,
+  type,
+  useStyles,
+  useTheme,
+} from '@/theme';
 
 import { ItemImage } from './item-image';
 import { SHAPES, shapeFor, type TileShape } from './tile-shape';
+import { Touchable } from './touchable';
 
 export { shapeFor, shapeForList, type TileShape } from './tile-shape';
 
@@ -16,80 +30,184 @@ export interface TileProps {
   width: number;
   shape?: TileShape;
   onPress: (item: BaseItemDto) => void;
+  onLongPress?: (item: BaseItemDto) => void;
   /** Override the title line. */
   title?: string | null;
   subtitle?: string | null;
   showProgress?: boolean;
+  /** Title and metadata on the artwork over a scrim (Continue watching). */
+  titleOnArt?: boolean;
+  /** TV: take the first focus on the screen. */
+  preferredFocus?: boolean;
 }
 
-export const Tile = memo(function Tile({ item, width, shape, onPress, title, subtitle, showProgress = true }: TileProps) {
-  const s = SHAPES[shape ?? shapeFor(item)];
+function radiusFor(shape: TileShape): number {
+  return shape === 'square' ? radius.sm : radius.md;
+}
+
+/**
+ * The media tile (design system §7.3): one picture, a title and one line of
+ * metadata, a white progress bar on the art, at most one badge. Flat at rest;
+ * it lifts with the `raised` shadow only on hover and focus.
+ */
+export const Tile = memo(function Tile({
+  item,
+  width,
+  shape,
+  onPress,
+  onLongPress,
+  title,
+  subtitle,
+  showProgress = true,
+  titleOnArt = false,
+  preferredFocus,
+}: TileProps) {
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const kind = shape ?? shapeFor(item);
+  const shapeInfo = SHAPES[kind];
+  const circle = kind === 'circle';
+  const r = circle ? width / 2 : radiusFor(kind);
+
   const progress = showProgress ? playedFraction(item) : null;
-  const played = item.UserData?.Played && item.Type !== 'MusicAlbum' && item.Type !== 'Audio';
+  const played = !!item.UserData?.Played && item.Type !== 'MusicAlbum' && item.Type !== 'Audio' && item.Type !== 'Series';
+  const unplayed = item.Type === 'Series' ? item.UserData?.UnplayedItemCount ?? 0 : 0;
   const titleText = title ?? (item.Type === 'Episode' ? item.SeriesName ?? item.Name : item.Name) ?? '';
   const sub = subtitle !== undefined ? subtitle : item.Type === 'Episode' ? item.Name : subtitleFor(item);
-  const circle = (shape ?? shapeFor(item)) === 'circle';
+  const left = remainingLabel(item);
+  const lines = fontScale >= 1.5 ? 2 : 1;
+
+  const label = [titleText, sub, progress !== null ? left : null, played ? 'played' : null].filter(Boolean).join(', ');
 
   return (
-    <Pressable
+    <Touchable
+      kind="tile"
+      radius={r}
       onPress={() => onPress(item)}
-      style={({ pressed }) => [{ width }, pressed && styles.pressed]}
+      onLongPress={onLongPress ? () => onLongPress(item) : undefined}
+      hasTVPreferredFocus={preferredFocus}
       accessibilityRole="button"
-      accessibilityLabel={[titleText, sub].filter(Boolean).join(', ')}>
-      <View>
-        <ItemImage item={item} variant={s.variant} width={width} aspectRatio={s.aspect} circle={circle} />
-        {progress !== null ? (
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+      accessibilityLabel={label}
+      containerStyle={{ width }}>
+      {() => (
+        <>
+          <View>
+            <ItemImage
+              item={item}
+              variant={shapeInfo.variant}
+              width={width}
+              aspectRatio={shapeInfo.aspect}
+              rounded={r}
+              circle={circle}
+              hideArtTitle={titleOnArt || progress !== null}
+            />
+            {titleOnArt ? (
+              <View style={[StyleSheet.absoluteFill, s.artText, { borderRadius: r }]} pointerEvents="none">
+                <LinearGradient
+                  colors={[c.artScrimTop, c.artScrimBottom]}
+                  locations={[0.4, 1]}
+                  style={StyleSheet.absoluteFill}
+                />
+                <Text style={[s.onArtTitle, scriptStyle(titleText, s.onArtTitle)]} numberOfLines={1}>
+                  {titleText}
+                </Text>
+                {sub || left ? (
+                  <Text style={s.onArtMeta} numberOfLines={1}>
+                    {[sub, left].filter(Boolean).join(' · ')}
+                  </Text>
+                ) : null}
+                {progress !== null ? <Progress fraction={progress} inline /> : null}
+              </View>
+            ) : progress !== null ? (
+              <Progress fraction={progress} />
+            ) : null}
+            {played ? (
+              <View style={s.badge}>
+                <Icon name="checkmark" size={iconSize.xs} color={mediaColors.white} weight="bold" />
+              </View>
+            ) : unplayed > 0 ? (
+              <View style={[s.badge, s.countBadge]}>
+                <Text style={s.count}>{unplayed}</Text>
+              </View>
+            ) : null}
           </View>
-        ) : null}
-        {played ? (
-          <View style={styles.played}>
-            <Icon name="checkmark" size={iconSize.xs} color={colors.onImage} weight="bold" />
-          </View>
-        ) : null}
-      </View>
-      <Text style={[styles.title, circle && styles.center]} numberOfLines={1}>
-        {titleText}
-      </Text>
-      {sub ? (
-        <Text style={[styles.subtitle, circle && styles.center]} numberOfLines={1}>
-          {sub}
-        </Text>
-      ) : null}
-    </Pressable>
+          {!titleOnArt ? (
+            <>
+              <Text
+                style={[s.title, circle && s.center, scriptStyle(titleText, circle ? s.center : s.title)]}
+                numberOfLines={lines}>
+                {titleText}
+              </Text>
+              {sub ? (
+                <Text style={[s.meta, circle && s.center, scriptStyle(sub, circle ? s.center : s.meta)]} numberOfLines={1}>
+                  {sub}
+                </Text>
+              ) : null}
+            </>
+          ) : null}
+        </>
+      )}
+    </Touchable>
   );
 });
+
+function Progress({ fraction, inline }: { fraction: number; inline?: boolean }) {
+  const s = useStyles(makeStyles);
+  return (
+    <View style={inline ? s.progressInline : s.progress}>
+      <View style={[s.progressFill, { width: `${Math.max(2, Math.round(fraction * 100))}%` }]} />
+    </View>
+  );
+}
 
 export function tileAspect(shape: TileShape): number {
   return SHAPES[shape].aspect;
 }
 
-const styles = StyleSheet.create({
-  pressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
-  title: { ...type.tileTitle, color: colors.text, marginTop: spacing.xs2 },
-  subtitle: { ...type.tileSubtitle, color: colors.textSecondary, marginTop: spacing.xxs / 2 },
-  center: { textAlign: 'center' },
-  progressTrack: {
-    position: 'absolute',
-    left: size.overlayInset,
-    right: size.overlayInset,
-    bottom: size.overlayInset,
-    height: size.progressBar,
-    borderRadius: radius.bar,
-    backgroundColor: colors.progressTrack,
-    overflow: 'hidden',
-  },
-  progressFill: { height: size.progressBar, backgroundColor: colors.progress },
-  played: {
-    position: 'absolute',
-    top: size.badgeInset,
-    right: size.badgeInset,
-    width: size.badge,
-    height: size.badge,
+/** Height of a tile with its text, for skeletons and fixed row heights. */
+export function tileHeight(shape: TileShape, width: number, withText = true): number {
+  const art = width / SHAPES[shape].aspect;
+  if (!withText) return art;
+  return art + sizes.tileTitleGap + scaled(type.tileTitle.lineHeight) + sizes.tileMetaGap + scaled(type.caption1.lineHeight);
+}
+
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+  title: { ...font(type.tileTitle), color: c.text, marginTop: scaled(sizes.tileTitleGap) },
+  meta: { ...font(type.caption1), color: c.text2, marginTop: sizes.tileMetaGap },
+  center: { textAlign: 'center' as const },
+  artText: { overflow: 'hidden' as const, justifyContent: 'flex-end' as const, padding: scaled(sizes.progressInset) },
+  onArtTitle: { ...font(type.tileTitle), fontSize: scaled(15), color: c.textOnMedia },
+  onArtMeta: { ...font(type.caption1), color: c.textOnMediaSecondary, marginTop: sizes.tileMetaGap },
+  progress: {
+    position: 'absolute' as const,
+    left: scaled(sizes.progressInset),
+    right: scaled(sizes.progressInset),
+    bottom: scaled(sizes.progressInset),
+    height: scaled(sizes.progress),
     borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: c.progressTrack,
+    overflow: 'hidden' as const,
   },
-});
+  progressInline: {
+    marginTop: scaled(8),
+    height: scaled(sizes.progress),
+    borderRadius: radius.pill,
+    backgroundColor: c.progressTrack,
+    overflow: 'hidden' as const,
+  },
+  progressFill: { height: '100%' as const, backgroundColor: mediaColors.white, borderRadius: radius.pill },
+  badge: {
+    position: 'absolute' as const,
+    top: sizes.badgeInset,
+    right: sizes.badgeInset,
+    minWidth: scaled(sizes.badge),
+    height: scaled(sizes.badge),
+    borderRadius: radius.pill,
+    backgroundColor: mediaColors.badgeFill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  countBadge: { paddingHorizontal: 6 },
+  count: { ...font(type.caption2, { tabular: true }), color: mediaColors.white },
+}));

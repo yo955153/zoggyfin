@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 
 import { getApi } from '@/api/client';
 import { describeError } from '@/api/errors';
@@ -14,11 +14,12 @@ import {
 import { completeSignIn, type ServerInfo } from '@/auth/sign-in';
 import { Button } from '@/components/button';
 import { TextField, type TextFieldRef } from '@/components/text-field';
-import { colors, radius, size, spacing, type } from '@/theme';
+import { createStyles, type AppTheme, font, radius, scaled, sizes, spacing, type, useStyles } from '@/theme';
 
 const POLL_MS = 2000;
 
 export default function LoginScreen() {
+  const styles = useStyles(makeStyles);
   const params = useLocalSearchParams<{ url: string; serverId: string; serverName: string; version: string }>();
   const server: ServerInfo = {
     url: params.url,
@@ -109,10 +110,10 @@ export default function LoginScreen() {
               <Text style={styles.qcCode} selectable accessibilityLabel={`Code ${qcCode.split('').join(' ')}`}>
                 {qcCode}
               </Text>
-              <Text style={styles.qcHint}>Waiting for approval…</Text>
+              <Text style={styles.qcHint}>Waiting for approval. This page signs in by itself.</Text>
               <Button
                 title="Cancel"
-                variant="secondary"
+                variant="tonal"
                 onPress={() => {
                   setQcSecret(null);
                   setQcCode(null);
@@ -150,9 +151,9 @@ export default function LoginScreen() {
                   {error}
                 </Text>
               ) : null}
-              <Button title="Sign In" onPress={signIn} loading={busy} disabled={!username.trim()} />
+              <Button title="Sign in" onPress={signIn} loading={busy} disabled={!username.trim()} />
               {qcEnabled ? (
-                <Button title="Use Quick Connect" icon="qrcode" variant="secondary" onPress={startQuickConnect} />
+                <Button title="Use Quick Connect" icon="qrcode" variant="tonal" onPress={startQuickConnect} />
               ) : null}
             </>
           )}
@@ -162,15 +163,15 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  content: { flexGrow: 1, justifyContent: 'center', padding: spacing.xl },
-  inner: { width: '100%', maxWidth: size.formMaxWidth, alignSelf: 'center', gap: spacing.lg },
-  title: { ...type.largeTitle, color: colors.text },
-  subtitle: { ...type.body, color: colors.textSecondary, marginTop: -spacing.sm },
-  error: { ...type.callout, color: colors.danger },
-  qc: { gap: spacing.lg, backgroundColor: colors.surface, padding: spacing.xl, borderRadius: radius.lg },
-  qcLabel: { ...type.body, color: colors.textSecondary, textAlign: 'center' },
-  qcCode: { ...type.code, color: colors.text, textAlign: 'center' },
-  qcHint: { ...type.callout, color: colors.textTertiary, textAlign: 'center' },
-});
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+  flex: { flex: 1, backgroundColor: c.bg },
+  content: { flexGrow: 1, justifyContent: 'center' as const, padding: spacing.xxl },
+  inner: { width: '100%' as const, maxWidth: scaled(sizes.formMaxWidth), alignSelf: 'center' as const, gap: spacing.lg },
+  title: { ...font(type.largeTitle), color: c.text },
+  subtitle: { ...font(type.subheadline), color: c.text2, marginTop: -spacing.sm, marginBottom: spacing.sm },
+  error: { ...font(type.footnote), color: c.danger },
+  qc: { gap: spacing.lg, backgroundColor: c.surface, padding: spacing.xxl, borderRadius: radius.lg, borderCurve: 'continuous' as const },
+  qcLabel: { ...font(type.subheadline), color: c.text2, textAlign: 'center' as const },
+  qcCode: { ...font(type.largeTitle, { tabular: true }), fontSize: scaled(44), lineHeight: scaled(52), letterSpacing: 8, color: c.text, textAlign: 'center' as const },
+  qcHint: { ...font(type.footnote), color: c.text3, textAlign: 'center' as const },
+}));

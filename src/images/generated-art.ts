@@ -1,48 +1,36 @@
 /**
- * Generated art: the last image fallback. A gradient seeded from the title,
- * the title text and an icon for the item type. It is deterministic, so a
- * tile looks the same on every render and every device.
+ * Generated art: the last image fallback (design system §7.5). The gradient
+ * comes from `fallbackArt()` in the theme, so the same title gives the same
+ * art on every device and platform. This file adds the type glyph and title.
  */
+import type { IconName } from '@/components/icon-names';
+import { type FallbackArt, fallbackArt } from '@/theme/theme';
 
 export interface GeneratedArt {
-  /** Two gradient colors, top-left to bottom-right. */
-  colors: [string, string];
-  /** An SF Symbol name for the item type. */
-  icon: string;
+  art: FallbackArt;
+  /** The type glyph (§7.5 step 9). */
+  icon: IconName;
   /** The text to show on the tile. */
   title: string;
 }
 
-/** FNV-1a 32 bit. Small, fast and stable across platforms. */
-export function hashString(input: string): number {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
-}
-
-function hsl(h: number, s: number, l: number): string {
-  return `hsl(${Math.round(h) % 360}, ${s}%, ${l}%)`;
-}
-
-const ICONS: Record<string, string> = {
+const ICONS: Record<string, IconName> = {
   Movie: 'film',
-  Video: 'film',
   Trailer: 'film',
+  Video: 'play.rectangle',
+  MusicVideo: 'play.rectangle',
   Series: 'tv',
   Season: 'tv',
   Episode: 'tv',
-  MusicAlbum: 'square.stack',
+  MusicAlbum: 'music.note',
   Audio: 'music.note',
-  AudioBook: 'book',
+  AudioBook: 'waveform',
   Book: 'book',
   MusicArtist: 'music.mic',
-  Person: 'person.fill',
+  Person: 'person',
   Playlist: 'music.note.list',
-  BoxSet: 'square.stack.3d.up',
-  MusicGenre: 'guitars',
+  BoxSet: 'folder',
+  MusicGenre: 'music.note',
   Genre: 'theatermasks',
   CollectionFolder: 'folder',
   UserView: 'folder',
@@ -52,39 +40,45 @@ const ICONS: Record<string, string> = {
   LiveTvChannel: 'antenna.radiowaves.left.and.right',
 };
 
-const COLLECTION_ICONS: Record<string, string> = {
+const COLLECTION_ICONS: Record<string, IconName> = {
   movies: 'film',
   tvshows: 'tv',
   music: 'music.note',
-  books: 'book',
-  boxsets: 'square.stack.3d.up',
+  books: 'waveform',
+  boxsets: 'folder',
   playlists: 'music.note.list',
-  homevideos: 'video',
+  homevideos: 'play.rectangle',
   photos: 'photo',
   livetv: 'antenna.radiowaves.left.and.right',
-  musicvideos: 'music.note.tv',
+  musicvideos: 'play.rectangle',
 };
 
-export function iconForType(type?: string | null, collectionType?: string | null): string {
+export function iconForType(type?: string | null, collectionType?: string | null): IconName {
   if (collectionType && COLLECTION_ICONS[collectionType]) return COLLECTION_ICONS[collectionType];
   if (type && ICONS[type]) return ICONS[type];
-  return 'square.grid.2x2';
+  return 'play.rectangle';
 }
 
 export function generatedArt(
   title: string | null | undefined,
   type?: string | null,
   collectionType?: string | null,
+  itemId = '',
 ): GeneratedArt {
-  const text = (title ?? '').trim() || 'Untitled';
-  const hash = hashString(text);
-  const hue = hash % 360;
-  // A neighbour hue for the second stop keeps the gradient calm.
-  const hue2 = hue + 30 + ((hash >>> 9) % 40);
-  const sat = 45 + ((hash >>> 17) % 20);
+  const text = (title ?? '').trim();
   return {
-    colors: [hsl(hue, sat, 34), hsl(hue2, sat, 18)],
+    art: fallbackArt(text, itemId),
     icon: iconForType(type, collectionType),
-    title: text,
+    title: text || 'Untitled',
   };
+}
+
+/** Initials for a person or artist circle: the first letter of the first two words. */
+export function initials(name: string | null | undefined): string {
+  const firsts = (name ?? '')
+    .trim()
+    .split(/\s+/)
+    .map((w) => Array.from(w).find((ch) => /[\p{L}\p{N}]/u.test(ch)))
+    .filter((ch): ch is string => !!ch);
+  return firsts.slice(0, 2).join('').toUpperCase();
 }

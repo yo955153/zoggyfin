@@ -1,15 +1,16 @@
 import { FlashList } from '@shopify/flash-list';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback } from 'react';
+import { Text, View } from 'react-native';
 
 import type { BaseItemDto } from '@/api/types';
-import { useOpenItem } from '@/lib/navigation';
 import { Icon } from '@/components/icon';
-import { colors, GUTTER, iconSize, radius, spacing, type } from '@/theme';
+import { useOpenItem } from '@/lib/navigation';
+import { createStyles, type AppTheme, font, iconSize, scaled, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
 
+import { Delayed, SkeletonBlock, SkeletonText } from './skeleton';
 import { ErrorState } from './states';
 import { Tile, type TileShape, tileAspect } from './tile';
-
-const WIDTHS: Record<TileShape, number> = { poster: 118, landscape: 232, square: 140, circle: 104 };
+import { Touchable } from './touchable';
 
 interface ItemRowProps {
   title: string;
@@ -18,16 +19,24 @@ interface ItemRowProps {
   isLoading?: boolean;
   error?: unknown;
   onRetry?: () => void;
+  /** The header opens the full list. */
   onSeeAll?: () => void;
   /** Hide the row when it has no items (Home rows). */
   hideWhenEmpty?: boolean;
   tileTitle?: (item: BaseItemDto) => string | null | undefined;
   tileSubtitle?: (item: BaseItemDto) => string | null | undefined;
+  /** Titles on the artwork (Continue watching). */
+  titleOnArt?: boolean;
+  /** TV: the first tile of this row takes the first focus. */
+  preferredFocus?: boolean;
+  /** Override the tile press. */
+  onPress?: (item: BaseItemDto) => void;
 }
 
 /**
- * A titled row that scrolls sideways. It is a plain list with momentum
- * scrolling, not a paged carousel.
+ * A Home shelf (design system §7.4): a header button, then a row that
+ * scrolls freely with momentum. No paging, no snap: the last tile is cut at
+ * the edge, which shows that the row goes on.
  */
 export function ItemRow({
   title,
@@ -40,13 +49,37 @@ export function ItemRow({
   hideWhenEmpty = true,
   tileTitle,
   tileSubtitle,
+  titleOnArt,
+  preferredFocus,
+  onPress,
 }: ItemRowProps) {
+  const s = useStyles(makeStyles);
   const open = useOpenItem();
-  const width = WIDTHS[shape];
+  const l = useLayout();
+  const width = l.rowTile[shape === 'thumb' ? 'thumb' : shape];
+  const press = onPress ?? open;
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: BaseItemDto; index: number }) => (
+      <View style={{ marginRight: l.gap }}>
+      <Tile
+        item={item}
+        width={width}
+        shape={shape}
+        onPress={press}
+        title={tileTitle?.(item)}
+        subtitle={tileSubtitle ? tileSubtitle(item) : undefined}
+        titleOnArt={titleOnArt}
+        preferredFocus={preferredFocus && index === 0}
+      />
+      </View>
+    ),
+    [width, shape, press, tileTitle, tileSubtitle, titleOnArt, preferredFocus, l.gap],
+  );
 
   if (error && !items?.length) {
     return (
-      <View style={styles.section}>
+      <View style={[s.section, { marginTop: l.sectionGap }]}>
         <RowHeader title={title} />
         <ErrorState error={error} onRetry={() => onRetry?.()} compact />
       </View>
@@ -54,73 +87,71 @@ export function ItemRow({
   }
   if (!isLoading && !items?.length && hideWhenEmpty) return null;
 
-  const height = width / tileAspect(shape) + 44;
+  const artHeight = width / tileAspect(shape);
   return (
-    <View style={styles.section}>
+    <View style={[s.section, { marginTop: l.sectionGap }]}>
       <RowHeader title={title} onSeeAll={onSeeAll} />
       {isLoading && !items ? (
-        <View style={[styles.skeletonRow, { height }]}>
-          {[0, 1, 2, 3].map((i) => (
-            <View key={i} style={[styles.skeleton, { width, height: width / tileAspect(shape) }]} />
-          ))}
-        </View>
+        <Delayed>
+          <View style={[s.skeletonRow, { paddingHorizontal: l.gutter, gap: l.gap }]}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <View key={i} style={{ width }}>
+                <SkeletonBlock width={width} height={artHeight} radius={shape === 'circle' ? width / 2 : shape === 'square' ? 8 : 10} />
+                {titleOnArt ? null : <SkeletonText width={width} />}
+              </View>
+            ))}
+          </View>
+        </Delayed>
       ) : (
         <FlashList
           horizontal
           data={items ?? []}
           keyExtractor={(it, i) => it.Id ?? String(i)}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: GUTTER }}
-          ItemSeparatorComponent={Separator}
-          renderItem={({ item }) => (
-            <Tile
-              item={item}
-              width={width}
-              shape={shape}
-              onPress={open}
-              title={tileTitle?.(item)}
-              subtitle={tileSubtitle ? tileSubtitle(item) : undefined}
-            />
-          )}
+          decelerationRate="fast"
+          contentContainerStyle={{ paddingLeft: l.gutter, paddingRight: l.gutter - l.gap, paddingVertical: l.tv ? l.gap / 2 : spacing.xs }}
+          renderItem={renderItem}
         />
       )}
     </View>
   );
 }
 
-function Separator() {
-  return <View style={{ width: spacing.md }} />;
-}
-
+/** Section header: `title3` and a chevron. The whole header is the button; no "See all" text. */
 export function RowHeader({ title, onSeeAll }: { title: string; onSeeAll?: () => void }) {
-  return (
-    <View style={styles.header}>
-      <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  const l = useLayout();
+  const text = (
+    <>
+      <Text style={s.title} accessibilityRole="header" numberOfLines={1}>
         {title}
       </Text>
-      {onSeeAll ? (
-        <Pressable onPress={onSeeAll} hitSlop={10} style={styles.seeAll} accessibilityRole="button" accessibilityLabel={`See all ${title}`}>
-          <Text style={styles.seeAllText}>See all</Text>
-          <Icon name="chevron.right" size={iconSize.sm} color={colors.textSecondary} />
-        </Pressable>
-      ) : null}
+      {onSeeAll ? <Icon name="chevron.right" size={scaled(iconSize.sm)} color={c.text3} weight="semibold" /> : null}
+    </>
+  );
+  if (!onSeeAll) return <View style={[s.header, { paddingHorizontal: l.gutter }]}>{text}</View>;
+  return (
+    <View style={[s.headerWrap, { paddingHorizontal: l.gutter }]}>
+      <Touchable
+        onPress={onSeeAll}
+        radius={8}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityHint="Opens the full list"
+        style={s.headerButton}>
+        {text}
+      </Touchable>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  section: { marginTop: spacing.xl },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: GUTTER,
-    marginBottom: spacing.sm2,
-    gap: spacing.md,
-  },
-  title: { ...type.section, color: colors.text, flexShrink: 1 },
-  seeAll: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  seeAllText: { ...type.callout, color: colors.textSecondary },
-  skeletonRow: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: GUTTER, overflow: 'hidden' },
-  skeleton: { backgroundColor: colors.surface, borderRadius: radius.md },
-});
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+  section: {},
+  header: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs, marginBottom: sizes.sectionHeaderGap },
+  headerWrap: { flexDirection: 'row' as const, marginBottom: sizes.sectionHeaderGap },
+  headerButton: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs, flexShrink: 1 },
+  title: { ...font(type.title3), color: c.text, flexShrink: 1 },
+  skeletonRow: { flexDirection: 'row' as const, overflow: 'hidden' as const },
+}));

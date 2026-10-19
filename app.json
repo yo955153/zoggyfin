@@ -6,7 +6,7 @@
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "zoggyfin",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.zogtech.zoggyfin",
       "supportsTablet": true,
@@ -20,7 +20,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0B0B10",
+        "backgroundColor": "#0B0B0E",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -33,9 +33,13 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0B0B10",
+          "backgroundColor": "#0B0B0E",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 120,
+          "dark": {
+            "backgroundColor": "#0B0B0E",
+            "image": "./assets/images/splash-icon.png"
+          }
         }
       ],
       "expo-secure-store",
@@ -57,8 +61,8 @@
       "bundler": "metro",
       "favicon": "./assets/images/favicon.png",
       "name": "Zoggyfin",
-      "backgroundColor": "#0B0B10",
-      "themeColor": "#0B0B10"
+      "backgroundColor": "#0B0B0E",
+      "themeColor": "#0B0B0E"
     }
   }
 }

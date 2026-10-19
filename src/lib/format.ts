@@ -6,15 +6,24 @@ export function ticksToSeconds(ticks: number | null | undefined): number {
   return ticks ? ticks / TICKS_PER_SECOND : 0;
 }
 
-/** "1h 42m", "42m" or "35s". */
+/** "2 h 8 min", "42 min" or "35 s" (brand voice: numbers, short units). */
 export function formatDuration(ticks: number | null | undefined): string | null {
   const total = Math.round(ticksToSeconds(ticks));
   if (total <= 0) return null;
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
-  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  if (m > 0) return `${m}m`;
-  return `${total}s`;
+  if (h > 0) return m > 0 ? `${h} h ${m} min` : `${h} h`;
+  if (m > 0) return `${m} min`;
+  return `${total} s`;
+}
+
+/** "58 min left" for an item with a saved position, else null. */
+export function remainingLabel(item: BaseItemDto): string | null {
+  const pos = item.UserData?.PlaybackPositionTicks;
+  const run = item.RunTimeTicks;
+  if (!pos || !run || pos >= run) return null;
+  const left = formatDuration(run - pos);
+  return left ? `${left} left` : null;
 }
 
 /** "3:07" or "1:02:09", for track lengths. */
@@ -28,14 +37,14 @@ export function formatClock(ticks: number | null | undefined): string | null {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 }
 
-/** "S1:E4" style label for an episode, or null. */
+/** "S1 · E4" style label for an episode, or null. */
 export function episodeLabel(item: BaseItemDto): string | null {
   const s = item.ParentIndexNumber;
   const e = item.IndexNumber;
   if (s == null && e == null) return null;
   if (s == null) return `E${e}`;
   if (e == null) return `S${s}`;
-  return `S${s}:E${e}`;
+  return `S${s} · E${e}`;
 }
 
 /** Played fraction 0..1 for a progress bar, or null when there is no progress. */

@@ -62,7 +62,7 @@ describe('resolveImage – movies', () => {
     if (r.kind === 'generated') {
       expect(r.title).toBe('Sample Movie');
       expect(r.icon).toBe('film');
-      expect(r.colors).toHaveLength(2);
+      expect(r.art.from).toMatch(/^#[0-9A-F]{6}$/);
     }
   });
 

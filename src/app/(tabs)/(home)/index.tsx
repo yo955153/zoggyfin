@@ -1,19 +1,24 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, Stack } from 'expo-router';
 import { useState, useSyncExternalStore } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, View } from 'react-native';
 
 import { queryKeys } from '@/api/query-keys';
 import { useApi } from '@/api/use-api';
 import { Avatar } from '@/components/avatar';
+import { Touchable } from '@/components/touchable';
 import { registerBuiltinHomeSections } from '@/features/home/builtin-sections';
-import { rootScreenOptions } from '@/lib/stack-options';
+import { useRootScreenOptions } from '@/lib/stack-options';
+import { isTV } from '@/platform/tv';
 import { homeSections } from '@/registry/home-sections';
-import { colors, size, spacing } from '@/theme';
+import { createStyles, type AppTheme, sizes, spacing, useStyles, useTheme } from '@/theme';
 
 registerBuiltinHomeSections();
 
 export default function HomeScreen() {
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  const root = useRootScreenOptions();
   const { session, scope } = useApi();
   const qc = useQueryClient();
   const sections = useSyncExternalStore(homeSections.subscribe, homeSections.list, homeSections.list);
@@ -29,27 +34,28 @@ export default function HomeScreen() {
     <>
       <Stack.Screen
         options={{
-          ...rootScreenOptions,
+          ...root,
           title: 'Home',
           headerRight: () => (
-            <Pressable
+            <Touchable
               onPress={() => router.push('/(tabs)/(home)/settings')}
+              radius={sizes.avatarSmall / 2}
               accessibilityRole="button"
               accessibilityLabel="Settings and account"
               hitSlop={8}>
-              <Avatar session={session} size={size.avatarSmall} />
-            </Pressable>
+              <Avatar session={session} size={sizes.avatarSmall} />
+            </Touchable>
           ),
         }}
       />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        style={styles.flex}
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.textSecondary} />}>
-        {sections.map((s) => (
-          <View key={s.id}>
-            <s.component />
+        style={s.flex}
+        contentContainerStyle={s.content}
+        refreshControl={isTV ? undefined : <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={c.text2} />}>
+        {sections.map((sec) => (
+          <View key={sec.id}>
+            <sec.component />
           </View>
         ))}
       </ScrollView>
@@ -57,7 +63,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.xxl * 2, paddingTop: spacing.none },
-});
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+  flex: { flex: 1, backgroundColor: c.bg },
+  content: { paddingBottom: spacing.huge * 2 },
+}));

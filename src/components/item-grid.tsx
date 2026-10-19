@@ -1,18 +1,13 @@
 import { FlashList } from '@shopify/flash-list';
-import type { ReactElement } from 'react';
-import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { type ReactElement, useCallback, useState } from 'react';
+import { ActivityIndicator, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 
 import type { BaseItemDto } from '@/api/types';
 import { useOpenItem } from '@/lib/navigation';
-import { colors, GUTTER, spacing } from '@/theme';
+import { usePullRefresh } from '@/lib/use-pull-refresh';
+import { gridLayout, spacing, useLayout, useTheme } from '@/theme';
 
 import { Tile, type TileShape } from './tile';
-
-/** Columns for a shape and screen width; phones get 3 posters or 2 wide tiles. */
-export function gridColumns(shape: TileShape, screenWidth: number): number {
-  const min = shape === 'landscape' ? 160 : shape === 'poster' ? 104 : 150;
-  return Math.max(2, Math.floor((screenWidth - GUTTER * 2 + spacing.md) / (min + spacing.md)));
-}
 
 interface ItemGridProps {
   items: BaseItemDto[];
@@ -21,15 +16,20 @@ interface ItemGridProps {
   isFetchingMore?: boolean;
   ListHeaderComponent?: ReactElement | null;
   ListEmptyComponent?: ReactElement | null;
-  refreshing?: boolean;
-  onRefresh?: () => void;
+  /** Pull to refresh. The spinner shows only for a pull, not for background refetches. */
+  onRefresh?: () => unknown;
   /** Overrides the default "open item" press. */
   onPress?: (item: BaseItemDto) => void;
   /** Insets for a grid under a transparent or large-title header. Default true. */
   autoInset?: boolean;
 }
 
-/** A virtualized grid of tiles (FlashList), sized to fill the width. */
+/**
+ * A virtualized grid of tiles (FlashList). Columns come from the width the
+ * grid really has (`gridFor` in the theme), so a sidebar, Split View or the
+ * TV rail give the right column count. `key` changes with the column count,
+ * so FlashList rebuilds once instead of animating cells.
+ */
 export function ItemGrid({
   items,
   shape,
@@ -37,50 +37,61 @@ export function ItemGrid({
   isFetchingMore,
   ListHeaderComponent,
   ListEmptyComponent,
-  refreshing,
   onRefresh,
   onPress,
   autoInset = true,
 }: ItemGridProps) {
-  const { width } = useWindowDimensions();
+  const l = useLayout();
+  const { c } = useTheme();
   const openItem = useOpenItem();
+  const pull = usePullRefresh(onRefresh);
   const open = onPress ?? openItem;
-  const columns = gridColumns(shape, width);
-  const tileWidth = Math.floor((width - GUTTER * 2 - spacing.md * (columns - 1)) / columns);
+  const [measured, setMeasured] = useState(0);
+  const width = measured || l.contentWidth;
+  const g = gridLayout(shape, width, l.tv, l.width);
+  const { columns, tileWidth, gap, gutter } = g;
+
+  const onLayout = (e: LayoutChangeEvent) => {
+    const w = Math.round(e.nativeEvent.layout.width);
+    if (w > 0 && w !== measured) setMeasured(w);
+  };
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: BaseItemDto; index: number }) => (
+      // Equal gaps: each cell gives up the same share of the gaps.
+      <View
+        style={{
+          marginBottom: gap + spacing.sm,
+          paddingLeft: ((index % columns) * gap) / columns,
+          paddingRight: ((columns - 1 - (index % columns)) * gap) / columns,
+        }}>
+        <Tile item={item} width={tileWidth} shape={shape} onPress={open} preferredFocus={l.tv && index === 0} />
+      </View>
+    ),
+    [columns, gap, tileWidth, shape, open, l.tv],
+  );
 
   return (
-    <FlashList
-      data={items}
-      numColumns={columns}
-      key={columns}
-      keyExtractor={(it, i) => it.Id ?? String(i)}
-      contentInsetAdjustmentBehavior={autoInset ? 'automatic' : 'never'}
-      contentContainerStyle={{ paddingHorizontal: GUTTER, paddingBottom: spacing.xxl * 2, paddingTop: autoInset ? 0 : spacing.lg }}
-      onEndReached={onEndReached}
-      onEndReachedThreshold={0.8}
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-      ListHeaderComponent={ListHeaderComponent}
-      ListEmptyComponent={ListEmptyComponent}
-      ListFooterComponent={isFetchingMore ? <ActivityIndicator style={styles.footer} color={colors.textSecondary} /> : null}
-      renderItem={({ item, index }) => (
-        // Equal gaps: each cell gives up the same share of the gutters.
-        <View
-          style={[
-            styles.cell,
-            {
-              paddingLeft: ((index % columns) * spacing.md) / columns,
-              paddingRight: ((columns - 1 - (index % columns)) * spacing.md) / columns,
-            },
-          ]}>
-          <Tile item={item} width={tileWidth} shape={shape} onPress={open} />
-        </View>
-      )}
-    />
+      <FlashList
+        onLayout={onLayout}
+        data={items}
+        numColumns={columns}
+        key={columns}
+        keyExtractor={(it, i) => it.Id ?? String(i)}
+        contentInsetAdjustmentBehavior={autoInset ? 'automatic' : 'never'}
+        contentContainerStyle={{ paddingHorizontal: gutter, paddingBottom: spacing.huge * 2, paddingTop: autoInset ? spacing.xs : spacing.lg }}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.8}
+        refreshing={pull.refreshing}
+        onRefresh={pull.onRefresh}
+        ListHeaderComponent={ListHeaderComponent}
+        ListEmptyComponent={ListEmptyComponent}
+        ListFooterComponent={isFetchingMore ? <ActivityIndicator style={styles.footer} color={c.text2} /> : null}
+        renderItem={renderItem}
+      />
   );
 }
 
 const styles = StyleSheet.create({
-  cell: { marginBottom: spacing.lg },
   footer: { marginVertical: spacing.xl },
 });

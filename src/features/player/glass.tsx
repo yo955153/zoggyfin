@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Platform, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 
+import { useTheme } from '@/theme';
 import { dark } from '@/theme/theme';
 
 let glassOk: boolean | null = null;
@@ -43,20 +44,25 @@ export function Glass({
   style,
   children,
   variant = 'clear',
+  scheme = 'dark',
 }: {
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
   variant?: 'clear' | 'regular';
+  /** `dark` over video (players are always dark); `auto` follows the app theme (mini player, toasts). */
+  scheme?: 'dark' | 'auto';
 }) {
   const reduce = useReduceTransparency();
+  const theme = useTheme();
+  const colorScheme = scheme === 'auto' ? theme.scheme : 'dark';
   if (liquidGlass() && !reduce) {
     return (
-      <GlassView style={style} glassEffectStyle={variant} colorScheme="dark" isInteractive>
+      <GlassView style={style} glassEffectStyle={variant} colorScheme={colorScheme} isInteractive>
         {children}
       </GlassView>
     );
   }
-  return <View style={[styles.fallback, style]}>{children}</View>;
+  return <View style={[styles.fallback, scheme === 'auto' && { backgroundColor: theme.c.glassFallback }, style]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({

@@ -1,20 +1,20 @@
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
 
 import type { MusicTab } from '@/api/jellyfin';
 import { useMusicTab } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
 import { ItemGrid } from '@/components/item-grid';
-import { EmptyState, ErrorState, LoadingState } from '@/components/states';
+import { EmptyState, ErrorState, GridSkeleton, LoadingState } from '@/components/states';
 import { TabPager } from '@/components/tab-pager';
 import type { PagerTab } from '@/components/tab-pager-types';
-import { TrackRow } from '@/features/detail/rows';
-import { type TabGroup, useTabGroup } from '@/lib/navigation';
+import { ArtistRow, TrackRow } from '@/features/detail/rows';
+import { type TabGroup, useOpenItem, useTabGroup } from '@/lib/navigation';
+import { usePullRefresh } from '@/lib/use-pull-refresh';
 import { usePlayer } from '@/player';
 import { storage } from '@/storage/kv';
-import { colors, size, spacing } from '@/theme';
+import { spacing } from '@/theme';
 
 const TABS: (PagerTab & { key: MusicTab })[] = [
   { key: 'albums', title: 'Albums' },
@@ -31,6 +31,8 @@ const EMPTY: Record<MusicTab, string> = {
   songs: 'No songs',
   genres: 'No genres',
 };
+
+const listStyle = { paddingBottom: spacing.huge * 2, paddingTop: spacing.sm };
 
 /** Albums / Artists / Playlists / Songs / Genres, as a pager that follows a horizontal swipe. */
 export function MusicBrowser({ libraryId }: { libraryId: string }) {
@@ -58,30 +60,35 @@ function MusicPage({ libraryId, tab }: { libraryId: string; tab: MusicTab }) {
   const items = useMemo(() => q.data?.pages.flatMap((p) => p.items) ?? [], [q.data]);
   const group = useTabGroup();
   const player = usePlayer();
+  const open = useOpenItem();
+  const pull = usePullRefresh(q.refetch);
   const more = () => {
     if (q.hasNextPage && !q.isFetchingNextPage) q.fetchNextPage();
   };
 
-  if (q.isPending) return <LoadingState />;
+  if (q.isPending) return tab === 'songs' || tab === 'artists' ? <LoadingState /> : <GridSkeleton shape="square" />;
   if (q.error && !q.data) return <ErrorState error={q.error} onRetry={q.refetch} />;
 
   const empty = <EmptyState icon="music.note" title={EMPTY[tab]} />;
 
-  if (tab === 'songs') {
+  if (tab === 'songs' || tab === 'artists') {
     return (
       <FlashList
         data={items}
         keyExtractor={(it, i) => it.Id ?? String(i)}
-        renderItem={({ item, index }) => (
-          <TrackRow item={item} index={index} showArt onPress={(song) => player.play({ item: song })} />
-        )}
+        renderItem={({ item, index }) =>
+          tab === 'songs' ? (
+            <TrackRow item={item} index={index} showArt last={index === items.length - 1} onPress={(song) => player.play({ item: song })} />
+          ) : (
+            <ArtistRow item={item} last={index === items.length - 1} onPress={open} />
+          )
+        }
         onEndReached={more}
         onEndReachedThreshold={0.8}
-        refreshing={q.isRefetching && !q.isFetchingNextPage}
-        onRefresh={q.refetch}
+        refreshing={pull.refreshing}
+        onRefresh={pull.onRefresh}
         ListEmptyComponent={empty}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={Separator}
+        contentContainerStyle={listStyle}
       />
     );
   }
@@ -89,11 +96,10 @@ function MusicPage({ libraryId, tab }: { libraryId: string; tab: MusicTab }) {
   return (
     <ItemGrid
       items={items}
-      shape={tab === 'artists' ? 'circle' : 'square'}
+      shape="square"
       autoInset={false}
       onEndReached={more}
       isFetchingMore={q.isFetchingNextPage}
-      refreshing={q.isRefetching && !q.isFetchingNextPage}
       onRefresh={q.refetch}
       ListEmptyComponent={empty}
       onPress={tab === 'genres' ? (g) => router.push(genreHref(group, g, libraryId)) : undefined}
@@ -101,11 +107,3 @@ function MusicPage({ libraryId, tab }: { libraryId: string; tab: MusicTab }) {
   );
 }
 
-function Separator() {
-  return <View style={styles.sep} />;
-}
-
-const styles = StyleSheet.create({
-  list: { paddingBottom: spacing.xxl * 2, paddingTop: spacing.sm },
-  sep: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator, marginLeft: size.songSeparatorInset },
-});

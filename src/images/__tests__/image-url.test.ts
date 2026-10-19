@@ -1,4 +1,4 @@
-import { generatedArt, hashString, iconForType } from '../generated-art';
+import { generatedArt, iconForType } from '../generated-art';
 import { bucketSize, buildImageUrl, buildTrickplayUrl, buildUserImageUrl } from '../image-url';
 
 const server = { baseUrl: 'https://jf.example.com/base', token: 'abc' };
@@ -51,19 +51,28 @@ describe('other URLs', () => {
 describe('generatedArt', () => {
   it('is deterministic per title', () => {
     expect(generatedArt('Sample Movie', 'Movie')).toEqual(generatedArt('Sample Movie', 'Movie'));
-    expect(hashString('a')).not.toBe(hashString('b'));
   });
   it('gives different titles different colors', () => {
-    expect(generatedArt('Sample Movie').colors).not.toEqual(generatedArt('Another Movie').colors);
+    expect(generatedArt('Sample Movie').art.from).not.toEqual(generatedArt('Another Movie').art.from);
   });
   it('handles empty titles', () => {
     expect(generatedArt('  ').title).toBe('Untitled');
     expect(generatedArt(null).title).toBe('Untitled');
   });
   it('maps types to icons', () => {
-    expect(iconForType('MusicAlbum')).toBe('square.stack');
-    expect(iconForType('Person')).toBe('person.fill');
-    expect(iconForType('Unknown')).toBe('square.grid.2x2');
+    expect(iconForType('MusicAlbum')).toBe('music.note');
+    expect(iconForType('Person')).toBe('person');
+    expect(iconForType('Unknown')).toBe('play.rectangle');
     expect(iconForType('CollectionFolder', 'music')).toBe('music.note');
+  });
+});
+
+describe('initials', () => {
+  const { initials } = jest.requireActual<typeof import('../generated-art')>('../generated-art');
+  it('takes the first letter of the first two words', () => {
+    expect(initials('Jane Doe')).toBe('JD');
+    expect(initials('jane')).toBe('J');
+    expect(initials('www.example.net - www.sample.com')).toBe('WW');
+    expect(initials('')).toBe('');
   });
 });

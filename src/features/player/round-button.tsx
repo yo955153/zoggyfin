@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Platform, Pressable, type StyleProp, StyleSheet, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
-import { Icon } from '@/components/icon';
+import { Icon, type IconName } from '@/components/icon';
 
 import { Glass } from './glass';
 import { c, motion } from './tokens';
@@ -23,7 +23,7 @@ export function RoundButton({
   style,
   children,
 }: {
-  icon?: string;
+  icon?: IconName;
   label: string;
   size: number;
   glyph: number;

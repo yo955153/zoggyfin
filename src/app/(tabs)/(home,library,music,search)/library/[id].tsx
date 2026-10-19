@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 
 import { useLibrary, useViews } from '@/api/queries';
 import { ItemGrid } from '@/components/item-grid';
-import { EmptyState, ErrorState, LoadingState } from '@/components/states';
+import { EmptyState, ErrorState, GridSkeleton } from '@/components/states';
 import { shapeForList } from '@/components/tile';
 import { FilterBar } from '@/features/library/filter-bar';
 import { hasActiveFilters, useFiltersFor } from '@/features/library/filter-store';
@@ -22,9 +22,9 @@ export default function LibraryGridScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: view?.Name ?? name ?? 'Library', headerLargeTitle: true }} />
+      <Stack.Screen options={{ title: view?.Name ?? name ?? 'Library', headerLargeTitleEnabled: true }} />
       {lib.isPending ? (
-        <LoadingState />
+        <GridSkeleton shape={kind === 'music' ? 'square' : 'poster'} />
       ) : lib.error && !lib.data ? (
         <ErrorState error={lib.error} onRetry={lib.refetch} />
       ) : (
@@ -35,7 +35,6 @@ export default function LibraryGridScreen() {
             if (lib.hasNextPage && !lib.isFetchingNextPage) lib.fetchNextPage();
           }}
           isFetchingMore={lib.isFetchingNextPage}
-          refreshing={lib.isRefetching && !lib.isFetchingNextPage}
           onRefresh={lib.refetch}
           ListHeaderComponent={<FilterBar libraryId={id} itemTypes={itemTypes} />}
           ListEmptyComponent={

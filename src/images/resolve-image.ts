@@ -288,5 +288,5 @@ export function resolveImage(
     const trick = trickplayImage(item, server);
     if (trick) return trick;
   }
-  return { kind: 'generated', ...generatedArt(artTitle(item), item.Type, item.CollectionType) };
+  return { kind: 'generated', ...generatedArt(artTitle(item), item.Type, item.CollectionType, item.Id ?? '') };
 }

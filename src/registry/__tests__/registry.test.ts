@@ -6,9 +6,9 @@ const app = { play: noop, openItem: noop, setFavorite: async () => undefined, se
 describe('registry', () => {
   it('orders entries, replaces by id and unregisters', () => {
     const r = createRegistry<ItemAction>();
-    r.register({ id: 'b', title: 'B', icon: 'x', order: 20, run: noop });
-    const offA = r.register({ id: 'a', title: 'A', icon: 'x', order: 10, run: noop });
-    r.register({ id: 'b', title: 'B2', icon: 'x', order: 5, run: noop });
+    r.register({ id: 'b', title: 'B', icon: 'circle', order: 20, run: noop });
+    const offA = r.register({ id: 'a', title: 'A', icon: 'circle', order: 10, run: noop });
+    r.register({ id: 'b', title: 'B2', icon: 'circle', order: 5, run: noop });
     expect(r.list().map((e) => e.title)).toEqual(['B2', 'A']);
     offA();
     expect(r.list().map((e) => e.id)).toEqual(['b']);
@@ -18,20 +18,20 @@ describe('registry', () => {
     const r = createRegistry<ItemAction>();
     const fn = jest.fn();
     const off = r.subscribe(fn);
-    r.register({ id: 'a', title: 'A', icon: 'x', run: noop });
+    r.register({ id: 'a', title: 'A', icon: 'circle', run: noop });
     off();
-    r.register({ id: 'b', title: 'B', icon: 'x', run: noop });
+    r.register({ id: 'b', title: 'B', icon: 'circle', run: noop });
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
   it('filters actions by when, and hides actions whose filter throws', () => {
     const r = createRegistry<ItemAction>();
-    r.register({ id: 'movies', title: 'M', icon: 'x', when: ({ item }) => item.Type === 'Movie', run: noop });
-    r.register({ id: 'all', title: 'All', icon: 'x', run: noop });
+    r.register({ id: 'movies', title: 'M', icon: 'circle', when: ({ item }) => item.Type === 'Movie', run: noop });
+    r.register({ id: 'all', title: 'All', icon: 'circle', run: noop });
     r.register({
       id: 'bad',
       title: 'Bad',
-      icon: 'x',
+      icon: 'circle',
       when: () => {
         throw new Error('boom');
       },

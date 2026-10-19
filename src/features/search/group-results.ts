@@ -58,3 +58,34 @@ export function pushRecentSearch(recent: readonly string[], term: string, max = 
   const rest = recent.filter((r) => r.toLowerCase() !== t.toLowerCase());
   return [t, ...rest].slice(0, max);
 }
+
+export type SearchFilter = 'all' | 'movies' | 'shows' | 'episodes' | 'music' | 'people';
+
+export const SEARCH_FILTERS: readonly { value: SearchFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'movies', label: 'Movies' },
+  { value: 'shows', label: 'Shows' },
+  { value: 'episodes', label: 'Episodes' },
+  { value: 'music', label: 'Music' },
+  { value: 'people', label: 'People' },
+];
+
+const FILTER_KEYS: Record<Exclude<SearchFilter, 'all'>, readonly string[]> = {
+  movies: ['movies', 'collections', 'videos'],
+  shows: ['series'],
+  episodes: ['episodes'],
+  music: ['artists', 'albums', 'songs', 'playlists'],
+  people: ['people'],
+};
+
+/** The sections a filter chip keeps (design system §7.16). */
+export function filterSections(sections: readonly SearchSection[], filter: SearchFilter): SearchSection[] {
+  if (filter === 'all') return [...sections];
+  const keys = FILTER_KEYS[filter];
+  return sections.filter((s) => keys.includes(s.key));
+}
+
+/** The top result: the first item of the first section, shown as a card with Play. */
+export function topResult(sections: readonly SearchSection[]): BaseItemDto | null {
+  return sections[0]?.items[0] ?? null;
+}

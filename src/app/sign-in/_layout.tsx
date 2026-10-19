@@ -1,15 +1,17 @@
 import { Stack } from 'expo-router';
 
-import { colors } from '@/theme';
+import { useTheme } from '@/theme';
 
 export default function SignInLayout() {
+  const { c } = useTheme();
   return (
     <Stack
       screenOptions={{
         headerTransparent: true,
         headerTitle: '',
-        headerTintColor: colors.text,
-        contentStyle: { backgroundColor: colors.background },
+        headerTintColor: c.accent,
+        headerBackButtonDisplayMode: 'minimal',
+        contentStyle: { backgroundColor: c.bg },
       }}
     />
   );

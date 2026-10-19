@@ -2,25 +2,24 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 
 import { useGenreItems } from '@/api/queries';
 import { ItemGrid } from '@/components/item-grid';
-import { EmptyState, ErrorState, LoadingState } from '@/components/states';
+import { EmptyState, ErrorState, GridSkeleton } from '@/components/states';
 
 export default function GenreScreen() {
   const { id, name, libraryId } = useLocalSearchParams<{ id: string; name?: string; libraryId?: string }>();
   const q = useGenreItems(libraryId, id);
   return (
     <>
-      <Stack.Screen options={{ title: name || 'Genre', headerLargeTitle: true }} />
+      <Stack.Screen options={{ title: name || 'Genre', headerLargeTitleEnabled: true }} />
       {q.isPending ? (
-        <LoadingState />
+        <GridSkeleton shape="square" />
       ) : q.error && !q.data ? (
         <ErrorState error={q.error} onRetry={q.refetch} />
       ) : (
         <ItemGrid
           items={q.data ?? []}
           shape="square"
-          refreshing={q.isRefetching}
           onRefresh={q.refetch}
-          ListEmptyComponent={<EmptyState icon="guitars" title="No albums in this genre" />}
+          ListEmptyComponent={<EmptyState icon="music.note" title="No albums in this genre" />}
         />
       )}
     </>

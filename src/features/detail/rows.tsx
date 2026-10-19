@@ -1,78 +1,147 @@
 import { memo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import type { BaseItemDto, BaseItemPerson } from '@/api/types';
+import { Icon } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
+import { Touchable } from '@/components/touchable';
 import { episodeLabel, formatClock, formatDuration, playedFraction } from '@/lib/format';
-import { colors, GUTTER, radius, size, spacing, type } from '@/theme';
+import { usePlayerStore } from '@/player/store';
+import { createStyles,
+  type AppTheme,
+  font,
+  iconSize,
+  mediaColors,
+  radius,
+  scaled,
+  scriptStyle,
+  sizes,
+  spacing,
+  type,
+  useLayout,
+  useStyles,
+  useTheme,
+} from '@/theme';
 
-type HoverState = { pressed: boolean; hovered?: boolean };
-const active = ({ pressed, hovered }: HoverState) => (pressed || hovered ? { backgroundColor: colors.pressedRow } : null);
-
-/** A song row: number, title, artist, length. */
+/** A song row (design system §7.10 rows): number or art, title, artist, length. The playing song is in `accent` with a glyph. */
 export const TrackRow = memo(function TrackRow({
   item,
   index,
   showArt,
   onPress,
+  last,
 }: {
   item: BaseItemDto;
   index: number;
   showArt?: boolean;
   onPress: (item: BaseItemDto) => void;
+  last?: boolean;
 }) {
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  const l = useLayout();
+  const playing = usePlayerStore((st) => !!item.Id && st.now?.item.Id === item.Id);
   const artist = item.Artists?.join(', ') ?? item.AlbumArtist;
+  const time = formatClock(item.RunTimeTicks);
   return (
-    <Pressable onPress={() => onPress(item)} style={(s: HoverState) => [styles.track, active(s)]} accessibilityRole="button" accessibilityLabel={[item.Name, artist].filter(Boolean).join(', ')}>
+    <Touchable
+      kind="row"
+      onPress={() => onPress(item)}
+      accessibilityRole="button"
+      accessibilityLabel={[item.Name, artist, time, playing ? 'playing' : null].filter(Boolean).join(', ')}
+      style={({ pressed, hovered, focused }) => [s.track, { paddingLeft: l.gutter }, (pressed || hovered || focused) && s.active]}>
       {showArt ? (
-        <ItemImage item={item} variant="square" width={44} aspectRatio={1} rounded={radius.sm} hideArtTitle />
+        <ItemImage item={item} variant="square" width={scaled(sizes.trackArt)} aspectRatio={1} rounded={6} hideArtTitle />
+      ) : playing ? (
+        <View style={s.trackNoBox}>
+          <Icon name="waveform" size={scaled(iconSize.sm - 2)} color={c.accent} weight="semibold" />
+        </View>
       ) : (
-        <Text style={styles.trackNo}>{item.IndexNumber ?? index + 1}</Text>
+        <Text style={s.trackNo}>{item.IndexNumber ?? index + 1}</Text>
       )}
-      <View style={styles.flex}>
-        <Text style={styles.trackTitle} numberOfLines={1}>
-          {item.Name}
-        </Text>
-        {artist ? (
-          <Text style={styles.trackSub} numberOfLines={1}>
-            {artist}
+      <View style={[s.trackBody, { paddingRight: l.gutter }, !last && s.line]}>
+        <View style={s.flex}>
+          <Text style={[s.trackTitle, playing && { color: c.accent }, scriptStyle(item.Name, s.trackTitle)]} numberOfLines={1}>
+            {item.Name}
           </Text>
-        ) : null}
+          {artist && showArt ? (
+            <Text style={[s.trackSub, scriptStyle(artist, s.trackSub)]} numberOfLines={1}>
+              {artist}
+            </Text>
+          ) : null}
+        </View>
+        {time ? <Text style={s.trackTime}>{time}</Text> : null}
       </View>
-      <Text style={styles.trackTime}>{formatClock(item.RunTimeTicks) ?? ''}</Text>
-    </Pressable>
+    </Touchable>
   );
 });
 
-/** An episode row: still, number and title, runtime, overview. */
-export const EpisodeRow = memo(function EpisodeRow({ item, onPress }: { item: BaseItemDto; onPress: (item: BaseItemDto) => void }) {
-  const progress = playedFraction(item);
+/** An artist row for the Music pager: a circle, the name and the counts. */
+export const ArtistRow = memo(function ArtistRow({ item, onPress, last }: { item: BaseItemDto; onPress: (item: BaseItemDto) => void; last?: boolean }) {
+  const s = useStyles(makeStyles);
+  const l = useLayout();
+  const albums = item.AlbumCount ? `${item.AlbumCount} ${item.AlbumCount === 1 ? 'album' : 'albums'}` : null;
+  const songs = item.SongCount ? `${item.SongCount} ${item.SongCount === 1 ? 'song' : 'songs'}` : null;
+  const meta = [albums, songs].filter(Boolean).join(' · ');
   return (
-    <Pressable onPress={() => onPress(item)} style={(s: HoverState) => [styles.episode, active(s)]} accessibilityRole="button">
+    <Touchable
+      kind="row"
+      onPress={() => onPress(item)}
+      accessibilityRole="button"
+      accessibilityLabel={[item.Name, meta].filter(Boolean).join(', ')}
+      style={({ pressed, hovered, focused }) => [s.track, { paddingLeft: l.gutter }, (pressed || hovered || focused) && s.active]}>
+      <ItemImage item={item} variant="square" width={scaled(56)} aspectRatio={1} circle />
+      <View style={[s.trackBody, s.artistBody, { paddingRight: l.gutter }, !last && s.line]}>
+        <View style={s.flex}>
+          <Text style={[s.trackTitle, scriptStyle(item.Name, s.trackTitle)]} numberOfLines={1}>
+            {item.Name}
+          </Text>
+          {meta ? <Text style={s.trackSub}>{meta}</Text> : null}
+        </View>
+      </View>
+    </Touchable>
+  );
+});
+
+/** An episode row: still with progress, "S1 · E5 · 42 min", title and two lines of overview. */
+export const EpisodeRow = memo(function EpisodeRow({ item, onPress }: { item: BaseItemDto; onPress: (item: BaseItemDto) => void }) {
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  const l = useLayout();
+  const progress = playedFraction(item);
+  const label = [episodeLabel(item), formatDuration(item.RunTimeTicks)].filter(Boolean).join(' · ');
+  return (
+    <Touchable
+      kind="row"
+      onPress={() => onPress(item)}
+      accessibilityRole="button"
+      accessibilityLabel={[item.Name, label, item.UserData?.Played ? 'played' : null].filter(Boolean).join(', ')}
+      style={({ pressed, hovered, focused }) => [s.episode, { paddingHorizontal: l.gutter }, (pressed || hovered || focused) && s.active]}>
       <View>
-        <ItemImage item={item} variant="landscape" width={150} aspectRatio={16 / 9} rounded={radius.sm} hideArtTitle />
+        <ItemImage item={item} variant="landscape" width={scaled(sizes.episodeThumb)} aspectRatio={16 / 9} rounded={radius.sm} hideArtTitle />
         {progress !== null ? (
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+          <View style={s.progressTrack}>
+            <View style={[s.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+          </View>
+        ) : null}
+        {item.UserData?.Played ? (
+          <View style={s.badge}>
+            <Icon name="checkmark" size={iconSize.xs - 2} color={mediaColors.white} weight="bold" />
           </View>
         ) : null}
       </View>
-      <View style={styles.flex}>
-        <Text style={styles.epLabel}>
-          {[episodeLabel(item), formatDuration(item.RunTimeTicks), item.UserData?.Played ? 'Watched' : null]
-            .filter(Boolean)
-            .join(' · ')}
-        </Text>
-        <Text style={styles.epTitle} numberOfLines={2}>
+      <View style={s.flex}>
+        <Text style={s.epLabel}>{label}</Text>
+        <Text style={[s.epTitle, scriptStyle(item.Name, s.epTitle)]} numberOfLines={2}>
           {item.Name}
         </Text>
         {item.Overview ? (
-          <Text style={styles.epOverview} numberOfLines={2}>
+          <Text style={[s.epOverview, { color: c.text2 }, scriptStyle(item.Overview, s.epOverview, true)]} numberOfLines={2}>
             {item.Overview}
           </Text>
         ) : null}
       </View>
-    </Pressable>
+    </Touchable>
   );
 });
 
@@ -88,17 +157,54 @@ export function personToItem(p: BaseItemPerson): BaseItemDto {
   };
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  track: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: GUTTER, paddingVertical: spacing.sm2, minHeight: size.trackRowHeight },
-  trackNo: { ...type.callout, ...type.number, color: colors.textTertiary, width: size.trackNumber, textAlign: 'center' },
-  trackTitle: { ...type.body, color: colors.text },
-  trackSub: { ...type.callout, color: colors.textSecondary },
-  trackTime: { ...type.callout, ...type.number, color: colors.textTertiary },
-  episode: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: GUTTER, paddingVertical: spacing.md },
-  epLabel: { ...type.caption, color: colors.textSecondary },
-  epTitle: { ...type.bodyStrong, color: colors.text, marginTop: spacing.xxs },
-  epOverview: { ...type.callout, color: colors.textSecondary, marginTop: spacing.xs },
-  progressTrack: { position: 'absolute', left: size.badgeInset, right: size.badgeInset, bottom: size.badgeInset, height: size.progressBarThin, borderRadius: radius.bar, backgroundColor: colors.progressTrack, overflow: 'hidden' },
-  progressFill: { height: size.progressBarThin, backgroundColor: colors.progress },
-});
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+  flex: { flex: 1, minWidth: 0 },
+  active: { backgroundColor: c.surface3 },
+  track: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.md, minHeight: scaled(sizes.rowMedia) - 12 },
+  trackBody: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.md,
+    alignSelf: 'stretch' as const,
+    paddingVertical: spacing.sm + 2,
+  },
+  artistBody: { minHeight: scaled(sizes.rowMedia) },
+  line: { borderBottomWidth: sizes.hairline, borderBottomColor: c.separator },
+  trackNo: {
+    ...font(type.callout, { tabular: true }),
+    color: c.text3,
+    width: scaled(sizes.trackNumber) - 8,
+    textAlign: 'center' as const,
+  },
+  trackNoBox: { width: scaled(sizes.trackNumber) - 8, alignItems: 'center' as const },
+  trackTitle: { ...font(type.callout), color: c.text },
+  trackSub: { ...font(type.footnote), color: c.text2, marginTop: 1 },
+  trackTime: { ...font(type.footnote, { tabular: true }), color: c.text3 },
+  episode: { flexDirection: 'row' as const, gap: spacing.md, paddingVertical: spacing.md },
+  epLabel: { ...font(type.caption1, { tabular: true }), color: c.text2 },
+  epTitle: { ...font(type.headline), color: c.text, marginTop: sizes.tileMetaGap },
+  epOverview: { ...font(type.footnote), marginTop: spacing.xs },
+  progressTrack: {
+    position: 'absolute' as const,
+    left: sizes.badgeInset,
+    right: sizes.badgeInset,
+    bottom: sizes.badgeInset,
+    height: 3,
+    borderRadius: radius.pill,
+    backgroundColor: c.progressTrack,
+    overflow: 'hidden' as const,
+  },
+  progressFill: { height: 3, backgroundColor: mediaColors.white },
+  badge: {
+    position: 'absolute' as const,
+    top: 4,
+    right: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: mediaColors.badgeFill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+}));

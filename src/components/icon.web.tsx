@@ -1,83 +1,91 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import {
-  Airplay,
+  ArrowDown,
+  ArrowUpDown,
+  AudioWaveform,
+  Book,
   Captions,
+  Cast,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  CircleArrowDown,
+  CircleCheck,
+  CircleUser,
+  CircleX,
+  Drama,
+  Ellipsis,
+  FastForward,
+  Film,
+  Folder,
+  GalleryVerticalEnd,
   Gauge,
+  Guitar,
+  Heart,
+  History,
+  House,
+  Image,
+  Info,
+  Layers,
+  LayoutGrid,
+  List,
+  ListFilter,
+  ListMusic,
+  ListPlus,
+  LogOut,
   type LucideIcon,
   Maximize,
+  MicVocal,
+  Moon,
+  Music,
   Pause,
   PictureInPicture2,
   Play,
+  QrCode,
+  Radio,
+  Rewind,
   RotateCcw,
   RotateCw,
+  Search,
+  Server,
   Settings,
-  SkipForward,
+  Shuffle,
+  SquarePlay,
+  Sun,
+  SunMoon,
+  Trash2,
+  TriangleAlert,
+  Tv,
   Undo2,
+  User,
+  Video,
   Volume2,
   VolumeX,
+  WifiOff,
   X,
 } from 'lucide-react';
-import type { ComponentProps } from 'react';
 
+import { type IconName, isIconName } from './icon-names';
 import type { IconProps } from './icon';
 
-type IonName = ComponentProps<typeof Ionicons>['name'];
+export type { IconName } from './icon-names';
 
-/** SF Symbol name -> Ionicons name, for the web build. */
-const MAP: Record<string, IonName> = {
-  film: 'film-outline',
-  tv: 'tv-outline',
-  'square.stack': 'albums-outline',
-  'music.note': 'musical-note',
-  book: 'book-outline',
-  'music.mic': 'mic-outline',
-  'person.fill': 'person',
-  'music.note.list': 'list',
-  'square.stack.3d.up': 'layers-outline',
-  guitars: 'musical-notes-outline',
-  theatermasks: 'happy-outline',
-  folder: 'folder-outline',
-  'antenna.radiowaves.left.and.right': 'radio-outline',
-  video: 'videocam-outline',
-  photo: 'image-outline',
-  'music.note.tv': 'musical-notes-outline',
-  'square.grid.2x2': 'grid-outline',
-  'wifi.exclamationmark': 'cloud-offline-outline',
-  checkmark: 'checkmark',
-  'chevron.right': 'chevron-forward',
-  'chevron.down': 'chevron-down',
-  'play.fill': 'play',
-  heart: 'heart-outline',
-  'heart.fill': 'heart',
-  'ellipsis': 'ellipsis-horizontal',
-  'arrow.down.circle': 'arrow-down-circle-outline',
-  magnifyingglass: 'search',
-  'clock.arrow.circlepath': 'time-outline',
-  'line.3.horizontal.decrease': 'filter',
-  'arrow.up.arrow.down': 'swap-vertical',
-  xmark: 'close',
-  'xmark.circle.fill': 'close-circle',
-  'person.crop.circle': 'person-circle-outline',
-  'qrcode': 'qr-code-outline',
-  server: 'server-outline',
-  'rectangle.portrait.and.arrow.right': 'log-out-outline',
-  'trash': 'trash-outline',
-  'checkmark.circle.fill': 'checkmark-circle',
-  'circle': 'ellipse-outline',
-  'star.fill': 'star',
-};
+type Glyph = { icon: LucideIcon; filled?: boolean };
 
-/**
- * SF Symbol name -> Lucide icon (the design system's web icon set). The
- * player uses these; other screens still use Ionicons until the restyle.
- * `filled` glyphs get a fill, like the SF `.fill` variants.
- */
-const LUCIDE: Record<string, { icon: LucideIcon; filled?: boolean }> = {
+/** Icon name -> Lucide (stroke 1.75, round caps). `filled` matches the SF `.fill` glyphs. */
+const LUCIDE: Record<IconName, Glyph> = {
+  house: { icon: House },
+  'house.fill': { icon: House },
+  'square.stack': { icon: GalleryVerticalEnd },
+  'square.stack.fill': { icon: GalleryVerticalEnd },
+  'music.note': { icon: Music },
+  magnifyingglass: { icon: Search },
+  'arrow.down.circle': { icon: CircleArrowDown },
+  'arrow.down.circle.fill': { icon: CircleArrowDown },
+  'arrow.down': { icon: ArrowDown },
   'play.fill': { icon: Play, filled: true },
   'pause.fill': { icon: Pause, filled: true },
-  'forward.fill': { icon: SkipForward, filled: true },
   'gobackward.5': { icon: RotateCcw },
   'gobackward.10': { icon: RotateCcw },
   'gobackward.15': { icon: RotateCcw },
@@ -88,25 +96,78 @@ const LUCIDE: Record<string, { icon: LucideIcon; filled?: boolean }> = {
   'goforward.15': { icon: RotateCw },
   'goforward.30': { icon: RotateCw },
   'goforward.60': { icon: RotateCw },
-  'arrow.counterclockwise': { icon: Undo2 },
-  'player.xmark': { icon: X },
-  'player.chevron.down': { icon: ChevronDown },
+  'forward.fill': { icon: FastForward, filled: true },
+  'backward.fill': { icon: Rewind, filled: true },
+  'text.badge.plus': { icon: ListPlus },
+  ellipsis: { icon: Ellipsis },
+  checkmark: { icon: Check },
+  heart: { icon: Heart },
+  'heart.fill': { icon: Heart, filled: true },
   'captions.bubble': { icon: Captions },
-  gearshape: { icon: Settings },
+  'airplay.video': { icon: Cast },
   'pip.enter': { icon: PictureInPicture2 },
-  'airplay.video': { icon: Airplay },
-  'player.checkmark': { icon: Check },
+  'list.bullet': { icon: List },
+  'arrow.clockwise': { icon: RotateCw },
+  'arrow.counterclockwise': { icon: Undo2 },
+  xmark: { icon: X },
+  'xmark.circle.fill': { icon: CircleX },
+  'chevron.right': { icon: ChevronRight },
+  'chevron.down': { icon: ChevronDown },
+  'chevron.left': { icon: ChevronLeft },
+  film: { icon: Film },
+  tv: { icon: Tv },
+  'music.mic': { icon: MicVocal },
+  waveform: { icon: AudioWaveform },
+  person: { icon: User },
+  'person.fill': { icon: User },
+  'person.crop.circle': { icon: CircleUser },
+  folder: { icon: Folder },
+  'play.rectangle': { icon: SquarePlay },
+  'wifi.exclamationmark': { icon: WifiOff },
+  'exclamationmark.triangle': { icon: TriangleAlert },
+  'clock.arrow.circlepath': { icon: History },
+  'line.3.horizontal.decrease': { icon: ListFilter },
+  'arrow.up.arrow.down': { icon: ArrowUpDown },
+  shuffle: { icon: Shuffle },
+  trash: { icon: Trash2 },
+  'rectangle.portrait.and.arrow.right': { icon: LogOut },
+  qrcode: { icon: QrCode },
+  gearshape: { icon: Settings },
   'speaker.wave.2.fill': { icon: Volume2 },
   'speaker.slash.fill': { icon: VolumeX },
   'arrow.up.left.and.arrow.down.right': { icon: Maximize },
   gauge: { icon: Gauge },
+  circle: { icon: Circle },
+  'checkmark.circle.fill': { icon: CircleCheck },
+  'music.note.list': { icon: ListMusic },
+  'square.stack.3d.up': { icon: Layers },
+  guitars: { icon: Guitar },
+  theatermasks: { icon: Drama },
+  book: { icon: Book },
+  photo: { icon: Image },
+  video: { icon: Video },
+  'antenna.radiowaves.left.and.right': { icon: Radio },
+  'square.grid.2x2': { icon: LayoutGrid },
+  'circle.lefthalf.filled': { icon: SunMoon },
+  server: { icon: Server },
+  'info.circle': { icon: Info },
+  'moon.fill': { icon: Moon },
+  'sun.max.fill': { icon: Sun },
 };
 
-export function Icon({ name, size, color }: IconProps) {
-  const lucide = LUCIDE[name];
-  if (lucide) {
-    const L = lucide.icon;
-    return <L size={size} color={color} strokeWidth={1.75} fill={lucide.filled ? color : 'none'} aria-hidden />;
-  }
-  return <Ionicons name={MAP[name] ?? 'ellipse-outline'} size={size} color={color} />;
+export function Icon({ name, size, color, weight }: IconProps) {
+  const g = LUCIDE[isIconName(name) ? name : 'circle'];
+  const L = g.icon;
+  const stroke = weight === 'bold' ? 2.5 : weight === 'semibold' ? 2.1 : 1.75;
+  return (
+    <L
+      size={size}
+      color={color}
+      strokeWidth={stroke}
+      fill={g.filled ? color : 'none'}
+      aria-hidden
+      focusable={false}
+      style={{ flexShrink: 0, display: 'block' }}
+    />
+  );
 }

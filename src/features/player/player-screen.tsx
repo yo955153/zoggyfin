@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { useImageServer } from '@/api/use-api';
-import { Icon } from '@/components/icon';
+import { Icon, type IconName } from '@/components/icon';
 import { episodeLabel } from '@/lib/format';
 import { KeyInput } from '@/native/key-input';
 import { VideoSurface } from '@/player/engine';
@@ -41,10 +41,11 @@ import { SubtitleOverlay } from './subtitle-overlay';
 import { c, ease, iconSize, motion, player, radius, spacing, textStyle, type } from './tokens';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
-const SKIP_GLYPHS = new Set([5, 10, 15, 30, 45, 60, 75, 90]);
+const SKIP_GLYPHS = [5, 10, 15, 30, 60] as const;
+type SkipGlyph = (typeof SKIP_GLYPHS)[number];
 
-function skipIcon(dir: 'back' | 'forward', seconds: number): string {
-  const n = SKIP_GLYPHS.has(seconds) ? seconds : 10;
+function skipIcon(dir: 'back' | 'forward', seconds: number): IconName {
+  const n: SkipGlyph = SKIP_GLYPHS.find((g) => g === seconds) ?? 10;
   return dir === 'back' ? `gobackward.${n}` : `goforward.${n}`;
 }
 
@@ -355,7 +356,7 @@ export function PlayerScreen() {
           <LinearGradient colors={player.bottomScrim} style={[styles.bottomScrim, { height: bottomPad + 180 }]} pointerEvents="none" />
 
           <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm, paddingLeft: sideInset, paddingRight: sideInset }]} pointerEvents="box-none">
-            <RoundButton icon="player.xmark" label="Close player" size={player.closeSize} glyph={iconSize.sm} onPress={closePlayer} />
+            <RoundButton icon="xmark" label="Close player" size={player.closeSize} glyph={iconSize.sm} onPress={closePlayer} />
             <View style={styles.titleBlock}>
               <Text style={styles.title} numberOfLines={1}>
                 {title}
@@ -498,7 +499,7 @@ function SkipNumber({ seconds }: { seconds: number }) {
   );
 }
 
-function PillButton({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
+function PillButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}

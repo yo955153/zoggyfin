@@ -312,7 +312,7 @@ export async function getMusicPage(
   const base = { userId, startIndex, limit, enableTotalRecordCount: true, ...tile };
   switch (tab) {
     case 'artists': {
-      const res = await getArtistApi(api).getAlbumArtists({ ...base, parentId: libraryId, sortBy: ['SortName'] });
+      const res = await getArtistApi(api).getAlbumArtists({ ...base, fields: [...TILE_FIELDS, 'ItemCounts'], parentId: libraryId, sortBy: ['SortName'] });
       return toPage(res.data);
     }
     case 'genres': {

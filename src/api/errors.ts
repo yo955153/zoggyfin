@@ -51,5 +51,5 @@ export function describeError(e: unknown): DescribedError {
   if (status !== undefined) {
     return { kind: 'unknown', status, title: 'Request failed', message: `The server answered with HTTP ${status}.` };
   }
-  return { kind: 'unknown', title: 'Something went wrong', message: message || 'An unknown error occurred.' };
+  return { kind: 'unknown', title: 'Request failed', message: message || 'Try again in a moment.' };
 }

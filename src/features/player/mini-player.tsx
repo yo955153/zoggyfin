@@ -11,8 +11,10 @@ import { openFullPlayer } from '@/player';
 import { videoSession } from '@/player/session';
 import { usePlayerStore } from '@/player/store';
 
+import { createStyles, type AppTheme, font, useStyles, useTheme } from '@/theme';
+
 import { Glass } from './glass';
-import { c, iconSize, motion, radius, spacing, textStyle, type } from './tokens';
+import { iconSize, motion, radius, spacing, type } from './tokens';
 
 /** True when the mini player should show: something plays and the full player is closed. */
 export function useMiniPlayerVisible(): boolean {
@@ -28,6 +30,8 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
   const now = usePlayerStore((s) => s.now);
   const playing = usePlayerStore((s) => s.playing);
   const fraction = usePlayerStore((s) => (s.duration > 0 ? Math.min(1, s.position / s.duration) : 0));
+  const styles = useStyles(makeStyles);
+  const { c } = useTheme();
   const lift = useSharedValue(0);
   const liftStyle = useAnimatedStyle(() => ({ transform: [{ translateY: lift.get() }] }));
 
@@ -66,7 +70,7 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
       </Pressable>
       {!inline ? (
         <Pressable onPress={() => void videoSession().stop()} hitSlop={6} style={styles.button} accessibilityRole="button" accessibilityLabel="Stop playback">
-          <Icon name="player.xmark" size={iconSize.sm} color={c.text2} weight="semibold" />
+          <Icon name="xmark" size={iconSize.sm} color={c.text2} weight="semibold" />
         </Pressable>
       ) : null}
     </Pressable>
@@ -76,7 +80,7 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
     <GestureDetector gesture={swipe}>
       <Animated.View style={[styles.wrap, floating && styles.floating, liftStyle]}>
         {floating ? (
-          <Glass variant="regular" style={styles.capsule}>
+          <Glass variant="regular" scheme="auto" style={styles.capsule}>
             {content}
             <Progress fraction={fraction} />
           </Glass>
@@ -92,6 +96,7 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
 }
 
 function Progress({ fraction }: { fraction: number }) {
+  const styles = useStyles(makeStyles);
   return (
     <View style={styles.progressTrack} pointerEvents="none">
       <View style={[styles.progressFill, { transform: [{ translateX: `${(fraction - 1) * 100}%` }] }]} />
@@ -99,23 +104,20 @@ function Progress({ fraction }: { fraction: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
   wrap: { flex: 1, width: '100%', justifyContent: 'center' },
   floating: { flex: 0, maxWidth: 400, alignSelf: 'center' },
   capsule: {
     borderRadius: radius.pill,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
+    ...shadow('floating'),
   },
   fillWrap: { flex: 1, justifyContent: 'center', overflow: 'hidden', borderRadius: radius.pill },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.sm, paddingRight: spacing.xs, minHeight: 52 },
   text: { flex: 1, minWidth: 0 },
-  title: { ...textStyle(type.tileTitle), color: c.text },
-  sub: { ...textStyle(type.caption1), color: c.text2 },
+  title: { ...font(type.tileTitle), color: c.text },
+  sub: { ...font(type.caption1), color: c.text2 },
   button: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   progressTrack: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: 0, height: 2, overflow: 'hidden', borderRadius: 1 },
   progressFill: { ...StyleSheet.absoluteFill, backgroundColor: c.accent },
-});
+}));

@@ -77,7 +77,7 @@ export function PlayerSheet({
                         </Text>
                       ) : null}
                     </View>
-                    {r.selected ? <Icon name="player.checkmark" size={iconSize.sm} color={c.accent} weight="semibold" /> : null}
+                    {r.selected ? <Icon name="checkmark" size={iconSize.sm} color={c.accent} weight="semibold" /> : null}
                   </Pressable>
                 ))}
               </View>

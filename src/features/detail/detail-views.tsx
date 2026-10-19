@@ -1,13 +1,15 @@
-import { StyleSheet, Text, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { Text, View } from 'react-native';
 
 import { useChildren, useEpisodes, useNextUp, useSeasons, useSimilar } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
 import { ItemRow, RowHeader } from '@/components/item-row';
 import { ErrorState, LoadingState } from '@/components/states';
+import { shapeForList } from '@/components/tile';
 import { episodeLabel, formatDuration } from '@/lib/format';
 import { useOpenItem } from '@/lib/navigation';
 import { usePlayer } from '@/player';
-import { colors, GUTTER, size, spacing, type } from '@/theme';
+import { createStyles, type AppTheme, font, spacing, type, useLayout, useStyles } from '@/theme';
 
 import { DetailScaffold } from './detail-scaffold';
 import { EpisodeRow, personToItem, TrackRow } from './rows';
@@ -15,7 +17,7 @@ import { EpisodeRow, personToItem, TrackRow } from './rows';
 interface ViewProps {
   item: BaseItemDto;
   refreshing: boolean;
-  onRefresh: () => void;
+  onRefresh: () => unknown;
 }
 
 function year(item: BaseItemDto): string | null {
@@ -26,6 +28,20 @@ function rating(item: BaseItemDto): string | null {
   return item.CommunityRating ? `★ ${item.CommunityRating.toFixed(1)}` : null;
 }
 
+function genre(item: BaseItemDto): string | null {
+  return item.Genres?.[0] ?? null;
+}
+
+/** Height and HDR facts from the first video stream: "4K", "1080p", "HDR10". */
+function videoFacts(item: BaseItemDto): (string | null)[] {
+  const v = item.MediaStreams?.find((m) => m.Type === 'Video');
+  if (!v?.Height) return [];
+  const h = v.Height;
+  const res = (v.Width ?? 0) >= 3800 || h >= 2100 ? '4K' : h >= 1000 ? '1080p' : h >= 700 ? '720p' : `${h}p`;
+  const range = v.VideoRangeType && v.VideoRangeType !== 'SDR' && v.VideoRangeType !== 'Unknown' ? String(v.VideoRangeType).replace('DOVI', 'Dolby Vision') : null;
+  return [res, range];
+}
+
 /** Cast row and "More Like This". Shared by movies, shows and episodes. */
 function CastAndSimilar({ item, similar = true }: { item: BaseItemDto; similar?: boolean }) {
   const cast = (item.People ?? []).filter((p) => p.Id).slice(0, 30).map(personToItem);
@@ -33,17 +49,24 @@ function CastAndSimilar({ item, similar = true }: { item: BaseItemDto; similar?:
   return (
     <>
       {cast.length ? (
-        <ItemRow title="Cast & Crew" shape="circle" items={cast} tileSubtitle={(p) => p.Overview ?? null} />
+        <ItemRow title="Cast & crew" shape="circle" items={cast} tileSubtitle={(p) => p.Overview ?? null} />
       ) : null}
       {similar ? (
-        <ItemRow title="More Like This" shape="poster" items={sim.data} isLoading={sim.isPending} error={sim.error} onRetry={sim.refetch} />
+        <ItemRow title="More like this" shape={shapeForList(sim.data, 'poster')} items={sim.data} isLoading={sim.isPending} error={sim.error} onRetry={sim.refetch} />
       ) : null}
     </>
   );
 }
 
 function SectionMessage({ children }: { children: string }) {
-  return <Text style={styles.message}>{children}</Text>;
+  const styles = useStyles(makeStyles);
+  const l = useLayout();
+  return <Text style={[styles.message, { paddingHorizontal: l.gutter }]}>{children}</Text>;
+}
+
+function Block({ children }: { children: ReactNode }) {
+  const l = useLayout();
+  return <View style={{ marginTop: l.sectionGap }}>{children}</View>;
 }
 
 // ---- Movie / video -------------------------------------------------------------
@@ -52,10 +75,8 @@ export function MovieDetail({ item, refreshing, onRefresh }: ViewProps) {
   return (
     <DetailScaffold
       item={item}
-      art="poster"
-      meta={[year(item), formatDuration(item.RunTimeTicks), item.OfficialRating, rating(item)]}
+      meta={[year(item), genre(item), formatDuration(item.RunTimeTicks), item.OfficialRating, ...videoFacts(item)]}
       playable
-      playLabel={item.UserData?.PlaybackPositionTicks ? 'Resume' : 'Play'}
       refreshing={refreshing}
       onRefresh={onRefresh}
       footer={<CastAndSimilar item={item} />}
@@ -72,25 +93,25 @@ export function SeriesDetail({ item, refreshing, onRefresh }: ViewProps) {
   return (
     <DetailScaffold
       item={item}
-      art="poster"
       meta={[
         year(item),
+        genre(item),
         item.ChildCount ? `${item.ChildCount} season${item.ChildCount === 1 ? '' : 's'}` : null,
         item.OfficialRating,
         rating(item),
       ]}
       playable
-      playLabel={next ? `Play ${episodeLabel(next) ?? ''}`.trim() : 'Play'}
+      playLabel={next ? `${next.UserData?.PlaybackPositionTicks ? 'Resume' : 'Play'} ${episodeLabel(next) ?? ''}`.trim() : 'Play'}
       refreshing={refreshing}
       onRefresh={onRefresh}
       footer={
         <>
-          {next ? <ItemRow title="Next Up" shape="landscape" items={[next]} /> : null}
+          {next ? <ItemRow title="Next up" shape="thumb" items={[next]} tileSubtitle={(e) => episodeLabel(e)} tileTitle={(e) => e.Name} /> : null}
           {seasons.error && !seasons.data ? (
-            <View style={styles.block}>
+            <Block>
               <RowHeader title="Seasons" />
               <ErrorState error={seasons.error} onRetry={seasons.refetch} compact />
-            </View>
+            </Block>
           ) : (
             <ItemRow
               title="Seasons"
@@ -118,7 +139,6 @@ export function SeasonDetail({ item, refreshing, onRefresh }: ViewProps) {
   return (
     <DetailScaffold
       item={item}
-      art="poster"
       eyebrow={item.SeriesName}
       meta={[year(item), episodes.data ? `${episodes.data.length} ${episodes.data.length === 1 ? 'episode' : 'episodes'}` : null]}
       playable
@@ -128,12 +148,12 @@ export function SeasonDetail({ item, refreshing, onRefresh }: ViewProps) {
         episodes.refetch();
       }}
       beforeRows={
-        <View style={styles.block}>
+        <Block>
           <RowHeader title="Episodes" />
-          {episodes.isPending ? <LoadingState style={styles.loading} /> : null}
+          {episodes.isPending ? <LoadingState rows={4} /> : null}
           {episodes.error && !episodes.data ? <ErrorState error={episodes.error} onRetry={episodes.refetch} compact /> : null}
           {episodes.data && episodes.data.length === 0 ? <SectionMessage>No episodes in this season.</SectionMessage> : null}
-        </View>
+        </Block>
       }
       rows={episodes.data}
       rowKey={(e, i) => e.Id ?? String(i)}
@@ -151,19 +171,17 @@ export function EpisodeDetail({ item, refreshing, onRefresh }: ViewProps) {
   return (
     <DetailScaffold
       item={item}
-      art="landscape"
       eyebrow={[item.SeriesName, episodeLabel(item)].filter(Boolean).join(' · ')}
-      meta={[formatDuration(item.RunTimeTicks), item.PremiereDate ? new Date(item.PremiereDate).toLocaleDateString() : null, rating(item)]}
+      meta={[item.PremiereDate ? new Date(item.PremiereDate).getFullYear().toString() : null, formatDuration(item.RunTimeTicks), item.OfficialRating, ...videoFacts(item)]}
       playable
-      playLabel={item.UserData?.PlaybackPositionTicks ? 'Resume' : 'Play'}
       refreshing={refreshing}
       onRefresh={onRefresh}
       footer={
         <>
           {others?.length ? (
             <ItemRow
-              title={item.SeasonName ?? 'More Episodes'}
-              shape="landscape"
+              title={item.SeasonName ?? 'More episodes'}
+              shape="thumb"
               items={others}
               tileTitle={(e) => e.Name}
               tileSubtitle={(e) => episodeLabel(e)}
@@ -181,26 +199,40 @@ export function EpisodeDetail({ item, refreshing, onRefresh }: ViewProps) {
 function TrackListDetail({ item, refreshing, onRefresh, kind }: ViewProps & { kind: 'tracks' | 'playlist' }) {
   const tracks = useChildren(item.Id ?? undefined, kind);
   const player = usePlayer();
+  const open = useOpenItem();
+  const styles = useStyles(makeStyles);
+  const l = useLayout();
   const list = tracks.data ?? [];
   const totalTicks = list.reduce((sum, t) => sum + (t.RunTimeTicks ?? 0), 0);
   const isPlaylist = kind === 'playlist';
   const multiDisc = !isPlaylist && new Set(list.map((t) => t.ParentIndexNumber ?? 1)).size > 1;
+  const artistId = item.AlbumArtists?.[0]?.Id;
 
   return (
     <DetailScaffold
       item={item}
-      art="square"
-      eyebrow={isPlaylist ? 'Playlist' : item.AlbumArtist ?? item.AlbumArtists?.[0]?.Name}
-      meta={[year(item), list.length ? `${list.length} ${list.length === 1 ? 'item' : 'items'}` : null, formatDuration(totalTicks)]}
+      eyebrow={isPlaylist ? null : item.AlbumArtist ?? item.AlbumArtists?.[0]?.Name}
+      onEyebrowPress={artistId ? () => open({ Id: artistId, Type: 'MusicArtist', Name: item.AlbumArtists?.[0]?.Name }) : undefined}
+      meta={[
+        isPlaylist ? 'Playlist' : 'Album',
+        year(item),
+        list.length ? `${list.length} ${isPlaylist ? (list.length === 1 ? 'item' : 'items') : list.length === 1 ? 'song' : 'songs'}` : null,
+        formatDuration(totalTicks),
+      ]}
       playable
+      onShuffle={() => {
+        const shuffled = [...list].sort(() => Math.random() - 0.5);
+        const first = shuffled[0];
+        if (first) player.play({ item: first, queue: shuffled.slice(1) });
+      }}
       refreshing={refreshing}
       onRefresh={() => {
         onRefresh();
         tracks.refetch();
       }}
       beforeRows={
-        <View style={styles.block}>
-          {tracks.isPending ? <LoadingState style={styles.loading} /> : null}
+        <View style={{ marginTop: spacing.xl }}>
+          {tracks.isPending ? <LoadingState rows={6} /> : null}
           {tracks.error && !tracks.data ? <ErrorState error={tracks.error} onRetry={tracks.refetch} compact /> : null}
           {tracks.data && list.length === 0 ? <SectionMessage>Nothing here yet.</SectionMessage> : null}
         </View>
@@ -210,9 +242,9 @@ function TrackListDetail({ item, refreshing, onRefresh, kind }: ViewProps & { ki
       renderRow={(t, i) => (
         <>
           {multiDisc && (i === 0 || list[i - 1]?.ParentIndexNumber !== t.ParentIndexNumber) ? (
-            <Text style={styles.disc}>Disc {t.ParentIndexNumber ?? 1}</Text>
+            <Text style={[styles.disc, { paddingHorizontal: l.gutter }]}>DISC {t.ParentIndexNumber ?? 1}</Text>
           ) : null}
-          <TrackRow item={t} index={i} showArt={isPlaylist} onPress={(song) => player.play({ item: song, queue: list.slice(i + 1) })} />
+          <TrackRow item={t} index={i} showArt={isPlaylist} last={i === list.length - 1} onPress={(song) => player.play({ item: song, queue: list.slice(i + 1) })} />
         </>
       )}
     />
@@ -237,8 +269,7 @@ export function ArtistDetail({ item, refreshing, onRefresh }: ViewProps) {
   return (
     <DetailScaffold
       item={item}
-      art="circle"
-      meta={[albums.data ? `${albums.data.length} album${albums.data.length === 1 ? '' : 's'}` : null]}
+      meta={['Artist', albums.data ? `${albums.data.length} ${albums.data.length === 1 ? 'album' : 'albums'}` : null]}
       playable
       refreshing={refreshing}
       onRefresh={onRefresh}
@@ -246,17 +277,17 @@ export function ArtistDetail({ item, refreshing, onRefresh }: ViewProps) {
         <>
           <ItemRow title="Albums" shape="square" items={albums.data} isLoading={albums.isPending} error={albums.error} onRetry={albums.refetch} />
           {songList.length || songs.isPending || songs.error ? (
-            <View style={styles.block}>
+            <Block>
               <RowHeader title="Songs" />
-              {songs.isPending ? <LoadingState style={styles.loading} /> : null}
+              {songs.isPending ? <LoadingState rows={5} /> : null}
               {songs.error && !songs.data ? <ErrorState error={songs.error} onRetry={songs.refetch} compact /> : null}
-            </View>
+            </Block>
           ) : null}
         </>
       }
       rows={songList}
       rowKey={(t, i) => t.Id ?? String(i)}
-      renderRow={(t, i) => <TrackRow item={t} index={i} showArt onPress={(song) => player.play({ item: song })} />}
+      renderRow={(t, i) => <TrackRow item={t} index={i} showArt last={i === songList.length - 1} onPress={(song) => player.play({ item: song })} />}
     />
   );
 }
@@ -271,15 +302,14 @@ export function PersonDetail({ item, refreshing, onRefresh }: ViewProps) {
   return (
     <DetailScaffold
       item={item}
-      art="circle"
       meta={[born ? `Born ${born}` : null, titles.data ? `${titles.data.length} ${titles.data.length === 1 ? 'title' : 'titles'}` : null]}
       refreshing={refreshing}
       onRefresh={onRefresh}
       footer={
         titles.error && !titles.data ? (
-          <View style={styles.block}>
+          <Block>
             <ErrorState error={titles.error} onRetry={titles.refetch} compact />
-          </View>
+          </Block>
         ) : (
           <>
             <ItemRow title="Movies" shape="poster" items={movies} isLoading={titles.isPending} />
@@ -299,7 +329,6 @@ export function CollectionDetail({ item, refreshing, onRefresh }: ViewProps) {
   return (
     <DetailScaffold
       item={item}
-      art="poster"
       eyebrow={item.Type === 'BoxSet' ? 'Collection' : undefined}
       meta={[children.data ? `${children.data.length} ${children.data.length === 1 ? 'item' : 'items'}` : null]}
       playable={item.Type === 'BoxSet'}
@@ -307,20 +336,18 @@ export function CollectionDetail({ item, refreshing, onRefresh }: ViewProps) {
       onRefresh={onRefresh}
       footer={
         children.error && !children.data ? (
-          <View style={styles.block}>
+          <Block>
             <ErrorState error={children.error} onRetry={children.refetch} compact />
-          </View>
+          </Block>
         ) : (
-          <ItemRow title="Items" shape="poster" items={children.data} isLoading={children.isPending} hideWhenEmpty={false} />
+          <ItemRow title="Items" shape={shapeForList(children.data, 'poster')} items={children.data} isLoading={children.isPending} hideWhenEmpty={false} />
         )
       }
     />
   );
 }
 
-const styles = StyleSheet.create({
-  block: { marginTop: spacing.xl },
-  loading: { minHeight: size.loadingMinHeight },
-  message: { ...type.callout, color: colors.textSecondary, paddingHorizontal: GUTTER, marginTop: spacing.md },
-  disc: { ...type.label, color: colors.textSecondary, paddingHorizontal: GUTTER, marginTop: spacing.lg },
-});
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+  message: { ...font(type.subheadline), color: c.text2, marginTop: spacing.md },
+  disc: { ...font(type.footnote), letterSpacing: 0.4, color: c.text2, marginTop: spacing.lg, marginBottom: spacing.xs },
+}));

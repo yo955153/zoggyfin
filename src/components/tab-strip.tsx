@@ -1,10 +1,11 @@
 import { type ComponentRef, useEffect, useRef, useState } from 'react';
-import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { Extrapolation, interpolate, type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import { type LayoutChangeEvent, ScrollView, View } from 'react-native';
+import Animated, { Extrapolation, interpolate, interpolateColor, type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
-import { colors, GUTTER, size, spacing, type } from '@/theme';
+import { createStyles, type AppTheme, font, scaled, sizes, type, useLayout, useStyles, useTheme } from '@/theme';
 
 import type { PagerTab } from './tab-pager-types';
+import { Touchable } from './touchable';
 
 interface Layout {
   x: number;
@@ -12,9 +13,9 @@ interface Layout {
 }
 
 /**
- * The tab strip over a pager. `position` is the pager's live scroll position
- * (page index plus fraction), so the indicator follows the finger. It runs on
- * the UI thread (Reanimated) and moves only by transform.
+ * The tab strip over a pager (design system §7.7). `position` is the pager's
+ * live position (page index plus fraction), so the 3 pt `accent` bar and the
+ * label colours follow the finger on the UI thread, with no React render.
  */
 export function TabStrip({
   tabs,
@@ -27,14 +28,17 @@ export function TabStrip({
   position: SharedValue<number>;
   onPress: (index: number) => void;
 }) {
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  const l = useLayout();
   const [layouts, setLayouts] = useState<(Layout | undefined)[]>([]);
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const ready = layouts.length === tabs.length && layouts.every(Boolean);
 
   useEffect(() => {
-    const l = layouts[index];
-    if (l) scrollRef.current?.scrollTo({ x: Math.max(0, l.x - GUTTER * 2), animated: true });
-  }, [index, layouts]);
+    const t = layouts[index];
+    if (t) scrollRef.current?.scrollTo({ x: Math.max(0, t.x - l.gutter * 2), animated: true });
+  }, [index, layouts, l.gutter]);
 
   const onLayout = (i: number) => (e: LayoutChangeEvent) => {
     const { x, width } = e.nativeEvent.layout;
@@ -46,50 +50,68 @@ export function TabStrip({
   };
 
   const inputRange = tabs.map((_, i) => i);
-  const xs = layouts.map((l) => l?.x ?? 0);
-  const widths = layouts.map((l) => l?.width ?? 0);
+  const xs = layouts.map((t) => t?.x ?? 0);
+  const widths = layouts.map((t) => t?.width ?? 0);
   const showIndicator = ready && tabs.length > 1;
-  // A 1 pt bar scaled to the tab width: transforms only.
+  // An absolute, childless bar: its width can animate without a layout pass for anything else.
   const indicator = useAnimatedStyle(() => {
     if (!showIndicator) return { opacity: 0 };
     const p = position.get();
     return {
       opacity: 1,
-      transform: [
-        { translateX: interpolate(p, inputRange, xs, Extrapolation.CLAMP) },
-        { scaleX: interpolate(p, inputRange, widths, Extrapolation.CLAMP) },
-      ],
+      width: interpolate(p, inputRange, widths, Extrapolation.CLAMP),
+      transform: [{ translateX: interpolate(p, inputRange, xs, Extrapolation.CLAMP) }],
     };
   });
 
   return (
-    <View style={styles.wrap}>
-      <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-        <View style={styles.inner}>
+    <View style={s.wrap} accessibilityRole="tablist">
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: l.gutter }}>
+        <View style={s.inner}>
           {tabs.map((t, i) => (
-            <Pressable
+            <Touchable
               key={t.key}
               onLayout={onLayout(i)}
               onPress={() => onPress(i)}
+              radius={6}
               accessibilityRole="tab"
+              accessibilityLabel={t.title}
               accessibilityState={{ selected: i === index }}
-              style={styles.tab}>
-              <Text style={[styles.label, i === index && styles.labelActive]}>{t.title}</Text>
-            </Pressable>
+              style={s.tab}>
+              <Label title={t.title} index={i} position={position} from={c.text2} to={c.text} />
+            </Touchable>
           ))}
-          {tabs.length > 1 ? <Animated.View style={[styles.indicator, indicator]} /> : null}
+          {tabs.length > 1 ? <Animated.View style={[s.indicator, indicator]} /> : null}
         </View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
-  row: { paddingHorizontal: GUTTER - spacing.sm },
-  inner: { flexDirection: 'row' },
-  tab: { paddingHorizontal: spacing.sm2, paddingVertical: spacing.md },
-  label: { ...type.bodyStrong, color: colors.textSecondary },
-  labelActive: { color: colors.text },
-  indicator: { position: 'absolute', left: 0, bottom: 0, width: 1, height: size.indicator, backgroundColor: colors.accent, transformOrigin: 'left' },
-});
+function Label({ title, index, position, from, to }: { title: string; index: number; position: SharedValue<number>; from: string; to: string }) {
+  const s = useStyles(makeStyles);
+  const color = useAnimatedStyle(() => {
+    const d = Math.min(1, Math.abs(position.get() - index));
+    return { color: interpolateColor(d, [0, 1], [to, from]) };
+  });
+  return <Animated.Text style={[s.label, color]}>{title}</Animated.Text>;
+}
+
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+  wrap: { borderBottomWidth: sizes.hairline, borderBottomColor: c.separator },
+  inner: { flexDirection: 'row' as const, gap: scaled(sizes.pagerGap) },
+  tab: { height: scaled(sizes.pagerStripHeight), justifyContent: 'center' as const },
+  label: { ...font(type.subheadline), fontWeight: '600' as const },
+  indicator: {
+    position: 'absolute' as const,
+    left: 0,
+    bottom: 0,
+    height: sizes.pagerIndicator,
+    borderRadius: sizes.pagerIndicator / 2,
+    backgroundColor: c.accent,
+  },
+}));

@@ -1,7 +1,7 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 
 import { useItem } from '@/api/queries';
-import { ErrorState, LoadingState } from '@/components/states';
+import { DetailSkeleton, ErrorState } from '@/components/states';
 import {
   AlbumDetail,
   ArtistDetail,
@@ -23,7 +23,7 @@ export default function ItemScreen() {
 
   let body;
   if (!item) {
-    body = q.error ? <ErrorState error={q.error} onRetry={q.refetch} /> : <LoadingState />;
+    body = q.error ? <ErrorState error={q.error} onRetry={q.refetch} /> : <DetailSkeleton />;
   } else {
     const props = { item, refreshing: q.isRefetching, onRefresh: q.refetch };
     switch (item.Type) {

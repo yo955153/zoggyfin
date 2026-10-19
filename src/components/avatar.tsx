@@ -1,13 +1,14 @@
 import { Image } from 'expo-image';
-import { PixelRatio, StyleSheet, Text, View } from 'react-native';
+import { PixelRatio, Text, View } from 'react-native';
 
 import type { Session } from '@/auth/session-store';
-import { generatedArt } from '@/images/generated-art';
+import { initials } from '@/images/generated-art';
 import { buildUserImageUrl } from '@/images/image-url';
-import { colors, type } from '@/theme';
+import { createStyles, type AppTheme, fallbackArt, font, mediaColors, type, useStyles } from '@/theme';
 
+/** The user's picture, or initials on the generated-art colour of the user name. */
 export function Avatar({ session, size }: { session: Session; size: number }) {
-  const art = generatedArt(session.userName, 'Person');
+  const s = useStyles(makeStyles);
   const box = { width: size, height: size, borderRadius: size / 2 };
   if (session.userImageTag) {
     const uri = buildUserImageUrl(
@@ -16,17 +17,18 @@ export function Avatar({ session, size }: { session: Session; size: number }) {
       session.userImageTag,
       size * PixelRatio.get(),
     );
-    return <Image source={{ uri }} style={[box, styles.bg]} contentFit="cover" recyclingKey={uri} />;
+    return <Image source={{ uri }} style={[box, s.bg]} contentFit="cover" recyclingKey={uri} accessibilityIgnoresInvertColors />;
   }
+  const art = fallbackArt(session.userName, session.userId);
   return (
-    <View style={[box, styles.center, { backgroundColor: art.colors[0] }]}>
-      <Text style={[styles.initial, { fontSize: size * 0.45 }]}>{session.userName.slice(0, 1).toUpperCase()}</Text>
+    <View style={[box, s.center, { backgroundColor: art.from }]}>
+      <Text style={[s.initial, { fontSize: size * 0.42, lineHeight: size * 0.5 }]}>{initials(session.userName).slice(0, 1)}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  bg: { backgroundColor: colors.surface },
-  center: { alignItems: 'center', justifyContent: 'center' },
-  initial: { ...type.initial, color: colors.onImage },
-});
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+  bg: { backgroundColor: c.surface2 },
+  center: { alignItems: 'center' as const, justifyContent: 'center' as const },
+  initial: { ...font(type.headline), color: mediaColors.white },
+}));

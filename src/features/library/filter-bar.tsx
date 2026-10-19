@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 
 import { useFilters } from '@/api/queries';
-import { Icon } from '@/components/icon';
+import { Chip } from '@/components/chip';
 import { OptionSheet } from '@/components/option-sheet';
-import { colors, GUTTER, iconSize, radius, spacing, type } from '@/theme';
+import { spacing, useLayout } from '@/theme';
 
 import { hasActiveFilters, SORT_OPTIONS, toggle, useFiltersFor, useLibraryFilters } from './filter-store';
 
@@ -16,24 +16,34 @@ export function FilterBar({ libraryId, itemTypes }: { libraryId: string; itemTyp
   const update = useLibraryFilters((s) => s.update);
   const reset = useLibraryFilters((s) => s.reset);
   const [sheet, setSheet] = useState<SheetName>(null);
+  const l = useLayout();
   const filters = useFilters(libraryId, itemTypes);
 
   const sortLabel = SORT_OPTIONS.find((o) => o.value === f.sortBy)?.label ?? 'Name';
-  const playedLabel = f.played === 'played' ? 'Watched' : f.played === 'unplayed' ? 'Unwatched' : 'All';
+  const playedLabel = f.played === 'played' ? 'Played' : f.played === 'unplayed' ? 'Unplayed' : 'All';
 
   return (
     <>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bar} style={styles.scroll}>
-        <Chip label={sortLabel} icon="arrow.up.arrow.down" onPress={() => setSheet('sort')} />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[styles.bar, { paddingHorizontal: l.gutter }]}
+        style={[styles.scroll, { marginHorizontal: -l.gutter }]}>
+        <Chip
+          label={sortLabel}
+          icon="arrow.up.arrow.down"
+          onPress={() => setSheet('sort')}
+          accessibilityLabel={`Sort by ${sortLabel}, ${f.sortOrder === 'Ascending' ? 'ascending' : 'descending'}`}
+        />
         <Chip
           label={f.sortOrder === 'Ascending' ? 'Ascending' : 'Descending'}
           onPress={() => update(libraryId, { sortOrder: f.sortOrder === 'Ascending' ? 'Descending' : 'Ascending' })}
         />
-        <Chip label={playedLabel} active={f.played !== 'all'} onPress={() => setSheet('played')} />
-        <Chip label="Favorites" icon={f.favorites ? 'heart.fill' : 'heart'} active={f.favorites} onPress={() => update(libraryId, { favorites: !f.favorites })} />
-        <Chip label={f.genres.length ? `Genres (${f.genres.length})` : 'Genre'} active={f.genres.length > 0} onPress={() => setSheet('genre')} />
-        <Chip label={f.years.length ? `Years (${f.years.length})` : 'Year'} active={f.years.length > 0} onPress={() => setSheet('year')} />
-        {hasActiveFilters(f) ? <Chip label="Clear" icon="xmark" onPress={() => reset(libraryId)} /> : null}
+        <Chip label={playedLabel} selected={f.played !== 'all'} onPress={() => setSheet('played')} />
+        <Chip label="Favourites" selected={f.favorites} onPress={() => update(libraryId, { favorites: !f.favorites })} />
+        <Chip label={f.genres.length ? `Genres · ${f.genres.length}` : 'Genre'} selected={f.genres.length > 0} onPress={() => setSheet('genre')} />
+        <Chip label={f.years.length ? `Years · ${f.years.length}` : 'Year'} selected={f.years.length > 0} onPress={() => setSheet('year')} />
+        {hasActiveFilters(f) ? <Chip label="Clear" icon="xmark" onPress={() => reset(libraryId)} accessibilityLabel="Clear filters" /> : null}
       </ScrollView>
 
       <OptionSheet
@@ -49,8 +59,8 @@ export function FilterBar({ libraryId, itemTypes }: { libraryId: string; itemTyp
         title="Show"
         options={[
           { value: 'all' as const, label: 'All' },
-          { value: 'unplayed' as const, label: 'Unwatched' },
-          { value: 'played' as const, label: 'Watched' },
+          { value: 'unplayed' as const, label: 'Unplayed' },
+          { value: 'played' as const, label: 'Played' },
         ]}
         selected={[f.played]}
         onSelect={(v) => update(libraryId, { played: v })}
@@ -78,35 +88,7 @@ export function FilterBar({ libraryId, itemTypes }: { libraryId: string; itemTyp
   );
 }
 
-function Chip({ label, icon, active, onPress }: { label: string; icon?: string; active?: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected: !!active }}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-        styles.chip,
-        active && styles.chipActive,
-        (pressed || hovered) && { opacity: 0.8 },
-      ]}>
-      {icon ? <Icon name={icon} size={iconSize.sm} color={active ? colors.accentText : colors.text} /> : null}
-      <Text style={[styles.chipText, active && { color: colors.accentText }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  scroll: { marginHorizontal: -GUTTER, marginBottom: spacing.md },
-  bar: { paddingHorizontal: GUTTER, gap: spacing.sm, paddingVertical: spacing.xs },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs2,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.row,
-    paddingVertical: spacing.xs2 + 1,
-  },
-  chipActive: { backgroundColor: colors.accent },
-  chipText: { ...type.chip, color: colors.text },
+  scroll: { marginBottom: spacing.md, flexGrow: 0 },
+  bar: { gap: spacing.sm, paddingVertical: spacing.xs },
 });

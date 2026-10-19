@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { useLatest, useNextUp, useResume, useViews } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
 import { ItemRow } from '@/components/item-row';
+import { EmptyState } from '@/components/states';
 import { shapeForList } from '@/components/tile';
 import { isSupportedView } from '@/features/library/library-kind';
 import { episodeLabel } from '@/lib/format';
@@ -20,8 +21,9 @@ function ContinueWatching() {
   const q = useResume('Video');
   return (
     <ItemRow
-      title="Continue Watching"
-      shape="landscape"
+      title="Continue watching"
+      shape="thumb"
+      titleOnArt
       items={q.data}
       isLoading={q.isPending}
       error={q.error}
@@ -35,8 +37,8 @@ function NextUp() {
   const q = useNextUp();
   return (
     <ItemRow
-      title="Next Up"
-      shape="landscape"
+      title="Next up"
+      shape="thumb"
       items={q.data}
       isLoading={q.isPending}
       error={q.error}
@@ -49,7 +51,7 @@ function NextUp() {
 function ContinueListening() {
   const q = useResume('Audio');
   return (
-    <ItemRow title="Continue Listening" shape="square" items={q.data} isLoading={q.isPending} error={q.error} onRetry={q.refetch} />
+    <ItemRow title="Continue listening" shape="square" items={q.data} isLoading={q.isPending} error={q.error} onRetry={q.refetch} />
   );
 }
 
@@ -57,10 +59,10 @@ function LatestRow({ view }: { view: BaseItemDto }) {
   const q = useLatest(view.Id ?? '');
   const group = useTabGroup();
   const shape =
-    view.CollectionType === 'music' ? 'square' : shapeForList(q.data, view.CollectionType === 'homevideos' ? 'landscape' : 'poster');
+    view.CollectionType === 'music' ? 'square' : shapeForList(q.data, view.CollectionType === 'homevideos' ? 'thumb' : 'poster');
   return (
     <ItemRow
-      title={`Recently Added in ${view.Name ?? 'Library'}`}
+      title={`Recently added in ${view.Name ?? 'Library'}`}
       shape={shape}
       items={q.data}
       isLoading={q.isPending}
@@ -77,7 +79,10 @@ function LatestRow({ view }: { view: BaseItemDto }) {
 function RecentlyAdded() {
   const views = useViews();
   if (views.error && !views.data) {
-    return <ItemRow title="Recently Added" shape="poster" items={undefined} error={views.error} onRetry={views.refetch} />;
+    return <ItemRow title="Recently added" shape="poster" items={undefined} error={views.error} onRetry={views.refetch} />;
+  }
+  if (views.data && views.data.filter(isSupportedView).length === 0) {
+    return <EmptyState icon="square.stack" title="No libraries yet" message="Add a library on the server, then pull to refresh." />;
   }
   return (
     <>

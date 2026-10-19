@@ -29,19 +29,19 @@ export function useItemActions(item: BaseItemDto | undefined) {
     const guard = async (fn: () => Promise<void>, done: string) => {
       try {
         await fn();
-        toast(done);
+        toast(done, { icon: 'checkmark' });
         await refresh();
       } catch (e) {
-        toast(describeError(e).title);
+        toast(describeError(e).title, { icon: 'exclamationmark.triangle' });
       }
     };
     return {
       play: (it) => player.play({ item: it }),
       openItem,
       setFavorite: (it, fav) =>
-        guard(() => jf.setFavorite(api, userId, it.Id ?? '', fav), fav ? 'Added to Favorites' : 'Removed from Favorites'),
+        guard(() => jf.setFavorite(api, userId, it.Id ?? '', fav), fav ? 'Added to favourites' : 'Removed from favourites'),
       setPlayed: (it, played) =>
-        guard(() => jf.setPlayed(api, userId, it.Id ?? '', played), played ? 'Marked as watched' : 'Marked as unwatched'),
+        guard(() => jf.setPlayed(api, userId, it.Id ?? '', played), played ? 'Marked as played' : 'Marked as unplayed'),
     };
   }, [api, userId, scope, qc, openItem, player]);
 

@@ -14,11 +14,11 @@ export const DEFAULT_FILTERS: LibraryFilters = {
 
 export const SORT_OPTIONS: { value: LibrarySortBy; label: string }[] = [
   { value: 'SortName', label: 'Name' },
-  { value: 'DateCreated', label: 'Date Added' },
-  { value: 'PremiereDate', label: 'Release Date' },
+  { value: 'DateCreated', label: 'Date added' },
+  { value: 'PremiereDate', label: 'Release date' },
   { value: 'CommunityRating', label: 'Rating' },
   { value: 'Runtime', label: 'Runtime' },
-  { value: 'DatePlayed', label: 'Last Played' },
+  { value: 'DatePlayed', label: 'Last played' },
   { value: 'Random', label: 'Random' },
 ];
 

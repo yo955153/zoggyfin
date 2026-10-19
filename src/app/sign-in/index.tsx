@@ -1,19 +1,21 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 
+import LOGO from '@/assets/images/logo-mark.png';
 import { describeError } from '@/api/errors';
 import { findServer } from '@/api/jellyfin';
 import { Button } from '@/components/button';
-import { Icon } from '@/components/icon';
 import { TextField } from '@/components/text-field';
 import { loadRuntimeConfig } from '@/lib/runtime-config';
 import { storage } from '@/storage/kv';
-import { colors, iconSize, radius, size, spacing, type } from '@/theme';
+import { createStyles, type AppTheme, font, scaled, sizes, spacing, type, useStyles } from '@/theme';
 
 const LAST_SERVER_KEY = 'server.lastUrl';
 
 export default function ServerScreen() {
+  const styles = useStyles(makeStyles);
   const [address, setAddress] = useState(() => storage.getString(LAST_SERVER_KEY) ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,11 +55,11 @@ export default function ServerScreen() {
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.inner}>
-          <View style={styles.logo}>
-            <Icon name="play.fill" size={iconSize.hero} color={colors.accentText} />
-          </View>
-          <Text style={styles.title}>Zoggyfin</Text>
-          <Text style={styles.subtitle}>Connect to your Jellyfin server.</Text>
+          <Image source={LOGO} style={styles.logo} contentFit="contain" accessibilityIgnoresInvertColors accessible={false} />
+          <Text style={styles.title} accessibilityRole="header">
+            zoggyfin
+          </Text>
+          <Text style={styles.subtitle}>Enter your server address.</Text>
           <TextField
             label="Server address"
             value={address}
@@ -78,26 +80,20 @@ export default function ServerScreen() {
             </Text>
           ) : null}
           <Button title="Continue" onPress={connect} loading={busy} disabled={!address.trim()} />
+          <Text style={styles.footnote}>Zoggyfin is a client for Jellyfin. It connects only to the server you enter.</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  content: { flexGrow: 1, justifyContent: 'center', padding: spacing.xl },
-  inner: { width: '100%', maxWidth: size.formMaxWidth, alignSelf: 'center', gap: spacing.lg },
-  logo: {
-    width: size.logo,
-    height: size.logo,
-    borderRadius: radius.logo,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-  },
-  title: { ...type.largeTitle, color: colors.text, textAlign: 'center' },
-  subtitle: { ...type.body, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md },
-  error: { ...type.callout, color: colors.danger },
-});
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+  flex: { flex: 1, backgroundColor: c.bg },
+  content: { flexGrow: 1, justifyContent: 'center' as const, padding: spacing.xxl },
+  inner: { width: '100%' as const, maxWidth: scaled(sizes.formMaxWidth), alignSelf: 'center' as const, gap: spacing.lg },
+  logo: { width: scaled(sizes.logoMark), height: scaled(sizes.logoMark), alignSelf: 'center' as const },
+  title: { ...font(type.largeTitle), fontWeight: '600' as const, letterSpacing: -0.34, color: c.text, textAlign: 'center' as const },
+  subtitle: { ...font(type.body), color: c.text2, textAlign: 'center' as const, marginBottom: spacing.md, marginTop: -spacing.sm },
+  error: { ...font(type.footnote), color: c.danger },
+  footnote: { ...font(type.footnote), color: c.text3, textAlign: 'center' as const, marginTop: spacing.sm },
+}));

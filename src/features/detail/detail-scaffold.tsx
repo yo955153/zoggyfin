@@ -1,30 +1,66 @@
-import { FlashList } from '@shopify/flash-list';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Stack } from 'expo-router';
 import { type ReactElement, type ReactNode, useState } from 'react';
-import { Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { PixelRatio, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  interpolate,
+  useAnimatedRef,
+  useAnimatedStyle,
+  useReducedMotion,
+  useScrollOffset,
+} from 'react-native-reanimated';
 
 import type { BaseItemDto } from '@/api/types';
+import { useImageServer } from '@/api/use-api';
 import { ItemActionSheet } from '@/components/action-sheet';
 import { Button } from '@/components/button';
-import { Icon } from '@/components/icon';
+import { Icon, type IconName } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
+import { Touchable } from '@/components/touchable';
 import { useItemActions } from '@/features/actions/use-item-actions';
+import { buildImageUrl } from '@/images/image-url';
+import { formatClock, playedFraction } from '@/lib/format';
+import { isTV } from '@/platform/tv';
 import { usePlayer } from '@/player';
-import { colors, GUTTER, iconSize, radius, shadow, size, spacing, type } from '@/theme';
+import { createStyles,
+  type AppTheme,
+  font,
+  iconSize,
+  mediaColors,
+  radius,
+  scaled,
+  scriptStyle,
+  sizes,
+  spacing,
+  type,
+  useLayout,
+  useStyles,
+  useTheme,
+  withAlpha,
+} from '@/theme';
 
-import { useIsWide } from './use-wide';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export type ArtShape = 'poster' | 'square' | 'circle' | 'landscape';
+import { usePullRefresh } from '@/lib/use-pull-refresh';
+
+import { heroHeight, heroLayout } from './hero-layout';
+
+export type ArtShape = 'poster' | 'square' | 'circle' | 'thumb';
 
 interface DetailScaffoldProps<Row> {
   item: BaseItemDto;
-  art: ArtShape;
-  /** Short facts under the title: year, runtime, rating. */
+  /** Facts in the metadata line: year, genre, runtime, rating. */
   meta: (string | null | undefined)[];
-  /** A line above the title, for example the series name of an episode. */
+  /** A line above the title (series name of an episode), or the album artist. */
   eyebrow?: string | null;
+  /** Tap on the eyebrow (album artist opens the artist). */
+  onEyebrowPress?: () => void;
   playable?: boolean;
+  /** Label for the primary button. Defaults to Play, or "Resume 1:02:14". */
   playLabel?: string;
+  /** Album pages: Play and Shuffle as two tonal buttons. */
+  onShuffle?: () => void;
   rows?: Row[];
   renderRow?: (row: Row, index: number) => ReactElement;
   rowKey?: (row: Row, index: number) => string;
@@ -33,169 +69,395 @@ interface DetailScaffoldProps<Row> {
   /** Shown after the rows: cast, similar items. */
   footer?: ReactNode;
   refreshing?: boolean;
-  onRefresh?: () => void;
+  /** May return a promise; the spinner shows until it settles. */
+  onRefresh?: () => unknown;
 }
 
+const VIDEO_TYPES = new Set(['Movie', 'Episode', 'Video', 'MusicVideo']);
+
 /**
- * The shared item page: a backdrop, the artwork, title, facts, actions and
- * overview, then a FlashList of rows (tracks, episodes). Wide windows put the
- * artwork and facts in a left column beside the content.
+ * The shared item page (design system §7.6). The hero depends on the item:
+ * a tall backdrop, a wide 16:9 image, square album art or a circle. Then the
+ * title (the server logo when there is one), the metadata line, the primary
+ * action with its resume bar, round secondary actions and the overview. Wide
+ * windows put the artwork and actions in a left column (40 %) and the text
+ * in the right column (60 %).
  */
 export function DetailScaffold<Row>({
   item,
-  art,
   meta,
   eyebrow,
+  onEyebrowPress,
   playable,
-  playLabel = 'Play',
+  playLabel,
+  onShuffle,
   rows,
   renderRow,
   rowKey,
   beforeRows,
   footer,
-  refreshing,
   onRefresh,
 }: DetailScaffoldProps<Row>) {
-  const { width } = useWindowDimensions();
-  const wide = useIsWide();
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  const l = useLayout();
+  const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
   const player = usePlayer();
   const { actions, run } = useItemActions(item);
   const [sheet, setSheet] = useState(false);
-  const favorite = !!item.UserData?.IsFavorite;
-  // Resume / Start over: only for a single video with a saved position.
-  const resumable = !!item.UserData?.PlaybackPositionTicks && ['Movie', 'Episode', 'Video', 'MusicVideo'].includes(item.Type ?? '');
-  const favAction = actions.find((a) => a.id === (favorite ? 'builtin.unfavorite' : 'builtin.favorite'));
+  const pull = usePullRefresh(onRefresh);
+  const scrollRef = useAnimatedRef<Animated.FlatList<Row>>();
+  const offset = useScrollOffset(scrollRef);
 
-  const heroHeight = wide ? Math.min(360, width * 0.3) : Math.min(width * 0.62, 340);
-  const artWidth = wide ? 260 : art === 'poster' ? 150 : art === 'landscape' ? Math.min(width - GUTTER * 2, 360) : 180;
-  const artAspect = art === 'poster' ? 2 / 3 : art === 'landscape' ? 16 / 9 : 1;
-  const contentWidth = Math.min(width, size.contentMaxWidth);
+  const layout = heroLayout(item);
+  const media = layout === 'backdrop' || layout === 'wide';
+  const twoColumn = l.contentWidth >= 900;
+  const heroH = heroHeight(layout, l.width, l.height, twoColumn);
+  const pageWidth = Math.min(l.width, 1280);
+
+  const favorite = !!item.UserData?.IsFavorite;
+  const played = !!item.UserData?.Played;
+  const favAction = actions.find((a) => a.id === (favorite ? 'builtin.unfavorite' : 'builtin.favorite'));
+  const playedAction = actions.find((a) => a.id === (played ? 'builtin.unplayed' : 'builtin.played'));
+  const position = item.UserData?.PlaybackPositionTicks ?? 0;
+  const resumable = position > 0 && VIDEO_TYPES.has(item.Type ?? '');
+  const progress = resumable ? playedFraction(item) : null;
+  const primaryLabel = playLabel ?? (resumable ? `Resume ${formatClock(position) ?? ''}`.trim() : 'Play');
 
   const facts = meta.filter((m): m is string => !!m);
 
-  const titleBlock = (
-    <View style={[styles.titleBlock, !wide && styles.center]}>
-      {eyebrow ? <Text style={[styles.eyebrow, !wide && styles.textCenter]}>{eyebrow}</Text> : null}
-      <Text style={[styles.title, !wide && styles.textCenter]} accessibilityRole="header">
-        {item.Name}
-      </Text>
-      {facts.length ? <Text style={[styles.meta, !wide && styles.textCenter]}>{facts.join('  ·  ')}</Text> : null}
-      <View style={[styles.buttons, !wide && styles.buttonsNarrow]}>
-        {playable ? (
-          <Button
-            title={playLabel}
-            icon="play.fill"
-            onPress={() => player.play({ item })}
-            style={wide ? styles.playWide : styles.playNarrow}
-          />
-        ) : null}
-        {playable && resumable ? (
-          <IconButton icon="arrow.counterclockwise" label="Start over" onPress={() => player.play({ item, startPositionTicks: 0 })} />
-        ) : null}
-        {favAction ? (
-          <IconButton
-            icon={favorite ? 'heart.fill' : 'heart'}
-            label={favAction.title}
-            active={favorite}
-            onPress={() => run(favAction)}
-          />
-        ) : null}
-        <IconButton icon="ellipsis" label="More actions" onPress={() => setSheet(true)} />
+  // Parallax (§7.6): stretch on pull-down, 0.5× speed on scroll up. Off with Reduce Motion.
+  const heroStyle = useAnimatedStyle(() => {
+    if (reduced || !media) return {};
+    const y = offset.get();
+    if (y < 0) {
+      return { transform: [{ translateY: y / 2 }, { scale: 1 + -y / Math.max(1, heroH) }] };
+    }
+    return { transform: [{ translateY: interpolate(y, [0, heroH], [0, heroH / 2], 'clamp') }] };
+  });
+
+  const secondary: { icon: IconName; label: string; active?: boolean; onPress: () => void }[] = [];
+  if (playable && resumable) {
+    secondary.push({ icon: 'arrow.counterclockwise', label: 'Start over', onPress: () => player.play({ item, startPositionTicks: 0 }) });
+  }
+  if (playedAction) secondary.push({ icon: 'checkmark', label: 'Played', active: played, onPress: () => run(playedAction) });
+  if (favAction) secondary.push({ icon: favorite ? 'heart.fill' : 'heart', label: 'Favourite', active: favorite, onPress: () => run(favAction) });
+  secondary.push({ icon: 'ellipsis', label: 'More', onPress: () => setSheet(true) });
+
+  const centered = !twoColumn;
+
+  const title = <Title item={item} centered={centered} big={media} />;
+
+  const factsLine = facts.length ? (
+    <Text style={[s.meta, centered && s.textCenter]} numberOfLines={2}>
+      {facts.join(' · ')}
+    </Text>
+  ) : null;
+
+  const eyebrowLine = eyebrow ? (
+    onEyebrowPress ? (
+      <Touchable onPress={onEyebrowPress} radius={6} accessibilityRole="link" accessibilityLabel={eyebrow} containerStyle={centered ? s.selfCenter : undefined}>
+        <Text style={[s.eyebrowLink, scriptStyle(eyebrow, s.eyebrowLink, true), centered && s.textCenter]}>{eyebrow}</Text>
+      </Touchable>
+    ) : (
+      <Text style={[s.eyebrow, scriptStyle(eyebrow, s.eyebrow, true), centered && s.textCenter]}>{eyebrow}</Text>
+    )
+  ) : null;
+
+  const primary = playable ? (
+    onShuffle ? (
+      <View style={[s.pairRow, l.fontScale >= 1.5 && s.stack]}>
+        <Button title="Play" icon="play.fill" variant="tonalAccent" onPress={() => player.play({ item })} containerStyle={s.flex} preferredFocus={isTV} />
+        <Button title="Shuffle" icon="shuffle" variant="tonalAccent" onPress={onShuffle} containerStyle={s.flex} />
       </View>
-      {item.Overview ? <Overview text={item.Overview} centered={!wide} /> : null}
-      {item.Genres?.length ? (
-        <Text style={[styles.genres, !wide && styles.textCenter]}>{item.Genres.join(', ')}</Text>
-      ) : null}
+    ) : (
+      <View>
+        <Button title={primaryLabel} icon="play.fill" onPress={() => player.play({ item })} preferredFocus={isTV} />
+        {progress !== null ? (
+          <View style={s.resumeTrack} accessibilityLabel={`${Math.round(progress * 100)} percent played`}>
+            <View style={[s.resumeFill, { width: `${Math.round(progress * 100)}%` }]} />
+          </View>
+        ) : null}
+      </View>
+    )
+  ) : null;
+
+  const actionsRow = (
+    <View style={[s.actions, centered ? s.actionsCenter : null]}>
+      {secondary.map((a) => (
+        <RoundAction key={a.label} {...a} />
+      ))}
     </View>
   );
 
-  const header = (
-    <View>
-      <View style={{ height: heroHeight }}>
-        <ItemImage item={item} variant="backdrop" width={width} aspectRatio={width / heroHeight} rounded={0} hideArtTitle />
-        <LinearGradient
-          colors={colors.heroFade}
-          locations={[0, 0.55, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-      </View>
-      <View style={[styles.body, { width: contentWidth, alignSelf: 'center' }, wide ? styles.bodyWide : null]}>
-        <View style={[!wide && styles.center, { marginTop: -heroHeight * (wide ? 0.55 : 0.45) }]}>
-          <ItemImage item={item} variant={art === 'landscape' ? 'landscape' : art === 'poster' ? 'poster' : 'square'} width={artWidth} aspectRatio={artAspect} rounded={radius.lg} circle={art === 'circle'} style={styles.artShadow} />
-        </View>
-        {titleBlock}
-      </View>
-      {beforeRows ? <View style={{ width: contentWidth, alignSelf: 'center' }}>{beforeRows}</View> : null}
+  const overview = item.Overview ? <Overview text={item.Overview} centered={false} /> : null;
+
+  const textBlock = (
+    <View style={s.textBlock}>
+      {layout === 'square' || layout === 'circle' ? null : eyebrowLine}
+      {title}
+      {layout === 'square' || layout === 'circle' ? eyebrowLine : null}
+      {factsLine}
+      {twoColumn ? null : primary}
+      {twoColumn ? null : actionsRow}
+      {overview}
     </View>
   );
+
+  const artWidth = layout === 'square' ? scaled(sizes.albumArt) : scaled(sizes.personArt);
+  const art =
+    layout === 'square' || layout === 'circle' ? (
+      <View style={[s.artWrap, s.raised]}>
+        <ItemImage item={item} variant="square" width={artWidth} aspectRatio={1} rounded={radius.lg} circle={layout === 'circle'} />
+      </View>
+    ) : null;
+
+  let header: ReactElement;
+  if (twoColumn) {
+    const leftWidth = Math.round((pageWidth - l.gutter * 2) * 0.4);
+    const posterWidth = Math.min(leftWidth, layout === 'square' ? 320 : 260);
+    header = (
+      <View>
+        {media ? <Hero item={item} height={heroH} style={heroStyle} /> : null}
+        <View style={[s.columns, { width: pageWidth, paddingHorizontal: l.gutter, marginTop: media ? -heroH * 0.45 : spacing.huge * 2 }]}>
+          <View style={[s.left, { width: leftWidth }]}>
+            <View style={s.raised}>
+              <ItemImage
+                item={item}
+                variant={layout === 'wide' ? 'landscape' : layout === 'backdrop' ? 'poster' : 'square'}
+                width={posterWidth}
+                aspectRatio={layout === 'wide' ? 16 / 9 : layout === 'backdrop' ? 2 / 3 : 1}
+                rounded={layout === 'square' ? radius.lg : radius.md}
+                circle={layout === 'circle'}
+              />
+            </View>
+            <View style={{ width: posterWidth, gap: spacing.lg }}>
+              {primary}
+              {actionsRow}
+            </View>
+          </View>
+          <View style={[s.right, { maxWidth: sizes.readableWidth }]}>{textBlock}</View>
+        </View>
+        {beforeRows ? <View style={[s.page, { width: pageWidth }]}>{beforeRows}</View> : null}
+      </View>
+    );
+  } else if (media) {
+    header = (
+      <View>
+        <Hero item={item} height={heroH} style={heroStyle} />
+        <View style={[s.body, { paddingHorizontal: l.gutter, marginTop: layout === 'backdrop' ? -scaled(120) : -scaled(36) }]}>{textBlock}</View>
+        {beforeRows}
+      </View>
+    );
+  } else {
+    header = (
+      <View>
+        <View style={[s.body, s.artBody, { paddingHorizontal: l.gutter, paddingTop: l.tv ? spacing.huge : Math.max(100, insets.top + sizes.iconButton + spacing.lg) }]}>
+          {art}
+          {textBlock}
+        </View>
+        {beforeRows}
+      </View>
+    );
+  }
 
   return (
     <>
-      <FlashList
+      <Stack.Screen
+        options={{
+          headerTintColor: media && !twoColumn ? mediaColors.white : c.accent,
+          headerRight: () => (
+            <Touchable onPress={() => setSheet(true)} radius={20} hitSlop={8} accessibilityRole="button" accessibilityLabel="More actions" style={s.headerButton}>
+              <Icon name="ellipsis" size={iconSize.md} color={media && !twoColumn ? mediaColors.white : c.accent} weight="semibold" />
+            </Touchable>
+          ),
+        }}
+      />
+      <Animated.FlatList
+        ref={scrollRef}
         data={rows ?? []}
         keyExtractor={rowKey ?? ((_, i) => String(i))}
         renderItem={({ item: row, index }) => (
-          <View style={{ width: contentWidth, alignSelf: 'center' }}>{renderRow ? renderRow(row, index) : null}</View>
+          <View style={[s.page, { width: pageWidth }]}>{renderRow ? renderRow(row, index) : null}</View>
         )}
         ListHeaderComponent={header}
-        ListFooterComponent={<View style={[styles.footer, { width: contentWidth, alignSelf: 'center' }]}>{footer}</View>}
+        ListFooterComponent={<View style={[s.page, s.footer, { width: pageWidth }]}>{footer}</View>}
         contentInsetAdjustmentBehavior="never"
-        refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.textSecondary} /> : undefined}
+        style={s.list}
+        scrollEventThrottle={16}
+        refreshControl={
+          pull.onRefresh && !isTV ? (
+            <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={c.text2} />
+          ) : undefined
+        }
       />
       <ItemActionSheet item={item} visible={sheet} onClose={() => setSheet(false)} />
     </>
   );
 }
 
-function IconButton({ icon, label, onPress, active }: { icon: string; label: string; onPress: () => void; active?: boolean }) {
+/** The backdrop or wide image, full bleed, fading into the page, with a top scrim for the status bar. */
+function Hero({ item, height, style }: { item: BaseItemDto; height: number; style: ReturnType<typeof useAnimatedStyle> }) {
+  const { c } = useTheme();
+  const l = useLayout();
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-        styles.iconButton,
-        (pressed || hovered) && { opacity: 0.75 },
-      ]}>
-      <Icon name={icon} size={iconSize.xl} color={active ? colors.accent : colors.text} />
-    </Pressable>
+    <View style={[styles.heroClip, { height }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, style]}>
+        <ItemImage item={item} variant="backdrop" width={l.width} aspectRatio={l.width / height} rounded={0} hideArtTitle hairline={false} />
+      </Animated.View>
+      <LinearGradient colors={[withAlpha(c.bg, 0), withAlpha(c.bg, 0), c.bg]} locations={[0, 0.45, 1]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={[mediaColors.heroTopScrim, 'rgba(0,0,0,0)']} locations={[0, 1]} style={[styles.topScrim, { height: height * 0.22 }]} />
+    </View>
   );
 }
 
-function Overview({ text, centered }: { text: string; centered: boolean }) {
-  const [open, setOpen] = useState(false);
+/**
+ * The server logo (max 280 × 100) when there is one, else the title in
+ * `display`. The text title shows until the logo has loaded, so a slow or
+ * failed logo never leaves an empty space.
+ */
+function Title({ item, centered, big }: { item: BaseItemDto; centered: boolean; big: boolean }) {
+  const s = useStyles(makeStyles);
+  const server = useImageServer();
+  const [state, setState] = useState<'loading' | 'loaded' | 'failed'>('loading');
+  const logo = item.ImageTags?.Logo
+    ? { id: item.Id ?? '', tag: item.ImageTags.Logo }
+    : item.ParentLogoItemId && item.ParentLogoImageTag && item.Type !== 'Episode'
+      ? { id: item.ParentLogoItemId, tag: item.ParentLogoImageTag }
+      : null;
+  const name = item.Name ?? '';
+  const uri =
+    logo && server && big && state !== 'failed'
+      ? buildImageUrl(server, { itemId: logo.id, type: 'Logo', tag: logo.tag, width: scaled(sizes.logoMaxWidth) * PixelRatio.get() })
+      : null;
+  const image = uri ? (
+    <Image
+      source={{ uri }}
+      style={s.logo}
+      contentFit="contain"
+      contentPosition={centered ? 'center' : 'left'}
+      onLoad={() => setState('loaded')}
+      onError={() => setState('failed')}
+    />
+  ) : null;
+  if (image && state === 'loaded') {
+    return (
+      <View style={[s.logoBox, centered ? s.selfCenter : null]} accessible accessibilityRole="header" accessibilityLabel={name}>
+        {image}
+      </View>
+    );
+  }
+  const base = big ? s.display : s.title2;
   return (
-    <Pressable onPress={() => setOpen((o) => !o)} accessibilityRole="button" accessibilityHint="Shows the full text">
-      <Text style={[styles.overview, centered && styles.textCenter]} numberOfLines={open ? undefined : 4}>
+    <View>
+      <Text style={[base, scriptStyle(name, base, !centered), centered && s.textCenter]} numberOfLines={3} accessibilityRole="header">
+        {name}
+      </Text>
+      {image ? (
+        <View style={[s.logoBox, s.logoProbe]} pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+          {image}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function RoundAction({ icon, label, active, onPress }: { icon: IconName; label: string; active?: boolean; onPress: () => void }) {
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  return (
+    <Touchable
+      kind="icon"
+      radius={radius.pill}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={active === undefined ? undefined : { selected: active }}
+      style={s.roundWrap}>
+      {({ pressed }) => (
+        <>
+          <View style={[s.round, { backgroundColor: pressed ? c.surface3 : c.surface2 }]}>
+            <Icon name={icon} size={scaled(iconSize.sm)} color={active ? c.accent : c.text} weight="semibold" />
+          </View>
+          <Text style={s.roundLabel} numberOfLines={1}>
+            {label}
+          </Text>
+        </>
+      )}
+    </Touchable>
+  );
+}
+
+/** Overview: 3 lines and a "More" link in `accent` that expands in place. */
+function Overview({ text, centered }: { text: string; centered: boolean }) {
+  const s = useStyles(makeStyles);
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  return (
+    <Touchable
+      onPress={() => setOpen((o) => !o)}
+      accessibilityRole="button"
+      accessibilityLabel={text}
+      accessibilityHint={open ? 'Shows less' : 'Shows the full text'}
+      radius={6}>
+      <Text
+        style={[s.overview, scriptStyle(text, s.overview, true), centered && s.textCenter]}
+        numberOfLines={open ? undefined : 3}
+        onTextLayout={(e) => {
+          if (!open && e.nativeEvent.lines.length >= 3) setLong(true);
+        }}>
         {text}
       </Text>
-    </Pressable>
+      {long ? <Text style={s.more}>{open ? 'Less' : 'More'}</Text> : null}
+    </Touchable>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: GUTTER, gap: spacing.lg },
-  bodyWide: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xxl },
-  center: { alignItems: 'center' },
-  textCenter: { textAlign: 'center' },
-  artShadow: shadow.art,
-  titleBlock: { flex: 1, gap: spacing.sm, width: '100%' },
-  eyebrow: { ...type.eyebrow, color: colors.textSecondary },
-  title: { ...type.title, color: colors.text },
-  meta: { ...type.callout, color: colors.textSecondary },
-  buttons: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
-  buttonsNarrow: { justifyContent: 'center' },
-  playWide: { minWidth: 160 },
-  playNarrow: { flex: 1, maxWidth: size.playButtonMaxWidth },
-  iconButton: {
-    width: size.iconButton,
-    height: size.iconButton,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceRaised,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  overview: { ...type.body, color: colors.text, marginTop: spacing.sm, opacity: 0.9 },
-  genres: { ...type.callout, color: colors.textTertiary },
-  footer: { paddingBottom: spacing.xxl * 2 },
+  heroClip: { overflow: 'hidden' },
+  topScrim: { position: 'absolute', top: 0, left: 0, right: 0 },
 });
+
+const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
+  flex: { flex: 1 },
+  list: { flex: 1, backgroundColor: c.bg },
+  page: { alignSelf: 'center' as const },
+  body: { gap: spacing.lg },
+  artBody: { alignItems: 'center' as const },
+  columns: { alignSelf: 'center' as const, flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: spacing.xxxl },
+  left: { alignItems: 'center' as const, gap: spacing.xl },
+  right: { flex: 1, paddingTop: spacing.huge * 2 },
+  raised: { ...shadow('raised'), borderRadius: radius.lg },
+  artWrap: { marginBottom: spacing.sm },
+  textBlock: { gap: spacing.md, width: '100%' as const },
+  textCenter: { textAlign: 'center' as const },
+  selfCenter: { alignSelf: 'center' as const },
+  eyebrow: { ...font(type.subheadline), fontWeight: '600' as const, color: c.text2 },
+  eyebrowLink: { ...font(type.title3), fontWeight: '400' as const, color: c.accent },
+  display: { ...font(type.display), color: c.text },
+  title2: { ...font(type.title2), color: c.text },
+  logoBox: { width: scaled(sizes.logoMaxWidth), height: scaled(sizes.logoMaxHeight) },
+  logo: { width: '100%' as const, height: '100%' as const },
+  logoProbe: { position: 'absolute' as const, top: 0, left: 0, opacity: 0 },
+  meta: { ...font(type.footnote, { tabular: true }), color: c.text2 },
+  pairRow: { flexDirection: 'row' as const, gap: spacing.md, marginTop: spacing.sm },
+  stack: { flexDirection: 'column' as const },
+  resumeTrack: { height: sizes.resumeBar, borderRadius: 2, backgroundColor: c.surface3, marginTop: spacing.md, marginHorizontal: spacing.xxxl, overflow: 'hidden' as const },
+  resumeFill: { height: '100%' as const, backgroundColor: c.accent },
+  actions: { flexDirection: 'row' as const, gap: spacing.xl, marginTop: spacing.xs },
+  actionsCenter: { justifyContent: 'center' as const },
+  roundWrap: { alignItems: 'center' as const, gap: 6, minWidth: scaled(56) },
+  round: {
+    width: scaled(sizes.iconButton),
+    height: scaled(sizes.iconButton),
+    borderRadius: radius.pill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  roundLabel: { ...font(type.caption2), color: c.text2 },
+  overview: { ...font(type.subheadline), color: c.text2 },
+  more: { ...font(type.subheadline), fontWeight: '600' as const, color: c.accent, marginTop: 2 },
+  footer: { paddingBottom: spacing.huge * 2 },
+  headerButton: { width: 40, height: 40, alignItems: 'center' as const, justifyContent: 'center' as const },
+}));

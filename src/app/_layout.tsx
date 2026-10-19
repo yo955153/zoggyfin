@@ -1,6 +1,5 @@
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -17,19 +16,8 @@ import {
 import { useSession, useSessionStore } from '@/auth/session-store';
 import { ToastHost } from '@/components/toast-host';
 import { toast } from '@/lib/toast';
-import { colors } from '@/theme';
-
-const theme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    background: colors.background,
-    card: colors.background,
-    text: colors.text,
-    primary: colors.accent,
-    border: colors.separator,
-  },
-};
+import { mediaColors, useTheme } from '@/theme';
+import { AppThemeProvider } from '@/theme/provider';
 
 export default function RootLayout() {
   const session = useSession();
@@ -58,11 +46,20 @@ export default function RootLayout() {
             shouldDehydrateQuery: (q) => q.state.data !== undefined && shouldPersistQuery(q.queryKey),
           },
         }}>
-        <ThemeProvider value={theme}>
-          <StatusBar style="light" />
-          <View style={styles.flex}>
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
-              <Stack.Protected guard={!!session}>
+        <AppThemeProvider>
+          <Root session={!!session} />
+        </AppThemeProvider>
+      </PersistQueryClientProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+function Root({ session }: { session: boolean }) {
+  const { c } = useTheme();
+  return (
+          <View style={[styles.flex, { backgroundColor: c.bg }]}>
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
+              <Stack.Protected guard={session}>
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen
                   name="player"
@@ -70,7 +67,7 @@ export default function RootLayout() {
                     presentation: 'transparentModal',
                     animation: 'fade',
                     animationDuration: 240,
-                    contentStyle: { backgroundColor: '#000000' },
+                    contentStyle: { backgroundColor: mediaColors.black },
                     autoHideHomeIndicator: true,
                     orientation: 'default',
                     gestureEnabled: false,
@@ -83,10 +80,7 @@ export default function RootLayout() {
             </Stack>
             <ToastHost />
           </View>
-        </ThemeProvider>
-      </PersistQueryClientProvider>
-    </GestureHandlerRootView>
   );
 }
 
-const styles = StyleSheet.create({ flex: { flex: 1, backgroundColor: colors.background } });
+const styles = StyleSheet.create({ flex: { flex: 1 } });

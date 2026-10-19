@@ -34,6 +34,15 @@ Phase 2 ("Video") adds the video player:
 - Keyboard: Space play/pause, ←/→ seek, Shift+←/→ 30 s, F full screen (web), M mute,
   C subtitles, Esc close. On iPad and Mac this works with a hardware keyboard.
 
+Phase 2b ("Platform base and restyle"):
+
+- Every screen follows the design system in [docs/design](docs/design/): the Ember accent on
+  graphite, a light theme that follows the system (Settings, Appearance: System, Dark or
+  Light), one icon set (SF Symbols on Apple platforms, Lucide on the web), generated art for
+  items without a picture, skeletons while loading and Arabic text rules.
+- Item pages pick their hero from the artwork: a tall backdrop, a wide 16:9 image (videos with
+  only a wide thumbnail), square album art or a circle for people.
+
 Music playback and downloads are not in yet.
 The design is in [docs/specs](docs/specs/) and [docs/design](docs/design/).
 

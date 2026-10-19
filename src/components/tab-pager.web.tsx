@@ -2,7 +2,7 @@
  * Web pager: a horizontal scroll view with paging (touch swipe and
  * trackpad), with the same tab strip as native.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -16,9 +16,11 @@ export function TabPager({ tabs, renderPage, initialIndex = 0, onIndexChange }: 
   const [index, setIndex] = useState(initialIndex);
   const [visited, setVisited] = useState(() => new Set([initialIndex]));
   const position = useSharedValue(initialIndex);
+  const indexRef = useRef(initialIndex);
 
   const select = (i: number) => {
     if (i === index) return;
+    indexRef.current = i;
     setIndex(i);
     setVisited((v) => (v.has(i) ? v : new Set(v).add(i)));
     onIndexChange?.(i);
@@ -26,11 +28,19 @@ export function TabPager({ tabs, renderPage, initialIndex = 0, onIndexChange }: 
 
   const onLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
-    if (w !== width) {
-      setWidth(w);
-      requestAnimationFrame(() => scrollRef.current?.scrollTo({ x: index * w, animated: false }));
-    }
+    if (w !== width) setWidth(w);
   };
+
+  // After the pages have their width: show the current page (the first
+  // scroll, and again after a resize). The scroll event then sets `position`.
+  useEffect(() => {
+    if (width <= 0) return;
+    const id = setTimeout(() => {
+      scrollRef.current?.scrollTo({ x: indexRef.current * width, animated: false });
+      position.set(indexRef.current);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [width, position]);
 
   const onPage = (page: number) => select(page);
   const onScroll = useAnimatedScrollHandler((e) => {

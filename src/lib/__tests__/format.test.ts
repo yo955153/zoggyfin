@@ -1,17 +1,21 @@
 import { gridItemTypes, isAudioView, isSupportedView, libraryKind } from '@/features/library/library-kind';
-import { groupSearchResults, pushRecentSearch } from '@/features/search/group-results';
+import { filterSections, groupSearchResults, pushRecentSearch, topResult } from '@/features/search/group-results';
 
-import { episodeLabel, formatClock, formatDuration, playedFraction, subtitleFor } from '../format';
+import { episodeLabel, formatClock, formatDuration, playedFraction, remainingLabel, subtitleFor } from '../format';
 
 const T = 10_000_000;
 
 describe('format', () => {
   it('formats durations', () => {
     expect(formatDuration(0)).toBeNull();
-    expect(formatDuration(35 * T)).toBe('35s');
-    expect(formatDuration(42 * 60 * T)).toBe('42m');
-    expect(formatDuration((102 * 60 + 10) * T)).toBe('1h 42m');
-    expect(formatDuration(120 * 60 * T)).toBe('2h');
+    expect(formatDuration(35 * T)).toBe('35 s');
+    expect(formatDuration(42 * 60 * T)).toBe('42 min');
+    expect(formatDuration((102 * 60 + 10) * T)).toBe('1 h 42 min');
+    expect(formatDuration(120 * 60 * T)).toBe('2 h');
+  });
+  it('labels the time left', () => {
+    expect(remainingLabel({ RunTimeTicks: 60 * 60 * T, UserData: { Key: 'k', PlaybackPositionTicks: 2 * 60 * T } })).toBe('58 min left');
+    expect(remainingLabel({ RunTimeTicks: 60 * T })).toBeNull();
   });
   it('formats clocks', () => {
     expect(formatClock(187 * T)).toBe('3:07');
@@ -19,7 +23,7 @@ describe('format', () => {
     expect(formatClock(undefined)).toBeNull();
   });
   it('labels episodes', () => {
-    expect(episodeLabel({ ParentIndexNumber: 1, IndexNumber: 4 })).toBe('S1:E4');
+    expect(episodeLabel({ ParentIndexNumber: 1, IndexNumber: 4 })).toBe('S1 · E4');
     expect(episodeLabel({ IndexNumber: 4 })).toBe('E4');
     expect(episodeLabel({})).toBeNull();
   });
@@ -31,7 +35,7 @@ describe('format', () => {
   });
   it('builds subtitles', () => {
     expect(subtitleFor({ Type: 'Episode', SeriesName: 'Sample Show', ParentIndexNumber: 2, IndexNumber: 3 })).toBe(
-      'Sample Show · S2:E3',
+      'Sample Show · S2 · E3',
     );
     expect(subtitleFor({ Type: 'Movie', ProductionYear: 2001 })).toBe('2001');
     expect(subtitleFor({ Type: 'MusicAlbum', AlbumArtist: 'Jane Doe' })).toBe('Jane Doe');
@@ -62,6 +66,18 @@ describe('search grouping', () => {
     ]);
     expect(groups.map((g) => g.key)).toEqual(['movies', 'songs', 'people', 'other']);
     expect(groups[0].items).toHaveLength(1);
+  });
+  it('filters sections by chip and picks a top result', () => {
+    const groups = groupSearchResults([
+      { Id: '1', Type: 'Audio', Name: 'Song' },
+      { Id: '2', Type: 'Movie', Name: 'Sample Movie' },
+      { Id: '3', Type: 'MusicAlbum', Name: 'Album' },
+    ]);
+    expect(filterSections(groups, 'music').map((g) => g.key)).toEqual(['albums', 'songs']);
+    expect(filterSections(groups, 'people')).toEqual([]);
+    expect(filterSections(groups, 'all')).toHaveLength(3);
+    expect(topResult(groups)?.Id).toBe('2');
+    expect(topResult([])).toBeNull();
   });
   it('keeps recent searches distinct and capped', () => {
     expect(pushRecentSearch(['a', 'B'], 'b')).toEqual(['b', 'a']);
@@ -98,7 +114,7 @@ describe('parseRuntimeConfig', () => {
 describe('shapeForList', () => {
   const { shapeForList } = jest.requireActual<typeof import('@/components/tile-shape')>('@/components/tile-shape');
   it('uses wide tiles when most images are wide', () => {
-    expect(shapeForList([{ PrimaryImageAspectRatio: 1.77 }, { PrimaryImageAspectRatio: 1.78 }, { PrimaryImageAspectRatio: 0.67 }], 'poster')).toBe('landscape');
+    expect(shapeForList([{ PrimaryImageAspectRatio: 1.77 }, { PrimaryImageAspectRatio: 1.78 }, { PrimaryImageAspectRatio: 0.67 }], 'poster')).toBe('thumb');
     expect(shapeForList([{ PrimaryImageAspectRatio: 0.67 }, { PrimaryImageAspectRatio: 1.78 }], 'poster')).toBe('poster');
     expect(shapeForList([{}, {}, {}], 'poster')).toBe('poster');
     expect(shapeForList([{ PrimaryImageAspectRatio: 1.78 }], 'square')).toBe('square');

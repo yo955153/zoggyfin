@@ -4,6 +4,7 @@
  * same way any later contributor (for example an extension) will.
  */
 import type { BaseItemDto } from '@/api/types';
+import type { IconName } from '@/components/icon-names';
 
 /** What an action may ask the app to do. The screen that shows the sheet supplies it. */
 export interface AppActionApi {
@@ -23,8 +24,8 @@ export interface ItemActionContext {
 export interface ItemAction {
   id: string;
   title: string;
-  /** SF Symbol name (mapped on web). */
-  icon: string;
+  /** An icon name (see components/icon-names.ts). */
+  icon: IconName;
   /** Lower comes first. Built-ins use steps of 10. */
   order?: number;
   destructive?: boolean;
