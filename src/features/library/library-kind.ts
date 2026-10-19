@@ -51,9 +51,14 @@ export function isSupportedView(view: Pick<BaseItemDto, 'CollectionType' | 'Type
 
 /**
  * Libraries that open in the Music tab. Recitations and other spoken-word
- * audio usually live in a "music" library too. Audiobook libraries ("books")
- * join in phase 3, with the long-form audio player.
+ * audio usually live in a "music" library too. Audiobook libraries have the
+ * "books" collection type (the SDK has no audiobooks type); they open with
+ * the Audiobooks and Authors tabs and the long-form player.
  */
 export function isAudioView(view: Pick<BaseItemDto, 'CollectionType'>): boolean {
-  return view.CollectionType === 'music';
+  return view.CollectionType === 'music' || view.CollectionType === 'books';
+}
+
+export function audioLibraryKind(view: Pick<BaseItemDto, 'CollectionType'>): 'music' | 'books' {
+  return view.CollectionType === 'books' ? 'books' : 'music';
 }

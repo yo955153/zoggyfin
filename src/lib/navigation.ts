@@ -20,8 +20,8 @@ export function itemHref(group: TabGroup, item: BaseItemDto): Href | null {
   const id = item.Id;
   const name = item.Name ?? '';
   if (item.Type === 'CollectionFolder' || item.Type === 'UserView') {
-    if (item.CollectionType === 'music') {
-      return { pathname: `/(tabs)/${group}/music/[id]`, params: { id, name } } as unknown as Href;
+    if (item.CollectionType === 'music' || item.CollectionType === 'books') {
+      return { pathname: `/(tabs)/${group}/music/[id]`, params: { id, name, kind: item.CollectionType } } as unknown as Href;
     }
     return { pathname: `/(tabs)/${group}/library/[id]`, params: { id, name } } as unknown as Href;
   }

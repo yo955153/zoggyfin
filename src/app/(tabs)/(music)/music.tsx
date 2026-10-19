@@ -7,7 +7,7 @@ import { Icon } from '@/components/icon';
 import { OptionSheet } from '@/components/option-sheet';
 import { EmptyState, ErrorState, GridSkeleton } from '@/components/states';
 import { Touchable } from '@/components/touchable';
-import { isAudioView } from '@/features/library/library-kind';
+import { audioLibraryKind, isAudioView } from '@/features/library/library-kind';
 import { MusicBrowser } from '@/features/music/music-browser';
 import { storage } from '@/storage/kv';
 import { useRootScreenOptions } from '@/lib/stack-options';
@@ -47,7 +47,7 @@ export default function MusicScreen() {
       ) : views.error && !views.data ? (
         <ErrorState error={views.error} onRetry={views.refetch} />
       ) : library?.Id ? (
-        <MusicBrowser key={library.Id} libraryId={library.Id} />
+        <MusicBrowser key={library.Id} libraryId={library.Id} kind={audioLibraryKind(library)} />
       ) : (
         <EmptyState icon="music.note" title="No music library" message="Add a music library on the server to see it here." />
       )}

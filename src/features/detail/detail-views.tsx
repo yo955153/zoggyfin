@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { useChildren, useEpisodes, useNextUp, useSeasons, useSimilar } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
+import { ItemActionSheet } from '@/components/action-sheet';
 import { ItemRow, RowHeader } from '@/components/item-row';
 import { ErrorState, LoadingState } from '@/components/states';
 import { shapeForList } from '@/components/tile';
@@ -207,6 +208,7 @@ function TrackListDetail({ item, refreshing, onRefresh, kind }: ViewProps & { ki
   const isPlaylist = kind === 'playlist';
   const multiDisc = !isPlaylist && new Set(list.map((t) => t.ParentIndexNumber ?? 1)).size > 1;
   const artistId = item.AlbumArtists?.[0]?.Id;
+  const [menu, setMenu] = useState<BaseItemDto | undefined>(undefined);
 
   return (
     <DetailScaffold
@@ -220,16 +222,13 @@ function TrackListDetail({ item, refreshing, onRefresh, kind }: ViewProps & { ki
         formatDuration(totalTicks),
       ]}
       playable
-      onShuffle={() => {
-        const shuffled = [...list].sort(() => Math.random() - 0.5);
-        const first = shuffled[0];
-        if (first) player.play({ item: first, queue: shuffled.slice(1) });
-      }}
+      onShuffle={() => player.play({ item, shuffle: true })}
       refreshing={refreshing}
       onRefresh={() => {
         onRefresh();
         tracks.refetch();
       }}
+      footer={<ItemActionSheet item={menu} visible={!!menu} onClose={() => setMenu(undefined)} />}
       beforeRows={
         <View style={{ marginTop: spacing.xl }}>
           {tracks.isPending ? <LoadingState rows={6} /> : null}
@@ -244,7 +243,14 @@ function TrackListDetail({ item, refreshing, onRefresh, kind }: ViewProps & { ki
           {multiDisc && (i === 0 || list[i - 1]?.ParentIndexNumber !== t.ParentIndexNumber) ? (
             <Text style={[styles.disc, { paddingHorizontal: l.gutter }]}>DISC {t.ParentIndexNumber ?? 1}</Text>
           ) : null}
-          <TrackRow item={t} index={i} showArt={isPlaylist} last={i === list.length - 1} onPress={(song) => player.play({ item: song, queue: list.slice(i + 1) })} />
+          <TrackRow
+            item={t}
+            index={i}
+            showArt={isPlaylist}
+            last={i === list.length - 1}
+            onPress={(song) => player.play({ item: song, list, index: i, context: item })}
+            onLongPress={setMenu}
+          />
         </>
       )}
     />
@@ -266,11 +272,15 @@ export function ArtistDetail({ item, refreshing, onRefresh }: ViewProps) {
   const songs = useChildren(item.Id ?? undefined, 'artistSongs');
   const player = usePlayer();
   const songList = songs.data ?? [];
+  const [menu, setMenu] = useState<BaseItemDto | undefined>(undefined);
   return (
     <DetailScaffold
       item={item}
       meta={['Artist', albums.data ? `${albums.data.length} ${albums.data.length === 1 ? 'album' : 'albums'}` : null]}
       playable
+      onShuffle={() => player.play({ item, shuffle: true })}
+      extraActions={[{ icon: 'wand.and.stars', label: 'Instant mix', onPress: () => player.instantMix(item) }]}
+      footer={<ItemActionSheet item={menu} visible={!!menu} onClose={() => setMenu(undefined)} />}
       refreshing={refreshing}
       onRefresh={onRefresh}
       beforeRows={
@@ -278,7 +288,7 @@ export function ArtistDetail({ item, refreshing, onRefresh }: ViewProps) {
           <ItemRow title="Albums" shape="square" items={albums.data} isLoading={albums.isPending} error={albums.error} onRetry={albums.refetch} />
           {songList.length || songs.isPending || songs.error ? (
             <Block>
-              <RowHeader title="Songs" />
+              <RowHeader title="Top songs" />
               {songs.isPending ? <LoadingState rows={5} /> : null}
               {songs.error && !songs.data ? <ErrorState error={songs.error} onRetry={songs.refetch} compact /> : null}
             </Block>
@@ -287,7 +297,16 @@ export function ArtistDetail({ item, refreshing, onRefresh }: ViewProps) {
       }
       rows={songList}
       rowKey={(t, i) => t.Id ?? String(i)}
-      renderRow={(t, i) => <TrackRow item={t} index={i} showArt last={i === songList.length - 1} onPress={(song) => player.play({ item: song })} />}
+      renderRow={(t, i) => (
+        <TrackRow
+          item={t}
+          index={i}
+          showArt
+          last={i === songList.length - 1}
+          onPress={() => player.play({ item: t, list: songList, index: i, context: item })}
+          onLongPress={setMenu}
+        />
+      )}
     />
   );
 }

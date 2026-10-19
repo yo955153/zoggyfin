@@ -12,6 +12,10 @@ export interface AppActionApi {
   openItem(item: BaseItemDto): void;
   setFavorite(item: BaseItemDto, favorite: boolean): Promise<void>;
   setPlayed(item: BaseItemDto, played: boolean): Promise<void>;
+  /** Audio queue. Optional, so a host without a player can leave them out. */
+  playNext?(item: BaseItemDto): void;
+  addToQueue?(item: BaseItemDto): void;
+  instantMix?(item: BaseItemDto): void;
 }
 
 export interface ItemActionContext {

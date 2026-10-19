@@ -37,6 +37,9 @@ export function useItemActions(item: BaseItemDto | undefined) {
     };
     return {
       play: (it) => player.play({ item: it }),
+      playNext: (it) => player.playNext(it),
+      addToQueue: (it) => player.addToQueue(it),
+      instantMix: (it) => player.instantMix(it),
       openItem,
       setFavorite: (it, fav) =>
         guard(() => jf.setFavorite(api, userId, it.Id ?? '', fav), fav ? 'Added to favourites' : 'Removed from favourites'),

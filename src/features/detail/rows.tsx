@@ -29,12 +29,15 @@ export const TrackRow = memo(function TrackRow({
   index,
   showArt,
   onPress,
+  onLongPress,
   last,
 }: {
   item: BaseItemDto;
   index: number;
   showArt?: boolean;
   onPress: (item: BaseItemDto) => void;
+  /** Opens the item's action sheet (Play next, Add to queue, Instant mix). */
+  onLongPress?: (item: BaseItemDto) => void;
   last?: boolean;
 }) {
   const s = useStyles(makeStyles);
@@ -47,8 +50,11 @@ export const TrackRow = memo(function TrackRow({
     <Touchable
       kind="row"
       onPress={() => onPress(item)}
+      onLongPress={onLongPress ? () => onLongPress(item) : undefined}
       accessibilityRole="button"
       accessibilityLabel={[item.Name, artist, time, playing ? 'playing' : null].filter(Boolean).join(', ')}
+      accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'More actions' }] : undefined}
+      onAccessibilityAction={onLongPress ? () => onLongPress(item) : undefined}
       style={({ pressed, hovered, focused }) => [s.track, { paddingLeft: l.gutter }, (pressed || hovered || focused) && s.active]}>
       {showArt ? (
         <ItemImage item={item} variant="square" width={scaled(sizes.trackArt)} aspectRatio={1} rounded={6} hideArtTitle />

@@ -23,6 +23,7 @@ import { buildImageUrl } from '@/images/image-url';
 import { formatClock, playedFraction } from '@/lib/format';
 import { isTV } from '@/platform/tv';
 import { usePlayer } from '@/player';
+import { audioResumeTicks } from '@/player/audio/resume';
 import { createStyles,
   type AppTheme,
   font,
@@ -61,6 +62,8 @@ interface DetailScaffoldProps<Row> {
   playLabel?: string;
   /** Album pages: Play and Shuffle as two tonal buttons. */
   onShuffle?: () => void;
+  /** More round buttons after Played and Favourite (Instant mix). */
+  extraActions?: { icon: IconName; label: string; onPress: () => void }[];
   rows?: Row[];
   renderRow?: (row: Row, index: number) => ReactElement;
   rowKey?: (row: Row, index: number) => string;
@@ -91,6 +94,7 @@ export function DetailScaffold<Row>({
   playable,
   playLabel,
   onShuffle,
+  extraActions,
   rows,
   renderRow,
   rowKey,
@@ -113,16 +117,19 @@ export function DetailScaffold<Row>({
   const layout = heroLayout(item);
   const media = layout === 'backdrop' || layout === 'wide';
   const twoColumn = l.contentWidth >= 900;
-  const heroH = heroHeight(layout, l.width, l.height, twoColumn);
-  const pageWidth = Math.min(l.width, 1280);
+  // The width beside an iPad sidebar (TV keeps the full screen behind its rail).
+  const screenW = l.tv ? l.width : l.contentWidth;
+  const heroH = heroHeight(layout, screenW, l.height, twoColumn);
+  const pageWidth = Math.min(screenW, 1280);
 
   const favorite = !!item.UserData?.IsFavorite;
   const played = !!item.UserData?.Played;
   const favAction = actions.find((a) => a.id === (favorite ? 'builtin.unfavorite' : 'builtin.favorite'));
   const playedAction = actions.find((a) => a.id === (played ? 'builtin.unplayed' : 'builtin.played'));
-  const position = item.UserData?.PlaybackPositionTicks ?? 0;
-  const resumable = position > 0 && VIDEO_TYPES.has(item.Type ?? '');
-  const progress = resumable ? playedFraction(item) : null;
+  const audioResume = audioResumeTicks(item);
+  const position = audioResume ?? item.UserData?.PlaybackPositionTicks ?? 0;
+  const resumable = position > 0 && (VIDEO_TYPES.has(item.Type ?? '') || audioResume !== null);
+  const progress = resumable ? (audioResume !== null && item.RunTimeTicks ? audioResume / item.RunTimeTicks : playedFraction(item)) : null;
   const primaryLabel = playLabel ?? (resumable ? `Resume ${formatClock(position) ?? ''}`.trim() : 'Play');
 
   const facts = meta.filter((m): m is string => !!m);
@@ -143,6 +150,7 @@ export function DetailScaffold<Row>({
   }
   if (playedAction) secondary.push({ icon: 'checkmark', label: 'Played', active: played, onPress: () => run(playedAction) });
   if (favAction) secondary.push({ icon: favorite ? 'heart.fill' : 'heart', label: 'Favourite', active: favorite, onPress: () => run(favAction) });
+  for (const a of extraActions ?? []) secondary.push(a);
   secondary.push({ icon: 'ellipsis', label: 'More', onPress: () => setSheet(true) });
 
   const centered = !twoColumn;
@@ -301,10 +309,11 @@ export function DetailScaffold<Row>({
 function Hero({ item, height, style }: { item: BaseItemDto; height: number; style: ReturnType<typeof useAnimatedStyle> }) {
   const { c } = useTheme();
   const l = useLayout();
+  const w = l.tv ? l.width : l.contentWidth;
   return (
     <View style={[styles.heroClip, { height }]}>
       <Animated.View style={[StyleSheet.absoluteFill, style]}>
-        <ItemImage item={item} variant="backdrop" width={l.width} aspectRatio={l.width / height} rounded={0} hideArtTitle hairline={false} />
+        <ItemImage item={item} variant="backdrop" width={w} aspectRatio={w / height} rounded={0} hideArtTitle hairline={false} />
       </Animated.View>
       <LinearGradient colors={[withAlpha(c.bg, 0), withAlpha(c.bg, 0), c.bg]} locations={[0, 0.45, 1]} style={StyleSheet.absoluteFill} />
       <LinearGradient colors={[mediaColors.heroTopScrim, 'rgba(0,0,0,0)']} locations={[0, 1]} style={[styles.topScrim, { height: height * 0.22 }]} />

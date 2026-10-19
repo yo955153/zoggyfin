@@ -4,8 +4,16 @@
  */
 import { itemActions } from '@/registry/item-actions';
 
-const PLAYABLE = new Set(['Movie', 'Episode', 'Video', 'MusicVideo', 'Audio', 'AudioBook', 'MusicAlbum', 'Playlist', 'Series', 'Season', 'BoxSet']);
-const WATCHABLE = new Set(['Movie', 'Episode', 'Video', 'MusicVideo', 'Series', 'Season', 'BoxSet']);
+const PLAYABLE = new Set(['Movie', 'Episode', 'Video', 'MusicVideo', 'Audio', 'AudioBook', 'MusicAlbum', 'MusicArtist', 'MusicGenre', 'Playlist', 'Series', 'Season', 'BoxSet']);
+const WATCHABLE = new Set(['Movie', 'Episode', 'Video', 'MusicVideo', 'Series', 'Season', 'BoxSet', 'AudioBook']);
+/** Items whose audio can go into the queue. */
+const QUEUEABLE = new Set(['Audio', 'AudioBook', 'MusicAlbum', 'MusicArtist', 'MusicGenre']);
+/** Items the server can build an Instant Mix from. */
+const MIXABLE = new Set(['Audio', 'MusicAlbum', 'MusicArtist', 'MusicGenre']);
+
+function queueable(item: { Type?: string | null; MediaType?: string | null }): boolean {
+  return QUEUEABLE.has(item.Type ?? '') || (item.Type === 'Playlist' && item.MediaType === 'Audio');
+}
 
 let registered = false;
 
@@ -20,6 +28,30 @@ export function registerBuiltinItemActions(): void {
     order: 10,
     when: ({ item }) => PLAYABLE.has(item.Type ?? ''),
     run: ({ item, app }) => app.play(item),
+  });
+  itemActions.register({
+    id: 'builtin.playNext',
+    title: 'Play next',
+    icon: 'text.line.first.and.arrowtriangle.forward',
+    order: 12,
+    when: ({ item, app }) => !!app.playNext && queueable(item),
+    run: ({ item, app }) => app.playNext?.(item),
+  });
+  itemActions.register({
+    id: 'builtin.addToQueue',
+    title: 'Add to queue',
+    icon: 'text.append',
+    order: 13,
+    when: ({ item, app }) => !!app.addToQueue && queueable(item),
+    run: ({ item, app }) => app.addToQueue?.(item),
+  });
+  itemActions.register({
+    id: 'builtin.instantMix',
+    title: 'Instant mix',
+    icon: 'wand.and.stars',
+    order: 14,
+    when: ({ item, app }) => !!app.instantMix && (MIXABLE.has(item.Type ?? '') || (item.Type === 'Playlist' && item.MediaType === 'Audio')),
+    run: ({ item, app }) => app.instantMix?.(item),
   });
   itemActions.register({
     id: 'builtin.favorite',
