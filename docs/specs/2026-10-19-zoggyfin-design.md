@@ -103,6 +103,11 @@ One Expo code base for all targets. Every phase keeps all of them working.
   a clear focus ring, D-pad focus order that never traps, Back/Menu that always goes
   back, no touch gestures. Players map remote keys (play/pause, seek, back). Fire TV has
   no Google services. Not on TV: watch together, downloads, extension web panels.
+  The baseline TV is a low-end stick: Android 9 (API 28), 32-bit `armeabi-v7a` only,
+  about 900 MB RAM, 1080p. So TV builds keep `armeabi-v7a` in the APK, use a light mode
+  (smaller expo-image memory cache, server-sized images at TV tile size, fewer rows
+  mounted at once, no blur materials), and build the Android device profile from the
+  decoders the device reports (MediaCodecList), never from a fixed list.
 - Native-only modules (MPV, background downloader, Google Cast, CarPlay, Live Activity)
   live behind `*.native.ts` / `*.web.ts` files or a capability check, so the web build
   never imports them.
