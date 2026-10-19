@@ -33,6 +33,11 @@ export interface ItemActionContext {
   app: AppActionApi;
   /** Platform the app runs on, for actions that only make sense on some. */
   platform: 'ios' | 'android' | 'web' | string;
+  /**
+   * Facts that need an extra request (the item's library and file path).
+   * The sheet loads them only when a registered action asks for them.
+   */
+  facts?: { libraryName?: string | null; path?: string | null };
 }
 
 export interface ItemAction {

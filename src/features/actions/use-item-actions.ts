@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useSyncExternalStore } from 'react';
 import { Platform } from 'react-native';
 
@@ -10,6 +10,8 @@ import { useApi } from '@/api/use-api';
 import { router } from 'expo-router';
 
 import { downloads, downloadsSupported } from '@/downloads';
+import { loadItemFacts, needsItemFacts } from '@/extensions/runtime';
+import { useExtensions } from '@/extensions/store';
 import { downloadsState, statusOf, useDownloadsStore } from '@/downloads/store';
 import { openAddToPlaylist, openRenamePlaylist } from '@/features/playlists/add-to-playlist';
 import * as playlistOps from '@/features/playlists/ops';
@@ -85,17 +87,28 @@ export function useItemActions(item: BaseItemDto | undefined) {
     };
   }, [api, userId, scope, qc, openItem, player]);
 
+  // Extension actions can filter on the item's library or file path: load them only then.
+  const extList = useExtensions((st) => st.list);
+  const wantFacts = useMemo(() => extList.length > 0 && needsItemFacts(), [extList]);
+  const factsQ = useQuery({
+    queryKey: [...queryKeys.all(scope), 'ext-facts', item?.Id ?? ''],
+    queryFn: () => loadItemFacts(item?.Id ?? ''),
+    enabled: wantFacts && !!item?.Id,
+    staleTime: 5 * 60_000,
+  });
+  const facts = factsQ.data;
+
   const actions = useMemo(
-    () => (item ? actionsFor({ item, app, platform: Platform.OS }) : []),
+    () => (item ? actionsFor({ item, app, platform: Platform.OS, facts }) : []),
     // `version` changes when the registry changes; `dlKey` when the download state does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [item, app, version, dlKey],
+    [item, app, version, dlKey, facts],
   );
-  const titleOf = (action: ItemAction) => (item ? actionTitle(action, { item, app, platform: Platform.OS }) : action.title);
+  const titleOf = (action: ItemAction) => (item ? actionTitle(action, { item, app, platform: Platform.OS, facts }) : action.title);
 
   const run = (action: ItemAction) => {
     if (!item) return;
-    Promise.resolve(action.run({ item, app, platform: Platform.OS })).catch((e: unknown) =>
+    Promise.resolve(action.run({ item, app, platform: Platform.OS, facts })).catch((e: unknown) =>
       toast(describeError(e).title),
     );
   };

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "org.example.hello",
+  "name": "Hello",
+  "version": "1.0.0",
+  "description": "A sample extension. It greets items, shows a Home row, takes links and has a page.",
+  "baseUrl": "http://localhost:8787",
+  "permissions": ["network"],
+  "contributes": {
+    "settings": [
+      { "key": "greeting", "type": "choice", "label": "Greeting", "options": [{ "value": "Hello", "label": "Hello" }, { "value": "Hi", "label": "Hi" }] },
+      { "key": "user", "type": "text", "label": "Your name", "source": "jellyfin.userName" }
+    ],
+    "itemActions": [
+      {
+        "id": "greet",
+        "title": "Say hello",
+        "icon": "wand.and.stars",
+        "when": { "types": ["Movie", "Episode", "Video", "Audio", "MusicAlbum"] },
+        "inputs": [{ "key": "mood", "type": "choice", "title": "Mood", "source": "/moods" }],
+        "confirm": { "title": "Greet {{item.name}}?", "message": "The sample server counts to ten.", "action": "Greet" },
+        "request": {
+          "method": "POST",
+          "path": "/greet",
+          "body": { "itemId": "{{item.id}}", "name": "{{item.name}}", "mood": "{{input.mood}}", "greeting": "{{settings.greeting}}", "user": "{{settings.user}}" }
+        }
+      }
+    ],
+    "homeSections": [{ "id": "cards", "title": "Hello cards", "feed": "/feed", "refreshSeconds": 15 }],
+    "shareTargets": [{ "id": "send", "title": "Send to Hello", "request": { "method": "POST", "path": "/share", "body": { "url": "{{share.url}}" } } }],
+    "panels": [{ "id": "main", "title": "Hello", "url": "/panel" }]
+  }
+}

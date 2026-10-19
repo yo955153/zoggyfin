@@ -1,0 +1,89 @@
+/**
+ * An extension panel: the extension's own web page, over the app. The page
+ * can only use the six bridge methods (see extensions/bridge.ts).
+ */
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Platform, View } from 'react-native';
+
+import { getItem } from '@/api/jellyfin';
+import { useApi } from '@/api/use-api';
+import { EmptyState } from '@/components/states';
+import type { BridgeRequest } from '@/extensions/bridge';
+import { handleBridgeRequest } from '@/extensions/bridge';
+import { resolveOnOrigin } from '@/extensions/match';
+import { currentAccount, refreshLibrary, templateContext } from '@/extensions/runtime';
+import { useExtensions } from '@/extensions/store';
+import { render } from '@/extensions/template';
+import { ModalHeader } from '@/extensions/ui/modal-header';
+import { PanelView } from '@/extensions/ui/panel-view';
+import { itemHref } from '@/lib/navigation';
+import { toast } from '@/lib/toast';
+import { usePlayer } from '@/player';
+import { useTheme } from '@/theme';
+
+export default function ExtensionPanelScreen() {
+  const { ext: extId, panel: panelId } = useLocalSearchParams<{ ext: string; panel: string }>();
+  const ext = useExtensions((st) => st.list.find((e) => e.manifest.id === extId));
+  const panel = ext?.manifest.contributes.panels?.find((p) => p.id === panelId);
+  const { api, userId } = useApi();
+  const player = usePlayer();
+  const { c, scheme } = useTheme();
+  const [error, setError] = useState<string | null>(null);
+
+  const close = useCallback(() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/(home)')), []);
+
+  const url = useMemo(() => {
+    if (!ext || !panel) return null;
+    try {
+      return resolveOnOrigin(ext.manifest.baseUrl, render(panel.url, templateContext(ext), encodeURIComponent)).toString();
+    } catch {
+      return null;
+    }
+  }, [ext, panel]);
+
+  const handle = useCallback(
+    (req: BridgeRequest) =>
+      handleBridgeRequest(req, {
+        context: () => {
+          if (!ext) return null;
+          const ctx = templateContext(ext);
+          const account = currentAccount();
+          const token = ext.grants.jellyfinToken && ext.manifest.permissions.includes('jellyfinToken') ? account?.token : undefined;
+          return {
+            extension: { id: ext.manifest.id, name: ext.manifest.name, version: ext.manifest.version },
+            settings: ctx.settings,
+            jellyfin: { ...ctx.jellyfin, ...(token ? { token } : null) },
+            theme: scheme,
+            platform: Platform.OS,
+          };
+        },
+        play: async (itemId) => player.play({ item: await getItem(api, userId, itemId) }),
+        openItem: async (itemId) => {
+          const item = await getItem(api, userId, itemId);
+          const href = itemHref('(home)', item);
+          close();
+          if (href) setTimeout(() => router.push(href), 50);
+        },
+        refreshLibrary,
+        toast: (text) => toast(text),
+        close,
+      }),
+    [ext, scheme, player, api, userId, close],
+  );
+
+  return (
+    <View style={{ flex: 1, backgroundColor: c.bgGrouped }}>
+      <ModalHeader title={panel?.title ?? ext?.manifest.name ?? 'Extension'} onClose={close} />
+      {!ext || !panel || !url ? (
+        <EmptyState icon="square.grid.2x2" title="Panel not found" message="The extension is off or removed, or it has no such panel." />
+      ) : !ext.enabled ? (
+        <EmptyState icon="square.grid.2x2" title={`${ext.manifest.name} is off`} message="Turn it on in Settings, Extensions." />
+      ) : error ? (
+        <EmptyState icon="exclamationmark.triangle" title="The page stopped" message={error} />
+      ) : (
+        <PanelView url={url} baseUrl={ext.manifest.baseUrl} handle={handle} onError={setError} />
+      )}
+    </View>
+  );
+}

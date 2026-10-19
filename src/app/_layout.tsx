@@ -17,6 +17,7 @@ import {
 import { useSession, useSessionStore } from '@/auth/session-store';
 import { ToastHost } from '@/components/toast-host';
 import { downloads, downloadsSupported } from '@/downloads';
+import { ExtensionsHost } from '@/extensions/ui/host';
 import { setNoAccountOpen, useNoAccountStore } from '@/features/offline/use-offline-entries';
 import { AddToPlaylistHost } from '@/features/playlists/add-to-playlist';
 import { UpdateCardHost } from '@/features/updates/update-card';
@@ -94,6 +95,9 @@ function Root({ session }: { session: boolean }) {
               <Stack.Protected guard={session}>
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="add-account" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="extension-install" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="extension-panel" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="share" />
               </Stack.Protected>
               <Stack.Protected guard={!session}>
                 <Stack.Screen name="sign-in" />
@@ -128,6 +132,7 @@ function Root({ session }: { session: boolean }) {
               </Stack.Protected>
             </Stack>
             {session ? <AddToPlaylistHost /> : null}
+            {session ? <ExtensionsHost /> : null}
             <UpdateCardHost />
             <ToastHost />
           </View>

@@ -1,0 +1,7 @@
+{
+  "name": "zoggyfin-share",
+  "version": "0.1.0",
+  "description": "Reads links that other Android apps share to Zoggyfin (ACTION_SEND, text/plain).",
+  "license": "MPL-2.0",
+  "private": true
+}

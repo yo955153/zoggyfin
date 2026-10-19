@@ -17,6 +17,7 @@ import { ActionRow, Group, InfoRow, makeSettingsStyles, SettingsRow, webSwitchCo
 import { UpdateSettingsRow } from '@/features/updates/update-row';
 import { confirmDestructive as confirm } from '@/lib/confirm';
 import { devOffline, setDevOffline } from '@/lib/dev-offline';
+import { useExtensions } from '@/extensions/store';
 import { checkServer } from '@/lib/online';
 import { formatBytes } from '@/lib/format';
 import { toast } from '@/lib/toast';
@@ -84,6 +85,8 @@ export default function SettingsScreen() {
           <PlaybackSection />
 
           {downloadsSupported ? <DownloadsSection /> : null}
+
+          <ExtensionsSection />
 
           <Group title="This device" footer="Zoggyfin is open source under the MPL-2.0. It is not affiliated with the Jellyfin project.">
             <InfoRow icon="tv" label="Device" value={id.device} />
@@ -247,6 +250,24 @@ function DownloadsSection() {
         onSelect={(v) => update({ downloadQuality: v })}
         onClose={() => setOpen(false)}
       />
+    </Group>
+  );
+}
+
+/** Extensions: the list, and a quick way to send a link to one. */
+function ExtensionsSection() {
+  const count = useExtensions((st) => st.list.length);
+  const takesLinks = useExtensions((st) => st.list.some((e) => e.enabled && (e.manifest.contributes.shareTargets?.length ?? 0) > 0));
+  return (
+    <Group title="Extensions" footer="Extensions add buttons, Home rows and pages from your own servers, for example a downloader.">
+      <SettingsRow
+        icon="square.grid.2x2"
+        label="Extensions"
+        value={count ? String(count) : undefined}
+        onPress={() => router.push('/(tabs)/(home)/extensions')}
+        last={!takesLinks}
+      />
+      {takesLinks ? <SettingsRow icon="globe" label="Send link to…" onPress={() => router.push('/share')} last /> : null}
     </Group>
   );
 }
