@@ -84,6 +84,23 @@ export const ANDROID_SYMBOLS = {
   'info.circle': 'info',
   'moon.fill': 'dark_mode',
   'sun.max.fill': 'light_mode',
+  'backward.end.fill': 'skip_previous',
+  'forward.end.fill': 'skip_next',
+  'repeat': 'repeat',
+  'repeat.1': 'repeat_one',
+  'quote.bubble': 'lyrics',
+  'airplay.audio': 'cast',
+  'line.3.horizontal': 'drag_handle',
+  'moon.zzz': 'bedtime',
+  'speaker.fill': 'volume_mute',
+  'speaker.wave.3.fill': 'volume_up',
+  'text.line.first.and.arrowtriangle.forward': 'playlist_play',
+  'text.append': 'playlist_add',
+  'wand.and.stars': 'auto_awesome',
+  'list.number': 'format_list_numbered',
+  'arrow.up': 'arrow_upward',
+  'chevron.up': 'expand_less',
+  'timer': 'timer',
 } as const satisfies Record<string, AndroidSymbol>;
 
 export type IconName = keyof typeof ANDROID_SYMBOLS;

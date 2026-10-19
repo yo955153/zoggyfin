@@ -2,6 +2,7 @@ import { NativeTabs } from 'expo-router/native-tabs';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GlobalPlayerKeys } from '@/features/player/global-keys';
 import { MiniPlayer, useMiniPlayerVisible } from '@/features/player/mini-player';
 import { features } from '@/platform/tv';
 import { fontFamily, spacing, useLayout, useTheme } from '@/theme';
@@ -75,11 +76,11 @@ export default function TabsLayout() {
       </NativeTabs.Trigger>
     </NativeTabs>
   );
-  if (HAS_ACCESSORY) return tabs;
   return (
     <View style={styles.flex}>
       {tabs}
-      {mini ? <FloatingMiniPlayer /> : null}
+      {mini && !HAS_ACCESSORY ? <FloatingMiniPlayer /> : null}
+      <GlobalPlayerKeys />
     </View>
   );
 }

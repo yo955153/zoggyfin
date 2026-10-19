@@ -16,7 +16,7 @@ function airPlayVideo(): WebKitVideo | null {
 }
 
 /** Web: Safari's AirPlay picker when the browser has one; nothing elsewhere. */
-export function AirPlayButton({ onOpen }: { onOpen?: () => void }) {
+export function AirPlayButton({ onOpen }: { onOpen?: () => void; audio?: boolean }) {
   if (!airPlayVideo()) return null;
   return (
     <Pressable

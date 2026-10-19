@@ -7,8 +7,9 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { Icon } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
 import { episodeLabel } from '@/lib/format';
-import { openFullPlayer } from '@/player';
-import { videoSession } from '@/player/session';
+import { activePlayback, openFullPlayer } from '@/player';
+import { artistLine } from '@/player/audio/item';
+import { useAudioStore } from '@/player/audio/store';
 import { usePlayerStore } from '@/player/store';
 
 import { createStyles, type AppTheme, font, useStyles, useTheme } from '@/theme';
@@ -35,6 +36,10 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
   const lift = useSharedValue(0);
   const liftStyle = useAnimatedStyle(() => ({ transform: [{ translateY: lift.get() }] }));
 
+  const isAudio = usePlayerStore((s) => s.now?.kind === 'audio');
+  const sourceName = useAudioStore((s) => s.queue.source?.name);
+  const shift = useSharedValue(0);
+  const shiftStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shift.get() }] }));
   const swipe = Gesture.Pan()
     .activeOffsetY(-12)
     .failOffsetX([-20, 20])
@@ -43,41 +48,81 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
       lift.set(withSpring(0, { ...motion.spring.smooth, velocity: e.velocityY }));
       if (e.translationY < -30 || e.velocityY < -500) scheduleOnRN(openFullPlayer);
     });
+  // Audio: swipe left for the next track, right for the previous one.
+  const skipTrack = (dir: number) => {
+    if (Platform.OS !== 'web') void Haptics.selectionAsync();
+    if (dir < 0) activePlayback.next();
+    else activePlayback.previous();
+  };
+  const sideSwipe = Gesture.Pan()
+    .enabled(isAudio)
+    .activeOffsetX([-16, 16])
+    .failOffsetY([-12, 12])
+    .onUpdate((e) => shift.set(e.translationX * 0.35))
+    .onEnd((e) => {
+      shift.set(withSpring(0, { ...motion.spring.snappy, velocity: e.velocityX }));
+      if (Math.abs(e.translationX) > 60 || Math.abs(e.velocityX) > 700) scheduleOnRN(skipTrack, e.translationX < 0 ? -1 : 1);
+    });
+  const gestures = Gesture.Race(swipe, sideSwipe);
 
   if (!now) return null;
   const item = now.item;
-  const sub = item.Type === 'Episode' ? [item.SeriesName, episodeLabel(item)].filter(Boolean).join(' · ') : (item.ProductionYear ? String(item.ProductionYear) : 'Video');
+  const sub = isAudio
+    ? (artistLine(item) ?? item.Album ?? sourceName ?? 'Audio')
+    : item.Type === 'Episode'
+      ? [item.SeriesName, episodeLabel(item)].filter(Boolean).join(' · ')
+      : item.ProductionYear
+        ? String(item.ProductionYear)
+        : 'Video';
   const toggle = () => {
     if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    videoSession().togglePlay();
+    activePlayback.togglePlay();
   };
+  const art = isAudio ? (
+    <ItemImage item={item} variant="square" width={38} aspectRatio={1} rounded={radius.sm} hideArtTitle />
+  ) : (
+    <ItemImage item={item} variant="landscape" width={38 * (16 / 9)} aspectRatio={16 / 9} rounded={radius.sm} hideArtTitle />
+  );
 
   const content = (
-    <Pressable onPress={openFullPlayer} accessibilityRole="button" accessibilityLabel={`Now playing: ${item.Name ?? ''}. Opens the player`} style={styles.row}>
-      {!inline ? <ItemImage item={item} variant="landscape" width={38 * (16 / 9)} aspectRatio={16 / 9} rounded={radius.sm} hideArtTitle /> : null}
-      <View style={styles.text}>
-        <Text style={styles.title} numberOfLines={1}>
-          {item.Name}
-        </Text>
-        {!inline ? (
-          <Text style={styles.sub} numberOfLines={1}>
-            {sub}
+    // The buttons are siblings of the "open" area, not inside it: no nested buttons on web.
+    <View style={styles.row}>
+      {inline && isAudio ? (
+        <Pressable onPress={() => activePlayback.previous()} hitSlop={4} style={styles.buttonSmall} accessibilityRole="button" accessibilityLabel="Previous track">
+          <Icon name="backward.fill" size={iconSize.sm} color={c.text} />
+        </Pressable>
+      ) : null}
+      <Pressable onPress={openFullPlayer} accessibilityRole="button" accessibilityLabel={`Now playing: ${item.Name ?? ''}. Opens the player`} style={styles.open}>
+        {!inline ? art : null}
+        <Animated.View style={[styles.text, shiftStyle]}>
+          <Text style={styles.title} numberOfLines={1}>
+            {item.Name}
           </Text>
-        ) : null}
-      </View>
+          {!inline ? (
+            <Text style={styles.sub} numberOfLines={1}>
+              {sub}
+            </Text>
+          ) : null}
+        </Animated.View>
+      </Pressable>
       <Pressable onPress={toggle} hitSlop={6} style={styles.button} accessibilityRole="button" accessibilityLabel={playing ? 'Pause' : 'Play'}>
         <Icon name={playing ? 'pause.fill' : 'play.fill'} size={iconSize.md} color={c.text} weight="semibold" />
       </Pressable>
+      {isAudio ? (
+        <Pressable onPress={() => activePlayback.next()} hitSlop={inline ? 4 : 6} style={inline ? styles.buttonSmall : styles.button} accessibilityRole="button" accessibilityLabel="Next track">
+          <Icon name="forward.fill" size={inline ? iconSize.sm : iconSize.md - 2} color={c.text} />
+        </Pressable>
+      ) : null}
       {!inline ? (
-        <Pressable onPress={() => void videoSession().stop()} hitSlop={6} style={styles.button} accessibilityRole="button" accessibilityLabel="Stop playback">
+        <Pressable onPress={() => activePlayback.stop()} hitSlop={6} style={styles.button} accessibilityRole="button" accessibilityLabel="Stop playback">
           <Icon name="xmark" size={iconSize.sm} color={c.text2} weight="semibold" />
         </Pressable>
       ) : null}
-    </Pressable>
+    </View>
   );
 
   return (
-    <GestureDetector gesture={swipe}>
+    <GestureDetector gesture={gestures}>
       <Animated.View style={[styles.wrap, floating && styles.floating, liftStyle]}>
         {floating ? (
           <Glass variant="regular" scheme="auto" style={styles.capsule}>
@@ -114,10 +159,12 @@ const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
   },
   fillWrap: { flex: 1, justifyContent: 'center', overflow: 'hidden', borderRadius: radius.pill },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.sm, paddingRight: spacing.xs, minHeight: 52 },
+  open: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, alignSelf: 'stretch' },
   text: { flex: 1, minWidth: 0 },
   title: { ...font(type.tileTitle), color: c.text },
   sub: { ...font(type.caption1), color: c.text2 },
   button: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  buttonSmall: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
   progressTrack: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: 0, height: 2, overflow: 'hidden', borderRadius: 1 },
   progressFill: { ...StyleSheet.absoluteFill, backgroundColor: c.accent },
 }));

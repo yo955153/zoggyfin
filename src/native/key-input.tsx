@@ -37,7 +37,7 @@ export function KeyInput({
     const listener = (e: KeyboardEvent) => {
       if (isTextTarget(e.target) || e.ctrlKey) return;
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      const known = [' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Escape', 'f', 'm', 'c', 'k', 'j', 'l'];
+      const known = [' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Escape', 'Backspace', 'Delete', 'f', 'm', 'c', 'k', 'j', 'l', 'q', 'n', 'p', 's', 'r'];
       if (!known.includes(key)) return;
       e.preventDefault();
       if (key === ' ' && e.target instanceof HTMLElement && e.target !== document.body) e.target.blur();

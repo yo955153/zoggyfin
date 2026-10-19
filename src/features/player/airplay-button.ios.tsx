@@ -3,14 +3,14 @@ import { StyleSheet } from 'react-native';
 
 import { c, player } from './tokens';
 
-/** The system AirPlay route picker. */
-export function AirPlayButton({ onOpen }: { onOpen?: () => void }) {
+/** The system AirPlay route picker. `audio` lists speakers first instead of TVs. */
+export function AirPlayButton({ onOpen, audio = false }: { onOpen?: () => void; audio?: boolean }) {
   return (
     <VideoAirPlayButton
       style={styles.button}
       tint={c.textOnMedia}
       activeTint={c.accent}
-      prioritizeVideoDevices
+      prioritizeVideoDevices={!audio}
       onBeginPresentingRoutes={onOpen}
       accessibilityLabel="AirPlay"
     />
