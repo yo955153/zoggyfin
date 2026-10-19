@@ -17,8 +17,12 @@ import {
   etaSeconds,
   fraction,
   useDiskSpace,
+  type OtherServerDownloads,
+  removeServerDownloads,
   useDownloadLists,
 } from '@/downloads';
+import { useAccounts } from '@/auth/session-store';
+import { switchAccount } from '@/features/servers/actions';
 import { OfflineBanner } from '@/features/offline/offline-banner';
 import { confirmDestructive } from '@/lib/confirm';
 import { formatBytes, formatEta, formatSpeed } from '@/lib/format';
@@ -40,8 +44,8 @@ export default function DownloadsScreen() {
   const root = useRootScreenOptions();
   // The iPad sidebar floats over the content: center the column in the space beside it.
   const sidebar = useSidebarInset();
-  const { inProgress, groups, appBytes } = useDownloadLists();
-  const empty = inProgress.length === 0 && groups.length === 0;
+  const { inProgress, groups, appBytes, others } = useDownloadLists();
+  const empty = inProgress.length === 0 && groups.length === 0 && others.length === 0;
   const allPaused = inProgress.length > 0 && inProgress.every((r) => r.state === 'paused' || r.state === 'failed');
 
   return (
@@ -116,6 +120,7 @@ export default function DownloadsScreen() {
                 <Text style={s.footer}>Swipe left on a row to delete it. Downloads play with no connection.</Text>
               </Animated.View>
             ) : null}
+            {others.length ? <OtherServers others={others} /> : null}
           </View>
         )}
       </ScrollView>
@@ -262,6 +267,54 @@ const GROUP_WORDS: Record<string, [string, string]> = {
   Series: ['episode', 'episodes'],
 };
 
+/**
+ * Downloads of the other saved servers stay on the device. They show here
+ * under their server name; switch to that server to play them.
+ */
+function OtherServers({ others }: { others: OtherServerDownloads[] }) {
+  const s = useStyles(makeStyles);
+  const { servers } = useAccounts();
+  return (
+    <View style={s.section}>
+      <View style={s.sectionHead}>
+        <Text style={s.sectionTitle} accessibilityRole="header">
+          OTHER SERVERS
+        </Text>
+      </View>
+      <View style={s.card}>
+        {others.map((o, i) => {
+          const server = servers.find((sv) => sv.id === o.serverId);
+          const user = server?.users[0];
+          const name = server?.name ?? 'A removed server';
+          const remove = async () => {
+            if (!(await confirmDestructive(`Delete the downloads of ${name}?`, `${o.count} ${o.count === 1 ? 'item' : 'items'} (${formatBytes(o.bytes)}) are removed from this device.`, 'Delete'))) return;
+            await removeServerDownloads(o.serverId);
+          };
+          return (
+            <View key={o.serverId} style={[s.otherRow, i < others.length - 1 && s.otherLine]}>
+              <View style={s.otherText}>
+                <Text style={s.otherName} numberOfLines={1}>
+                  {name}
+                </Text>
+                <Text style={s.otherMeta}>{`${o.count} ${o.count === 1 ? 'item' : 'items'} · ${formatBytes(o.bytes)}`}</Text>
+              </View>
+              {server && user ? (
+                <Touchable onPress={() => switchAccount({ serverId: server.id, userId: user.userId })} radius={8} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Switch to ${name}`}>
+                  <Text style={s.link}>Switch</Text>
+                </Touchable>
+              ) : null}
+              <Touchable onPress={() => void remove()} radius={8} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Delete the downloads of ${name}`}>
+                <Text style={s.otherDelete}>Delete</Text>
+              </Touchable>
+            </View>
+          );
+        })}
+      </View>
+      <Text style={s.footer}>Downloads of other servers stay on this device. Switch to the server to play them.</Text>
+    </View>
+  );
+}
+
 function GroupRow({ group: g, last }: { group: DownloadGroupView; last: boolean }) {
   const s = useStyles(makeStyles);
   const { c } = useTheme();
@@ -389,6 +442,12 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   link: { ...font(type.subheadline), fontWeight: '600' as const, color: c.accent },
   footer: { ...font(type.footnote), color: c.text2, marginHorizontal: spacing.lg },
   card: { backgroundColor: c.surface, borderRadius: radius.lg, overflow: 'hidden' as const, borderCurve: 'continuous' as const },
+  otherRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  otherLine: { borderBottomWidth: sizes.hairline, borderBottomColor: c.separator },
+  otherText: { flex: 1, gap: 2 },
+  otherName: { ...font(type.body), color: c.text },
+  otherMeta: { ...font(type.footnote), color: c.text2 },
+  otherDelete: { ...font(type.subheadline), fontWeight: '600' as const, color: c.danger },
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.md, paddingLeft: spacing.lg, minHeight: scaled(76), backgroundColor: c.surface },
   rowActive: { backgroundColor: c.surface3 },
   rowBody: {

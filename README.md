@@ -91,6 +91,23 @@ Phase 4 ("Downloads and playlists"):
 - Web: playlists work fully. Downloads are not on the web.
 - Development builds have "Simulate no server" in Settings to test offline mode.
 
+Servers and accounts:
+
+- Save many servers, each with one or more users. The avatar button on Home opens the
+  account switcher: one tap on a user switches to that server and user.
+- A server has internal and external addresses. The app checks all of them at the same
+  time and uses the first one in your order that answers as the same server (it compares
+  the server Id). It checks again at start, on foreground, on a network change and after
+  a failed request. Modes: Automatic, Always internal, Always external. An optional Wi-Fi
+  rule picks the internal address on named Wi-Fi networks (iOS and Android).
+- Settings, Servers: add, edit, order and remove addresses, "Find addresses", the
+  connection status ("Connected through Home network (internal)") with "Check again",
+  users, Add user, and Remove server (with its downloads, if you want).
+- Each account has its own cache. The Downloads tab shows the downloads of other servers
+  under "Other servers".
+- An install with one saved account moves to the new format at the first start, with no
+  new sign-in. See "Server addresses" in the design.
+
 The design is in [docs/specs](docs/specs/) and [docs/design](docs/design/).
 
 The native app includes a small local module, `modules/zoggyfin-native`, that reports
@@ -126,8 +143,10 @@ pnpm expo export --platform web
 
 The `dist/` folder is a static site. A self-hosted build can carry an optional
 `config.json` next to `index.html` to prefill the server address, for example
-`{ "defaultServerUrl": "http://jellyfin.example.lan:8096" }`.
-See `public/config.example.json`. The Jellyfin server must allow the web app's origin (CORS).
+`{ "defaultServerUrl": "http://jellyfin.example.lan:8096" }`. It fills the address field
+when no server is saved. See `public/config.example.json`. The Jellyfin server must allow
+the web app's origin (CORS). A web app served over https cannot use http server addresses
+(the browser blocks mixed content); the app shows a message for them.
 
 ## License
 

@@ -25,6 +25,10 @@ export const UNKNOWN_CONNECTION: ConnectionInfo = {
   checkedAt: 0,
 };
 
+/** Browsers block an http address from an https page (mixed content). */
+export const MIXED_CONTENT_TEXT =
+  'This page uses https, and the browser blocks http addresses (mixed content). Enter an https address of the server, or open the web app over http.';
+
 export const KIND_LABEL: Record<AddressKind, string> = {
   internal: 'Home network (internal)',
   external: 'Internet (external)',

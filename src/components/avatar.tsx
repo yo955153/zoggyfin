@@ -6,8 +6,11 @@ import { initials } from '@/images/generated-art';
 import { buildUserImageUrl, imageSource } from '@/images/image-url';
 import { createStyles, type AppTheme, fallbackArt, font, mediaColors, type, useStyles } from '@/theme';
 
+/** What the avatar needs: a session, or a saved user of a server (no token: user pictures are public). */
+export type AvatarUser = Pick<Session, 'serverId' | 'serverUrl' | 'userId' | 'userName' | 'userImageTag'> & { token: string | null };
+
 /** The user's picture, or initials on the generated-art colour of the user name. */
-export function Avatar({ session, size }: { session: Session; size: number }) {
+export function Avatar({ session, size }: { session: AvatarUser; size: number }) {
   const s = useStyles(makeStyles);
   const box = { width: size, height: size, borderRadius: size / 2 };
   if (session.userImageTag) {

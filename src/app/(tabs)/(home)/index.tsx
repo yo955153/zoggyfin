@@ -8,6 +8,7 @@ import { useApi } from '@/api/use-api';
 import { Avatar } from '@/components/avatar';
 import { Touchable } from '@/components/touchable';
 import { registerBuiltinHomeSections } from '@/features/home/builtin-sections';
+import { AccountSwitcher } from '@/features/servers/account-switcher';
 import { OfflineBanner } from '@/features/offline/offline-banner';
 import { useRootScreenOptions } from '@/lib/stack-options';
 import { isTV } from '@/platform/tv';
@@ -24,6 +25,7 @@ export default function HomeScreen() {
   const qc = useQueryClient();
   const sections = useSyncExternalStore(homeSections.subscribe, homeSections.list, homeSections.list);
   const [refreshing, setRefreshing] = useState(false);
+  const [accounts, setAccounts] = useState(false);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -39,10 +41,12 @@ export default function HomeScreen() {
           title: 'Home',
           headerRight: () => (
             <Touchable
-              onPress={() => router.push('/(tabs)/(home)/settings')}
+              onPress={() => setAccounts(true)}
+              onLongPress={() => router.push('/(tabs)/(home)/settings')}
               radius={sizes.avatarSmall / 2}
               accessibilityRole="button"
-              accessibilityLabel="Settings and account"
+              accessibilityLabel="Accounts and settings"
+              accessibilityHint="Switch server or user"
               hitSlop={8}>
               <Avatar session={session} size={sizes.avatarSmall} />
             </Touchable>
@@ -61,6 +65,7 @@ export default function HomeScreen() {
           </View>
         ))}
       </ScrollView>
+      <AccountSwitcher visible={accounts} onClose={() => setAccounts(false)} />
     </>
   );
 }

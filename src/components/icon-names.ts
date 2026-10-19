@@ -80,7 +80,7 @@ export const ANDROID_SYMBOLS = {
   'antenna.radiowaves.left.and.right': 'radio',
   'square.grid.2x2': 'grid_view',
   'circle.lefthalf.filled': 'contrast',
-  server: 'dns',
+  'server.rack': 'dns',
   'info.circle': 'info',
   'moon.fill': 'dark_mode',
   'sun.max.fill': 'light_mode',

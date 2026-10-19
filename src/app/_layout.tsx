@@ -101,6 +101,7 @@ function Root({ session }: { session: boolean }) {
                     gestureEnabled: false,
                   }}
                 />
+                <Stack.Screen name="add-account" options={{ presentation: 'modal' }} />
               </Stack.Protected>
               <Stack.Protected guard={!session}>
                 <Stack.Screen name="sign-in" />

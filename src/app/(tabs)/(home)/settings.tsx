@@ -3,17 +3,17 @@ import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { Platform, ScrollView, Switch, Text, View } from 'react-native';
 
-import { dropApi } from '@/api/client';
-import { logout } from '@/api/jellyfin';
 import { clearQueryCache } from '@/api/query-client';
 import { useApi } from '@/api/use-api';
 import { clientIdentity } from '@/auth/identity';
-import { useSessionStore } from '@/auth/session-store';
+import { useAccounts } from '@/auth/session-store';
 import { Avatar } from '@/components/avatar';
-import { Icon, type IconName } from '@/components/icon';
+import { Icon } from '@/components/icon';
 import { type Option, OptionSheet } from '@/components/option-sheet';
-import { Touchable } from '@/components/touchable';
 import { DOWNLOAD_QUALITY_OPTIONS, downloadsSupported, useDownloadLists } from '@/downloads';
+import { openAddServer, signOutUser } from '@/features/servers/actions';
+import { ConnectionStatus } from '@/features/servers/connection-status';
+import { ActionRow, Group, InfoRow, makeSettingsStyles, SettingsRow, webSwitchColors } from '@/features/settings/rows';
 import { confirmDestructive as confirm } from '@/lib/confirm';
 import { devOffline, setDevOffline } from '@/lib/dev-offline';
 import { checkServer } from '@/lib/online';
@@ -22,30 +22,29 @@ import { toast } from '@/lib/toast';
 import { isTV } from '@/platform/tv';
 import { APPEARANCE_OPTIONS, useAppearance } from '@/settings/appearance';
 import { QUALITY_OPTIONS, qualityLabel, SKIP_OPTIONS, usePlaybackSettings } from '@/settings/playback';
-import { createStyles, type AppTheme, font, iconSize, mediaColors, radius, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
+import { iconSize, mediaColors, scaled, sizes, spacing, useStyles, useTheme } from '@/theme';
 import { useSidebarInset } from '@/theme/sidebar-inset';
 
 export default function SettingsScreen() {
-  const styles = useStyles(makeStyles);
+  const styles = useStyles(makeSettingsStyles);
   const { c } = useTheme();
-  const { session, api } = useApi();
+  const { session } = useApi();
   const [busy, setBusy] = useState(false);
   // The iPad sidebar floats over the content: center the column in the space beside it.
   const sidebar = useSidebarInset();
   const id = clientIdentity();
 
   const signOut = async () => {
-    if (!(await confirm('Sign out?', `You will be signed out of ${session.serverName}.`, 'Sign out'))) return;
     setBusy(true);
-    // Tell the server, but never let a dead server keep the user signed in.
-    await Promise.race([logout(api).catch(() => undefined), new Promise((r) => setTimeout(r, 3000))]);
-    dropApi(session.serverUrl, session.token);
-    clearQueryCache();
-    useSessionStore.getState().signOut();
+    try {
+      await signOutUser({ serverId: session.serverId, userId: session.userId });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const clearCache = async () => {
-    if (!(await confirm('Clear cache?', 'Cached pages and images are removed. Nothing on the server changes.', 'Clear'))) return;
+    if (!(await confirm('Clear cache?', 'Cached pages and images of all servers are removed. Nothing on the server changes.', 'Clear'))) return;
     clearQueryCache();
     try {
       const { Image } = await import('expo-image');
@@ -73,19 +72,16 @@ export default function SettingsScreen() {
                 </Text>
               </View>
             </View>
+            <ConnectionStatus serverId={session.serverId} inset />
           </Group>
+
+          <ServersSection />
 
           <AppearanceSection />
 
           <PlaybackSection />
 
           {downloadsSupported ? <DownloadsSection /> : null}
-
-          <Group title="Server">
-            <InfoRow icon="server" label="Name" value={session.serverName} />
-            <InfoRow icon="info.circle" label="Address" value={session.serverUrl} />
-            <InfoRow icon="gauge" label="Version" value={session.serverVersion ? `Jellyfin ${session.serverVersion}` : 'Unknown'} last />
-          </Group>
 
           <Group title="This device" footer="Zoggyfin is open source under the MPL-2.0. It is not affiliated with the Jellyfin project.">
             <InfoRow icon="tv" label="Device" value={id.device} />
@@ -103,7 +99,7 @@ export default function SettingsScreen() {
             <ActionRow label="Clear cache" onPress={clearCache} />
           </Group>
           <Group>
-            <ActionRow label={busy ? 'Signing out' : 'Sign out'} onPress={signOut} disabled={busy} />
+            <ActionRow label={busy ? 'Signing out' : `Sign ${session.userName} out`} onPress={signOut} disabled={busy} />
           </Group>
         </View>
       </ScrollView>
@@ -111,8 +107,34 @@ export default function SettingsScreen() {
   );
 }
 
-/** RN Web paints the "on" thumb green unless told otherwise; the RN types do not list the prop. */
-const webSwitchColors: object = Platform.OS === 'web' ? { activeThumbColor: mediaColors.white } : {};
+/** Saved servers: each opens its page (addresses, mode, Wi-Fi rule, users). */
+function ServersSection() {
+  const { servers, active } = useAccounts();
+  const { c } = useTheme();
+  return (
+    <Group title="Servers" footer="A server can have more than one address. The app uses the first address in the list that answers.">
+      {servers.map((sv) => {
+        const users = sv.users.length;
+        return (
+          <SettingsRow
+            key={sv.id}
+            icon="server.rack"
+            label={sv.name}
+            value={`${sv.addresses.length} ${sv.addresses.length === 1 ? 'address' : 'addresses'} · ${users} ${users === 1 ? 'user' : 'users'}`}
+            onPress={() => router.push({ pathname: '/(tabs)/(home)/server/[id]', params: { id: sv.id } })}
+            trailing={
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                {active?.serverId === sv.id ? <Icon name="checkmark" size={scaled(iconSize.sm)} color={c.accent} weight="semibold" /> : null}
+                <Icon name="chevron.right" size={scaled(iconSize.sm - 2)} color={c.text3} weight="semibold" />
+              </View>
+            }
+          />
+        );
+      })}
+      <SettingsRow icon="plus" label="Add server" onPress={openAddServer} last />
+    </Group>
+  );
+}
 
 type PickerKey = 'wifi' | 'cellular' | 'back' | 'forward' | null;
 
@@ -245,138 +267,3 @@ function DevSection() {
     </Group>
   );
 }
-
-/** An inset grouped section (design system §7.15). */
-function Group({ title, footer, children }: { title?: string; footer?: string; children: React.ReactNode }) {
-  const styles = useStyles(makeStyles);
-  return (
-    <View style={styles.section}>
-      {title ? (
-        <Text style={styles.sectionTitle} accessibilityRole="header">
-          {title.toUpperCase()}
-        </Text>
-      ) : null}
-      <View style={styles.card}>{children}</View>
-      {footer ? <Text style={styles.footer}>{footer}</Text> : null}
-    </View>
-  );
-}
-
-function LeadingIcon({ name }: { name: IconName }) {
-  const styles = useStyles(makeStyles);
-  return (
-    <View style={styles.leading}>
-      <Icon name={name} size={scaled(iconSize.sm - 1)} color={mediaColors.white} />
-    </View>
-  );
-}
-
-function SettingsRow({
-  icon,
-  label,
-  value,
-  onPress,
-  last,
-  trailing,
-  role = 'button',
-  checked,
-}: {
-  icon: IconName;
-  label: string;
-  value?: string;
-  onPress: () => void;
-  last?: boolean;
-  trailing?: React.ReactNode;
-  role?: 'button' | 'radio' | 'switch';
-  checked?: boolean;
-}) {
-  const styles = useStyles(makeStyles);
-  const { c } = useTheme();
-  return (
-    <Touchable
-      kind="row"
-      onPress={onPress}
-      accessibilityRole={role}
-      accessibilityLabel={value ? `${label}: ${value}` : label}
-      accessibilityState={checked === undefined ? undefined : { checked }}
-      style={({ pressed, hovered, focused }) => [styles.rowPad, (pressed || hovered || focused) && styles.rowPressed]}>
-      <LeadingIcon name={icon} />
-      <View style={[styles.row, styles.rowBody, !last && styles.rowBorder]}>
-        <Text style={styles.label} numberOfLines={2}>
-          {label}
-        </Text>
-        <View style={styles.trailing}>
-          {value ? (
-            <Text style={styles.value} numberOfLines={1}>
-              {value}
-            </Text>
-          ) : null}
-          {trailing ?? <Icon name="chevron.right" size={scaled(iconSize.sm - 2)} color={c.text3} weight="semibold" />}
-        </View>
-      </View>
-    </Touchable>
-  );
-}
-
-function InfoRow({ icon, label, value, last }: { icon: IconName; label: string; value: string; last?: boolean }) {
-  const styles = useStyles(makeStyles);
-  return (
-    <View style={styles.rowPad} accessible accessibilityLabel={`${label}: ${value}`}>
-      <LeadingIcon name={icon} />
-      <View style={[styles.row, styles.rowBody, !last && styles.rowBorder]}>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={styles.value} numberOfLines={1} selectable>
-          {value}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function ActionRow({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
-  const styles = useStyles(makeStyles);
-  return (
-    <Touchable
-      kind="row"
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={({ pressed, hovered, focused }) => [styles.row, styles.actionRow, (pressed || hovered || focused) && styles.rowPressed]}>
-      <Text style={styles.destructive}>{label}</Text>
-    </Touchable>
-  );
-}
-
-const makeStyles = createStyles(({ c, scheme }: AppTheme) => ({
-  flex: { flex: 1 },
-  page: { backgroundColor: c.bgGrouped },
-  content: { padding: spacing.lg, paddingBottom: spacing.huge * 2 },
-  inner: { width: '100%' as const, maxWidth: scaled(sizes.settingsMaxWidth), alignSelf: 'center' as const, gap: spacing.xxl },
-  account: { minHeight: scaled(sizes.settingsAccountRow + 12), gap: spacing.md, paddingHorizontal: spacing.lg },
-  name: { ...font(type.headline), color: c.text },
-  muted: { ...font(type.subheadline), color: c.text2, marginTop: spacing.xxs },
-  section: { gap: spacing.sm - 2 },
-  sectionTitle: { ...font(type.footnote), letterSpacing: 0.4, color: c.text2, marginLeft: spacing.lg },
-  footer: { ...font(type.footnote), color: c.text2, marginHorizontal: spacing.lg },
-  card: { backgroundColor: c.surface, borderRadius: radius.lg, overflow: 'hidden' as const, borderCurve: 'continuous' as const },
-  rowPad: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingLeft: spacing.lg, gap: spacing.md },
-  row: { flexDirection: 'row' as const, alignItems: 'center' as const, minHeight: scaled(sizes.settingsRow), gap: spacing.md },
-  rowBody: { flex: 1, justifyContent: 'space-between' as const, paddingRight: spacing.lg, paddingVertical: spacing.sm },
-  rowBorder: { borderBottomWidth: sizes.hairline, borderBottomColor: c.separator },
-  rowPressed: { backgroundColor: c.surface3 },
-  leading: {
-    width: scaled(sizes.settingsIcon),
-    height: scaled(sizes.settingsIcon),
-    borderRadius: sizes.settingsIconRadius,
-    backgroundColor: scheme === 'light' ? c.text3 : c.surface3,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    borderCurve: 'continuous' as const,
-  },
-  label: { ...font(type.body), color: c.text, flexShrink: 1 },
-  trailing: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm, flexShrink: 1 },
-  value: { ...font(type.body), color: c.text2, flexShrink: 1, textAlign: 'right' as const },
-  actionRow: { justifyContent: 'center' as const },
-  destructive: { ...font(type.body), color: c.danger, textAlign: 'center' as const },
-}));

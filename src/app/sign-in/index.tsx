@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image } from 'expo-image';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
@@ -6,22 +6,32 @@ import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-na
 import LOGO from '@/assets/images/logo-mark.png';
 import { describeError } from '@/api/errors';
 import { findServer } from '@/api/jellyfin';
+import { useAccounts } from '@/auth/session-store';
 import { Button } from '@/components/button';
 import { TextField } from '@/components/text-field';
 import { loadRuntimeConfig } from '@/lib/runtime-config';
+import { pageIsHttps } from '@/servers/connection';
+import { MIXED_CONTENT_TEXT } from '@/servers/status';
 import { storage } from '@/storage/kv';
 import { createStyles, type AppTheme, font, scaled, sizes, spacing, type, useStyles } from '@/theme';
 
 const LAST_SERVER_KEY = 'server.lastUrl';
 
+/**
+ * The server address step. The same screen adds a server while signed in
+ * (`/add-account`, a sheet over the app) and signs in when signed out.
+ */
 export default function ServerScreen() {
   const styles = useStyles(makeStyles);
-  const [address, setAddress] = useState(() => storage.getString(LAST_SERVER_KEY) ?? '');
+  const adding = usePathname().startsWith('/add-account');
+  const saved = useAccounts().servers.length > 0;
+  const [address, setAddress] = useState(() => (adding ? '' : (storage.getString(LAST_SERVER_KEY) ?? '')));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (address) return;
+    // The preset of a self-hosted web build is for the first server only.
+    if (address || adding || saved) return;
     let live = true;
     loadRuntimeConfig().then((c) => {
       if (live && c.defaultServerUrl) setAddress((a) => a || (c.defaultServerUrl ?? ''));
@@ -34,18 +44,23 @@ export default function ServerScreen() {
   }, []);
 
   const connect = async () => {
-    setBusy(true);
     setError(null);
+    if (pageIsHttps() && /^http:\/\//i.test(address.trim())) {
+      setError(MIXED_CONTENT_TEXT);
+      return;
+    }
+    setBusy(true);
     try {
       const { url, info } = await findServer(address);
       storage.set(LAST_SERVER_KEY, url);
       router.push({
-        pathname: '/sign-in/login',
+        pathname: adding ? '/add-account/login' : '/sign-in/login',
         params: { url, serverId: info.Id ?? '', serverName: info.ServerName ?? 'Jellyfin', version: info.Version ?? '' },
       });
     } catch (e) {
       const d = describeError(e);
-      setError(d.kind === 'unknown' ? d.message : `${d.title}. ${d.message}`);
+      if (pageIsHttps() && d.kind === 'offline' && !/^https:\/\//i.test(address.trim())) setError(`${d.title}. ${MIXED_CONTENT_TEXT}`);
+      else setError(d.kind === 'unknown' ? d.message : `${d.title}. ${d.message}`);
     } finally {
       setBusy(false);
     }
@@ -59,7 +74,7 @@ export default function ServerScreen() {
           <Text style={styles.title} accessibilityRole="header">
             zoggyfin
           </Text>
-          <Text style={styles.subtitle}>Enter your server address.</Text>
+          <Text style={styles.subtitle}>{adding ? 'Enter the address of the server to add.' : 'Enter your server address.'}</Text>
           <TextField
             label="Server address"
             value={address}

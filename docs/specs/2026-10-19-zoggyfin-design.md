@@ -247,6 +247,61 @@ Servers and accounts (multiple), Quick Connect login, streaming quality (Wi-Fi /
 cellular), download quality, subtitle style, default audio/subtitle language, player
 skip lengths, clear cache.
 
+## Server addresses
+
+A saved server has a list of addresses, for example a home network address
+(`http://192.0.2.10:8096`, internal) and an internet address
+(`https://jellyfin.example.com`, external). The user adds, edits, orders and removes
+addresses in Settings, Servers. "Find addresses" reads `LocalAddress` from
+`/System/Info/Public` and offers it as the internal address.
+
+- **Choice.** The app sends `GET /System/Info/Public` to all addresses at the same time,
+  with a 1.5 s timeout. An address counts only when its server Id is the saved server Id.
+  The app never sends a token to an address that has not passed this check. The first
+  address in the user's order that answers wins. The result comes as soon as it is known.
+- **When.** At start, when the app comes to the front, on a network change (the `online`
+  event on the web), after a request that gets no answer, and every 2 minutes (30 s while
+  no address answers). The choice is kept as the server's last address for the next start.
+- **Modes.** Automatic (default), Always internal, Always external. The Always modes use
+  only the addresses of that kind.
+- **Wi-Fi rule** (Automatic mode, iOS and Android). On the named Wi-Fi networks the app
+  tries the internal addresses first; on other Wi-Fi networks and on cellular it tries
+  the external addresses first. When those do not answer, the other addresses are the
+  fallback, and the status line tells the user. The rule needs the Wi-Fi name, so iOS
+  needs location access and the Access WiFi Information entitlement. The app asks for
+  location only when the user turns the rule on. The native modules load after a check,
+  so an app binary without them hides the rule and uses the probe only.
+- **One place.** The session holds the address in use. The API client, image URLs,
+  stream URLs and the downloader read it from there, so a switch takes effect at once.
+  An API instance belongs to an account and moves to the new address.
+- **Images.** The image cache key is the server Id plus the path, without the host and
+  without the token. A switch of address does not download the images again.
+- **Playback.** A playing stream keeps its address. When it fails after a switch, the
+  player starts it again on the new address at the same position (a transcode gets a new
+  session).
+- **Web.** A browser blocks an http address from an https page (mixed content). The app
+  does not probe such an address and shows a clear message.
+
+## Servers and accounts
+
+The app keeps many servers, each with one or more signed-in users. Tokens are in the
+secure store (the keychain; `localStorage` on the web), one per server and user. The
+avatar button in the Home header opens the account switcher: one tap on a user switches
+to that server and user. A switch stops playback, because progress must not go to the
+wrong account.
+
+- The persisted query cache has one key per server and user, and only that account's
+  queries go into it. Data of one server never shows on another.
+- Downloads keep their server Id. The Downloads tab shows the downloads of the active
+  server, and under "Other servers" the downloads of the other servers, with their size,
+  a Switch button and a Delete button. A download runs for the account that queued it.
+- Remove a server: the app asks first, and offers to delete the downloads of that server.
+- The first start after the update moves the single-account record (`session.active`)
+  to the new format without a new sign-in. The app still writes `session.active` for
+  the active account, so an older app version keeps working after a rollback.
+- The self-hosted web build's `/config.json` `defaultServerUrl` fills the address field
+  when no server is saved.
+
 ## Quality bar
 
 - No frame drops on scroll of a 1,000-item grid on an iPhone 15-class device.

@@ -173,7 +173,7 @@ const LUCIDE: Record<IconName, Glyph> = {
   'antenna.radiowaves.left.and.right': { icon: Radio },
   'square.grid.2x2': { icon: LayoutGrid },
   'circle.lefthalf.filled': { icon: SunMoon },
-  server: { icon: Server },
+  'server.rack': { icon: Server },
   'info.circle': { icon: Info },
   'moon.fill': { icon: Moon },
   'sun.max.fill': { icon: Sun },

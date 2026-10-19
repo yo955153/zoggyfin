@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 
@@ -28,6 +28,12 @@ export default function LoginScreen() {
     version: params.version || null,
   };
   const api = getApi(server.url, null);
+  const adding = usePathname().startsWith('/add-account');
+  /** Signed in already (adding an account): close the sheet over the app after the switch. */
+  const finish = (result: Parameters<typeof completeSignIn>[1]) => {
+    completeSignIn(server, result);
+    if (adding) router.dismissTo('/(tabs)/(home)');
+  };
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -45,7 +51,7 @@ export default function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
-      completeSignIn(server, await authenticateByName(api, username.trim(), password));
+      finish(await authenticateByName(api, username.trim(), password));
     } catch (e) {
       const d = describeError(e);
       setError(d.kind === 'auth' ? 'Wrong username or password.' : `${d.title}. ${d.message}`);
@@ -76,7 +82,7 @@ export default function LoginScreen() {
         if (stopped || !s.Authenticated) return;
         stopped = true;
         clearInterval(timer);
-        completeSignIn(server, await authenticateWithQuickConnect(api, qcSecret));
+        finish(await authenticateWithQuickConnect(api, qcSecret));
       } catch (e) {
         if (stopped) return;
         stopped = true;
