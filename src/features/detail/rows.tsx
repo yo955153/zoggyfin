@@ -1,7 +1,8 @@
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 import { Text, View } from 'react-native';
 
 import type { BaseItemDto, BaseItemPerson } from '@/api/types';
+import { DownloadGlyph } from '@/components/download-indicator';
 import { Icon } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
 import { Touchable } from '@/components/touchable';
@@ -31,6 +32,7 @@ export const TrackRow = memo(function TrackRow({
   onPress,
   onLongPress,
   last,
+  trailing,
 }: {
   item: BaseItemDto;
   index: number;
@@ -39,6 +41,8 @@ export const TrackRow = memo(function TrackRow({
   /** Opens the item's action sheet (Play next, Add to queue, Instant mix). */
   onLongPress?: (item: BaseItemDto) => void;
   last?: boolean;
+  /** A trailing control (a drag handle in an editable playlist). */
+  trailing?: ReactNode;
 }) {
   const s = useStyles(makeStyles);
   const { c } = useTheme();
@@ -76,7 +80,9 @@ export const TrackRow = memo(function TrackRow({
             </Text>
           ) : null}
         </View>
+        <DownloadGlyph id={item.Id} />
         {time ? <Text style={s.trackTime}>{time}</Text> : null}
+        {trailing}
       </View>
     </Touchable>
   );
@@ -137,7 +143,10 @@ export const EpisodeRow = memo(function EpisodeRow({ item, onPress }: { item: Ba
         ) : null}
       </View>
       <View style={s.flex}>
-        <Text style={s.epLabel}>{label}</Text>
+        <View style={s.epTop}>
+          <Text style={[s.epLabel, s.flex]}>{label}</Text>
+          <DownloadGlyph id={item.Id} size={14} />
+        </View>
         <Text style={[s.epTitle, scriptStyle(item.Name, s.epTitle)]} numberOfLines={2}>
           {item.Name}
         </Text>
@@ -188,6 +197,7 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   trackSub: { ...font(type.footnote), color: c.text2, marginTop: 1 },
   trackTime: { ...font(type.footnote, { tabular: true }), color: c.text3 },
   episode: { flexDirection: 'row' as const, gap: spacing.md, paddingVertical: spacing.md },
+  epTop: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm },
   epLabel: { ...font(type.caption1, { tabular: true }), color: c.text2 },
   epTitle: { ...font(type.headline), color: c.text, marginTop: sizes.tileMetaGap },
   epOverview: { ...font(type.footnote), marginTop: spacing.xs },

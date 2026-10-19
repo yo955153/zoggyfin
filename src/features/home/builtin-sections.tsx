@@ -5,6 +5,8 @@
 import { router } from 'expo-router';
 
 import { useLatest, useNextUp, useResume, useViews } from '@/api/queries';
+import { downloadsSupported, useDownloadLists } from '@/downloads';
+import { useOffline } from '@/lib/online';
 import type { BaseItemDto } from '@/api/types';
 import { ItemRow } from '@/components/item-row';
 import { EmptyState } from '@/components/states';
@@ -95,13 +97,43 @@ function RecentlyAdded() {
   );
 }
 
+/** Downloads on this device as tiles: the album, the show or the movie. */
+function DownloadedRow() {
+  const { groups } = useDownloadLists();
+  const items = groups.map((g) => g.item);
+  if (!downloadsSupported || !items.length) return null;
+  return (
+    <ItemRow
+      title="Downloads"
+      shape={shapeForList(items, 'poster')}
+      items={items}
+      onSeeAll={() => router.navigate('/(tabs)/(downloads)/downloads')}
+      tileSubtitle={(it) => {
+        const g = groups.find((x) => x.id === it.Id);
+        return g && g.records.length > 1 ? `${g.records.length} ${g.type === 'Series' ? 'episodes' : 'songs'}` : undefined;
+      }}
+    />
+  );
+}
+
+/** Offline: the downloads come first, since they are what plays. */
+function DownloadedFirst() {
+  return useOffline() ? <DownloadedRow /> : null;
+}
+
+function DownloadedLast() {
+  return useOffline() ? null : <DownloadedRow />;
+}
+
 let registered = false;
 
 export function registerBuiltinHomeSections(): void {
   if (registered) return;
   registered = true;
+  homeSections.register({ id: 'builtin.downloadedOffline', order: 5, component: DownloadedFirst });
   homeSections.register({ id: 'builtin.continueWatching', order: 10, component: ContinueWatching });
   homeSections.register({ id: 'builtin.nextUp', order: 20, component: NextUp });
   homeSections.register({ id: 'builtin.continueListening', order: 30, component: ContinueListening });
   homeSections.register({ id: 'builtin.recentlyAdded', order: 40, component: RecentlyAdded });
+  homeSections.register({ id: 'builtin.downloaded', order: 50, component: DownloadedLast });
 }

@@ -17,6 +17,8 @@ import { ItemActionSheet } from '@/components/action-sheet';
 import { Button } from '@/components/button';
 import { Icon, type IconName } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
+import { ProgressRing } from '@/components/progress-ring';
+import { useDownloadStatus } from '@/downloads';
 import { Touchable } from '@/components/touchable';
 import { useItemActions } from '@/features/actions/use-item-actions';
 import { buildImageUrl } from '@/images/image-url';
@@ -62,6 +64,8 @@ interface DetailScaffoldProps<Row> {
   playLabel?: string;
   /** Album pages: Play and Shuffle as two tonal buttons. */
   onShuffle?: () => void;
+  /** Replaces what Play does (a playlist plays its entries). */
+  onPlay?: () => void;
   /** More round buttons after Played and Favourite (Instant mix). */
   extraActions?: { icon: IconName; label: string; onPress: () => void }[];
   rows?: Row[];
@@ -94,6 +98,7 @@ export function DetailScaffold<Row>({
   playable,
   playLabel,
   onShuffle,
+  onPlay,
   extraActions,
   rows,
   renderRow,
@@ -109,6 +114,7 @@ export function DetailScaffold<Row>({
   const reduced = useReducedMotion();
   const player = usePlayer();
   const { actions, run } = useItemActions(item);
+  const download = useDownloadStatus(item.Id);
   const [sheet, setSheet] = useState(false);
   const pull = usePullRefresh(onRefresh);
   const scrollRef = useAnimatedRef<Animated.FlatList<Row>>();
@@ -144,10 +150,31 @@ export function DetailScaffold<Row>({
     return { transform: [{ translateY: interpolate(y, [0, heroH], [0, heroH / 2], 'clamp') }] };
   });
 
-  const secondary: { icon: IconName; label: string; active?: boolean; onPress: () => void }[] = [];
+  const secondary: { icon: IconName; label: string; active?: boolean; onPress: () => void; ring?: number; tint?: string; a11y?: string }[] = [];
   if (playable && resumable) {
     secondary.push({ icon: 'arrow.counterclockwise', label: 'Start over', onPress: () => player.play({ item, startPositionTicks: 0 }) });
   }
+  const dlAction = actions.find((a) => a.id === 'builtin.download' || a.id === 'builtin.downloading' || a.id === 'builtin.removeDownload');
+  if (dlAction) {
+    if (download.state === 'completed') {
+      secondary.push({ icon: 'arrow.down.circle.fill', label: 'Downloaded', tint: c.success, a11y: 'Downloaded. Remove the download', onPress: () => run(dlAction) });
+    } else if (download.state === 'none') {
+      secondary.push({ icon: 'arrow.down.circle', label: 'Download', onPress: () => run(dlAction) });
+    } else if (download.state === 'failed') {
+      secondary.push({ icon: 'exclamationmark.triangle', label: 'Failed', tint: c.danger, a11y: 'Download failed. Open Downloads', onPress: () => run(dlAction) });
+    } else {
+      const pct = Math.round(download.progress * 100);
+      secondary.push({
+        icon: 'arrow.down.circle',
+        label: download.state === 'paused' ? 'Paused' : `${pct}%`,
+        ring: download.progress,
+        a11y: `Downloading ${pct} percent. Open Downloads`,
+        onPress: () => run(dlAction),
+      });
+    }
+  }
+  const playlistAction = actions.find((a) => a.id === 'builtin.addToPlaylist');
+  if (playlistAction && item.Type !== 'Playlist') secondary.push({ icon: 'text.badge.plus', label: 'Playlist', a11y: 'Add to playlist', onPress: () => run(playlistAction) });
   if (playedAction) secondary.push({ icon: 'checkmark', label: 'Played', active: played, onPress: () => run(playedAction) });
   if (favAction) secondary.push({ icon: favorite ? 'heart.fill' : 'heart', label: 'Favourite', active: favorite, onPress: () => run(favAction) });
   for (const a of extraActions ?? []) secondary.push(a);
@@ -176,12 +203,12 @@ export function DetailScaffold<Row>({
   const primary = playable ? (
     onShuffle ? (
       <View style={[s.pairRow, l.fontScale >= 1.5 && s.stack]}>
-        <Button title="Play" icon="play.fill" variant="tonalAccent" onPress={() => player.play({ item })} containerStyle={s.flex} preferredFocus={isTV} />
+        <Button title="Play" icon="play.fill" variant="tonalAccent" onPress={onPlay ?? (() => player.play({ item }))} containerStyle={s.flex} preferredFocus={isTV} />
         <Button title="Shuffle" icon="shuffle" variant="tonalAccent" onPress={onShuffle} containerStyle={s.flex} />
       </View>
     ) : (
       <View>
-        <Button title={primaryLabel} icon="play.fill" onPress={() => player.play({ item })} preferredFocus={isTV} />
+        <Button title={primaryLabel} icon="play.fill" onPress={onPlay ?? (() => player.play({ item }))} preferredFocus={isTV} />
         {progress !== null ? (
           <View style={s.resumeTrack} accessibilityLabel={`${Math.round(progress * 100)} percent played`}>
             <View style={[s.resumeFill, { width: `${Math.round(progress * 100)}%` }]} />
@@ -372,22 +399,45 @@ function Title({ item, centered, big }: { item: BaseItemDto; centered: boolean; 
   );
 }
 
-function RoundAction({ icon, label, active, onPress }: { icon: IconName; label: string; active?: boolean; onPress: () => void }) {
+function RoundAction({
+  icon,
+  label,
+  active,
+  onPress,
+  ring,
+  tint,
+  a11y,
+}: {
+  icon: IconName;
+  label: string;
+  active?: boolean;
+  onPress: () => void;
+  /** A progress ring around the button (a running download), 0..1. */
+  ring?: number;
+  tint?: string;
+  a11y?: string;
+}) {
   const s = useStyles(makeStyles);
   const { c } = useTheme();
+  const size = scaled(sizes.iconButton);
   return (
     <Touchable
       kind="icon"
       radius={radius.pill}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={a11y ?? label}
       accessibilityState={active === undefined ? undefined : { selected: active }}
       style={s.roundWrap}>
       {({ pressed }) => (
         <>
           <View style={[s.round, { backgroundColor: pressed ? c.surface3 : c.surface2 }]}>
-            <Icon name={icon} size={scaled(iconSize.sm)} color={active ? c.accent : c.text} weight="semibold" />
+            <Icon name={icon} size={scaled(iconSize.sm)} color={tint ?? (active ? c.accent : c.text)} weight="semibold" />
+            {ring !== undefined ? (
+              <View style={StyleSheet.absoluteFill}>
+                <ProgressRing size={size} width={3} progress={ring} color={c.accent} track="transparent" />
+              </View>
+            ) : null}
           </View>
           <Text style={s.roundLabel} numberOfLines={1}>
             {label}

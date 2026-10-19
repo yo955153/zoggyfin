@@ -13,7 +13,10 @@ import { ItemRow, RowHeader } from '@/components/item-row';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { shapeFor } from '@/components/tile';
 import { Touchable } from '@/components/touchable';
+import { isNetworkError, searchDownloads } from '@/downloads';
+import { useDownloadsStore } from '@/downloads/store';
 import { TrackRow } from '@/features/detail/rows';
+import { OfflineBanner } from '@/features/offline/offline-banner';
 import {
   filterSections,
   groupSearchResults,
@@ -25,6 +28,7 @@ import {
 import { formatDuration } from '@/lib/format';
 import { useOpenItem } from '@/lib/navigation';
 import { useRootScreenOptions } from '@/lib/stack-options';
+import { useOffline } from '@/lib/online';
 import { useDebounced } from '@/lib/use-debounced';
 import { isTV } from '@/platform/tv';
 import { usePlayer } from '@/player';
@@ -57,7 +61,13 @@ export default function SearchScreen() {
   const [filter, setFilter] = useState<SearchFilter>('all');
   const term = useDebounced(text.trim(), sizes.searchDebounce);
   const q = useSearch(term);
-  const all = useMemo(() => groupSearchResults(q.data ?? []), [q.data]);
+  const offline = useOffline();
+  const records = useDownloadsStore((st) => st.records);
+  // Offline (or the server cannot be reached): search what is on this device.
+  const localOnly = offline || (!!q.error && !q.data && isNetworkError(q.error));
+  const localResults = useMemo(() => (localOnly ? searchDownloads(records, term) : []), [localOnly, records, term]);
+  const results = localOnly ? localResults : q.data;
+  const all = useMemo(() => groupSearchResults(results ?? []), [results]);
   const sections = useMemo(() => filterSections(all, filter), [all, filter]);
   const top = filter === 'all' ? topResult(sections) : null;
   const [recentVersion, setRecentVersion] = useState(0);
@@ -66,7 +76,7 @@ export default function SearchScreen() {
   const player = usePlayer();
 
   // Remember a search once it returns results.
-  const hasResults = !!q.data?.length;
+  const hasResults = !localOnly && !!q.data?.length;
   useEffect(() => {
     if (term.length >= 2 && hasResults) {
       writeJson(RECENT_KEY, pushRecentSearch(readJson<string[]>(RECENT_KEY, []), term));
@@ -150,6 +160,7 @@ export default function SearchScreen() {
           </View>
         ) : null}
 
+        <OfflineBanner />
         {active ? (
           <ScrollView
             horizontal
@@ -197,18 +208,24 @@ export default function SearchScreen() {
           ) : (
             <EmptyState icon="magnifyingglass" title="Search your server" message="Find movies, shows, episodes, albums, songs, artists and people." />
           )
-        ) : q.isPending ? (
+        ) : !localOnly && q.isPending ? (
           <LoadingState />
-        ) : q.error && !q.data ? (
+        ) : !localOnly && q.error && !q.data ? (
           <ErrorState error={q.error} onRetry={q.refetch} />
         ) : sections.length === 0 ? (
           <EmptyState
             icon="magnifyingglass"
             title={`No results for “${term}”`}
-            message={filter === 'all' ? 'Check the spelling or try fewer words.' : 'Check the spelling or choose another filter.'}
+            message={
+              localOnly
+                ? 'The server cannot be reached, so only downloads are searched.'
+                : filter === 'all'
+                  ? 'Check the spelling or try fewer words.'
+                  : 'Check the spelling or choose another filter.'
+            }
           />
         ) : (
-          <View style={q.isFetching ? s.stale : undefined}>
+          <View style={q.isFetching && !localOnly ? s.stale : undefined}>
             {top ? <TopResult item={top} onPlay={() => player.play({ item: top })} /> : null}
             {sections.map((sec) =>
               sec.key === 'songs' ? (
@@ -222,6 +239,7 @@ export default function SearchScreen() {
                 <ItemRow key={sec.key} title={sec.title} items={sec.items} shape={sec.items[0] ? shapeFor(sec.items[0]) : 'poster'} />
               ),
             )}
+            {localOnly ? <Text style={[s.localNote, { paddingHorizontal: l.gutter }]}>Showing downloads only. The server cannot be reached.</Text> : null}
           </View>
         )}
       </ScrollView>
@@ -286,6 +304,7 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   page: { backgroundColor: c.bg },
   content: { paddingBottom: spacing.huge * 2 },
   stale: { opacity: 0.6 },
+  localNote: { ...font(type.footnote), color: c.text2, marginTop: spacing.xl },
   fieldRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.md, marginTop: spacing.sm },
   field: {
     flex: 1,

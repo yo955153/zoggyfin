@@ -101,6 +101,11 @@ export const ANDROID_SYMBOLS = {
   'arrow.up': 'arrow_upward',
   'chevron.up': 'expand_less',
   'timer': 'timer',
+  pencil: 'edit',
+  plus: 'add',
+  'icloud.slash': 'cloud_off',
+  internaldrive: 'hard_drive',
+  'pause.circle': 'pause_circle',
 } as const satisfies Record<string, AndroidSymbol>;
 
 export type IconName = keyof typeof ANDROID_SYMBOLS;

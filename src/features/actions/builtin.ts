@@ -2,6 +2,8 @@
  * Built-in item actions. They register through the same registry that any
  * later contributor uses.
  */
+import { isDownloadable } from '@/downloads/plan';
+import { canAddToPlaylist } from '@/features/playlists/logic';
 import { itemActions } from '@/registry/item-actions';
 
 const PLAYABLE = new Set(['Movie', 'Episode', 'Video', 'MusicVideo', 'Audio', 'AudioBook', 'MusicAlbum', 'MusicArtist', 'MusicGenre', 'Playlist', 'Series', 'Season', 'BoxSet']);
@@ -52,6 +54,66 @@ export function registerBuiltinItemActions(): void {
     order: 14,
     when: ({ item, app }) => !!app.instantMix && (MIXABLE.has(item.Type ?? '') || (item.Type === 'Playlist' && item.MediaType === 'Audio')),
     run: ({ item, app }) => app.instantMix?.(item),
+  });
+  itemActions.register({
+    id: 'builtin.addToPlaylist',
+    title: 'Add to playlist…',
+    icon: 'text.badge.plus',
+    order: 15,
+    when: ({ item, app }) => !!app.addToPlaylist && canAddToPlaylist(item),
+    run: ({ item, app }) => app.addToPlaylist?.(item),
+  });
+  // Download / Downloading 45% (opens the Downloads tab) / Remove download: one of the three shows.
+  itemActions.register({
+    id: 'builtin.download',
+    title: 'Download',
+    icon: 'arrow.down.circle',
+    order: 16,
+    when: ({ item, app }) => !!app.downloadStatus && isDownloadable(item) && app.downloadStatus(item).state === 'none',
+    run: ({ item, app }) => app.download?.(item),
+  });
+  itemActions.register({
+    id: 'builtin.downloading',
+    title: 'Downloading',
+    titleFor: ({ item, app }) => {
+      const st = app.downloadStatus?.(item);
+      if (!st || st.state === 'none' || st.state === 'completed') return 'Downloading';
+      const pct = `${Math.round(st.progress * 100)}%`;
+      return st.state === 'failed' ? 'Download failed, see Downloads' : st.state === 'paused' ? `Download paused at ${pct}` : `Downloading ${pct}`;
+    },
+    icon: 'arrow.down.circle',
+    order: 16,
+    when: ({ item, app }) => {
+      const st = app.downloadStatus?.(item).state;
+      return !!st && st !== 'none' && st !== 'completed';
+    },
+    run: ({ app }) => app.openDownloads?.(),
+  });
+  itemActions.register({
+    id: 'builtin.removeDownload',
+    title: 'Remove download',
+    icon: 'trash',
+    order: 90,
+    destructive: true,
+    when: ({ item, app }) => app.downloadStatus?.(item).state === 'completed',
+    run: ({ item, app }) => app.removeDownload?.(item),
+  });
+  itemActions.register({
+    id: 'builtin.renamePlaylist',
+    title: 'Rename playlist',
+    icon: 'pencil',
+    order: 50,
+    when: ({ item, app }) => item.Type === 'Playlist' && !!app.renamePlaylist,
+    run: ({ item, app }) => app.renamePlaylist?.(item),
+  });
+  itemActions.register({
+    id: 'builtin.deletePlaylist',
+    title: 'Delete playlist',
+    icon: 'trash',
+    order: 95,
+    destructive: true,
+    when: ({ item, app }) => item.Type === 'Playlist' && !!app.deletePlaylist,
+    run: ({ item, app }) => app.deletePlaylist?.(item),
   });
   itemActions.register({
     id: 'builtin.favorite',

@@ -15,6 +15,8 @@ import {
 } from '@/api/query-client';
 import { useSession, useSessionStore } from '@/auth/session-store';
 import { ToastHost } from '@/components/toast-host';
+import { AddToPlaylistHost } from '@/features/playlists/add-to-playlist';
+import { startOfflineServices } from '@/features/offline/bootstrap';
 import { toast } from '@/lib/toast';
 import { audioSession } from '@/player/audio/session';
 import { mediaColors, useTheme } from '@/theme';
@@ -59,7 +61,9 @@ function Root({ session }: { session: boolean }) {
   const { c } = useTheme();
   // Bring back the last audio queue (paused) after a restart.
   useEffect(() => {
-    if (session) audioSession().restore();
+    if (!session) return;
+    startOfflineServices();
+    audioSession().restore();
   }, [session]);
   return (
           <View style={[styles.flex, { backgroundColor: c.bg }]}>
@@ -93,6 +97,7 @@ function Root({ session }: { session: boolean }) {
                 <Stack.Screen name="sign-in" />
               </Stack.Protected>
             </Stack>
+            {session ? <AddToPlaylistHost /> : null}
             <ToastHost />
           </View>
   );

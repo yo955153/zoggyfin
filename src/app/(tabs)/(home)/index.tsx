@@ -8,6 +8,7 @@ import { useApi } from '@/api/use-api';
 import { Avatar } from '@/components/avatar';
 import { Touchable } from '@/components/touchable';
 import { registerBuiltinHomeSections } from '@/features/home/builtin-sections';
+import { OfflineBanner } from '@/features/offline/offline-banner';
 import { useRootScreenOptions } from '@/lib/stack-options';
 import { isTV } from '@/platform/tv';
 import { homeSections } from '@/registry/home-sections';
@@ -53,6 +54,7 @@ export default function HomeScreen() {
         style={s.flex}
         contentContainerStyle={s.content}
         refreshControl={isTV ? undefined : <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={c.text2} />}>
+        <OfflineBanner />
         {sections.map((sec) => (
           <View key={sec.id}>
             <sec.component />

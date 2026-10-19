@@ -3,7 +3,9 @@ import { memo } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import type { BaseItemDto } from '@/api/types';
+import { DownloadBadge, downloadLabel } from '@/components/download-indicator';
 import { Icon } from '@/components/icon';
+import { useDownloadStatus } from '@/downloads';
 import { playedFraction, remainingLabel, subtitleFor } from '@/lib/format';
 import { createStyles,
   type AppTheme,
@@ -77,8 +79,9 @@ export const Tile = memo(function Tile({
   const sub = subtitle !== undefined ? subtitle : item.Type === 'Episode' ? item.Name : subtitleFor(item);
   const left = remainingLabel(item);
   const lines = fontScale >= 1.5 ? 2 : 1;
+  const download = useDownloadStatus(item.Id);
 
-  const label = [titleText, sub, progress !== null ? left : null, played ? 'played' : null].filter(Boolean).join(', ');
+  const label = [titleText, sub, progress !== null ? left : null, played ? 'played' : null, downloadLabel(download)].filter(Boolean).join(', ');
 
   return (
     <Touchable
@@ -122,7 +125,10 @@ export const Tile = memo(function Tile({
             ) : progress !== null ? (
               <Progress fraction={progress} />
             ) : null}
-            {played ? (
+            {download.state !== 'none' ? (
+              // One badge per tile: the download state comes first.
+              <DownloadBadge status={download} />
+            ) : played ? (
               <View style={s.badge}>
                 <Icon name="checkmark" size={iconSize.xs} color={mediaColors.white} weight="bold" />
               </View>

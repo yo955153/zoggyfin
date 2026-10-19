@@ -5,6 +5,7 @@
  */
 import type { BaseItemDto } from '@/api/types';
 import type { IconName } from '@/components/icon-names';
+import type { DownloadStatus } from '@/downloads/types';
 
 /** What an action may ask the app to do. The screen that shows the sheet supplies it. */
 export interface AppActionApi {
@@ -16,6 +17,15 @@ export interface AppActionApi {
   playNext?(item: BaseItemDto): void;
   addToQueue?(item: BaseItemDto): void;
   instantMix?(item: BaseItemDto): void;
+  /** Playlists. */
+  addToPlaylist?(item: BaseItemDto): void;
+  renamePlaylist?(item: BaseItemDto): void;
+  deletePlaylist?(item: BaseItemDto): void | Promise<void>;
+  /** Downloads. Left out where downloads do not exist (web, TV). */
+  downloadStatus?(item: BaseItemDto): DownloadStatus;
+  download?(item: BaseItemDto): void;
+  removeDownload?(item: BaseItemDto): void | Promise<void>;
+  openDownloads?(): void;
 }
 
 export interface ItemActionContext {
@@ -28,6 +38,8 @@ export interface ItemActionContext {
 export interface ItemAction {
   id: string;
   title: string;
+  /** A title that depends on the item or its state ("Downloading 45%"). */
+  titleFor?: (ctx: ItemActionContext) => string;
   /** An icon name (see components/icon-names.ts). */
   icon: IconName;
   /** Lower comes first. Built-ins use steps of 10. */
@@ -68,6 +80,15 @@ export function createRegistry<T extends { id: string; order?: number }>(): Regi
 }
 
 export const itemActions = createRegistry<ItemAction>();
+
+/** The title to show for an action in this context. */
+export function actionTitle(action: ItemAction, ctx: ItemActionContext): string {
+  try {
+    return action.titleFor ? action.titleFor(ctx) : action.title;
+  } catch {
+    return action.title;
+  }
+}
 
 export function actionsFor(ctx: ItemActionContext, registry: Registry<ItemAction> = itemActions): ItemAction[] {
   return registry.list().filter((a) => {

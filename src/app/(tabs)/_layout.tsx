@@ -2,6 +2,7 @@ import { NativeTabs } from 'expo-router/native-tabs';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useDownloadsStore } from '@/downloads/store';
 import { GlobalPlayerKeys } from '@/features/player/global-keys';
 import { MiniPlayer, useMiniPlayerVisible } from '@/features/player/mini-player';
 import { features } from '@/platform/tv';
@@ -35,9 +36,23 @@ function FloatingMiniPlayer() {
  * The five native tabs. On iPad and Mac the bar can turn into a sidebar
  * (sidebarAdaptable). Each tab has its own stack.
  */
+/** The Downloads tab badge: active downloads, or "!" when one has failed. */
+function useDownloadsBadge(): string | null {
+  return useDownloadsStore((s) => {
+    let active = 0;
+    let failed = 0;
+    for (const r of Object.values(s.records)) {
+      if (r.state === 'downloading' || r.state === 'queued') active++;
+      else if (r.state === 'failed') failed++;
+    }
+    return active ? String(active) : failed ? '!' : null;
+  });
+}
+
 export default function TabsLayout() {
   const mini = useMiniPlayerVisible();
   const { c } = useTheme();
+  const badge = useDownloadsBadge();
   const tabs = (
     <NativeTabs
       tintColor={c.accent}
@@ -69,6 +84,7 @@ export default function TabsLayout() {
       <NativeTabs.Trigger name="(downloads)" disableAutomaticContentInsets hidden={!features.downloads}>
         <NativeTabs.Trigger.Label>Downloads</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'arrow.down.circle', selected: 'arrow.down.circle.fill' }} md="download" />
+        <NativeTabs.Trigger.Badge hidden={!badge}>{badge ?? undefined}</NativeTabs.Trigger.Badge>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="(search)" disableAutomaticContentInsets role="search">
         <NativeTabs.Trigger.Label>Search</NativeTabs.Trigger.Label>

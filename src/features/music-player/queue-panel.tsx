@@ -14,6 +14,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { Icon, type IconName } from '@/components/icon';
+import { openAddToPlaylist } from '@/features/playlists/add-to-playlist';
 import { ItemImage } from '@/components/item-image';
 import { artistLine, type AudioItem } from '@/player/audio/item';
 import { queueSections, type QueueEntry } from '@/player/audio/queue';
@@ -57,6 +58,14 @@ export function QueuePanel({ selectedKey, onSelect }: { selectedKey?: string | n
         <Toggle icon="shuffle" label="Shuffle" active={queue.shuffle} onPress={() => s.toggleShuffle()} />
         <Toggle icon={repeatIcon} label={repeatLabel} active={queue.repeat !== 'off'} onPress={() => s.cycleRepeat()} />
         <View style={styles.flex} />
+        <Pressable
+          onPress={() => openAddToPlaylist(queue.entries.map((e) => e.item))}
+          accessibilityRole="button"
+          accessibilityLabel="Save the queue to a playlist"
+          hitSlop={8}
+          style={styles.clear}>
+          <Text style={styles.clearText}>Save</Text>
+        </Pressable>
         {sections.upNext.length + sections.rest.length > 0 ? (
           <Pressable onPress={() => s.clearQueue()} accessibilityRole="button" accessibilityLabel="Clear the queue" hitSlop={8} style={styles.clear}>
             <Text style={styles.clearText}>Clear</Text>

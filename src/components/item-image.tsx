@@ -5,6 +5,7 @@ import { PixelRatio, StyleSheet, Text, View, type ViewStyle } from 'react-native
 import { useImageServer } from '@/api/use-api';
 import type { BaseItemDto } from '@/api/types';
 import { Icon } from '@/components/icon';
+import { useLocalImage } from '@/downloads';
 import { generatedArt, initials } from '@/images/generated-art';
 import { type ImageVariant, type ResolvedImage, resolveImage } from '@/images/resolve-image';
 import { createStyles, type AppTheme, font, mediaColors, motion, radius, scaled, scriptStyle, type, useStyles } from '@/theme';
@@ -46,10 +47,13 @@ export const ItemImage = memo(function ItemImage({
   const server = useImageServer();
   const height = width / aspectRatio;
   const scale = PixelRatio.get();
-  const resolved = useMemo(
-    () => resolveImage(item, variant, { width: width * scale, height: height * scale }, server),
-    [item, variant, width, height, scale, server],
-  );
+  // A downloaded item has its pictures on the device: no network, and they work offline.
+  const local = useLocalImage(item.Id, variant);
+  const resolved = useMemo<ResolvedImage>(() => {
+    const remote = resolveImage(item, variant, { width: width * scale, height: height * scale }, server);
+    if (!local) return remote;
+    return { kind: 'remote', uri: local, source: 'Download', blurhash: remote.kind === 'remote' ? remote.blurhash : undefined };
+  }, [item, variant, width, height, scale, server, local]);
   const [failedUri, setFailedUri] = useState<string | null>(null);
 
   const borderRadius = circle ? width / 2 : rounded;

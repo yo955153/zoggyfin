@@ -261,9 +261,7 @@ export function AlbumDetail(props: ViewProps) {
   return <TrackListDetail {...props} kind="tracks" />;
 }
 
-export function PlaylistDetail(props: ViewProps) {
-  return <TrackListDetail {...props} kind="playlist" />;
-}
+export { PlaylistDetail } from './playlist-detail';
 
 // ---- Artist ------------------------------------------------------------------------
 

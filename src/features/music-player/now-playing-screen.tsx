@@ -14,6 +14,9 @@ import type { BaseItemDto } from '@/api/types';
 import { useApi } from '@/api/use-api';
 import { Icon, type IconName } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
+import { canDownload, downloads, findDownload } from '@/downloads';
+import { openAddToPlaylist } from '@/features/playlists/add-to-playlist';
+import { useHideDevToolsButton } from '@/lib/dev-tools';
 import { itemHref } from '@/lib/navigation';
 import { toast } from '@/lib/toast';
 import { KeyInput } from '@/native/key-input';
@@ -102,6 +105,7 @@ export function NowPlayingScreen() {
   const { api, userId } = useApi();
   const s = audioSession();
 
+  useHideDevToolsButton();
   const wide = width >= WIDE;
   const [panel, setPanel] = useState<Panel>(wide ? 'queue' : 'none');
   const [sheet, setSheet] = useState<SheetKind>(null);
@@ -565,6 +569,10 @@ export function NowPlayingScreen() {
                             },
                           },
                         ]
+                      : []),
+                    { key: 'playlist', label: 'Add to playlist…', selected: false, onPress: () => openAddToPlaylist(item) },
+                    ...(canDownload(item) && findDownload(item.Id)?.state !== 'completed'
+                      ? [{ key: 'download', label: 'Download this song', selected: false, onPress: () => void downloads.download(item) }]
                       : []),
                     { key: 'mix', label: 'Instant mix from this song', selected: false, onPress: () => void s.instantMix(item) },
                     { key: 'queue', label: 'Add to queue again', selected: false, onPress: () => void s.addToQueue(item) },

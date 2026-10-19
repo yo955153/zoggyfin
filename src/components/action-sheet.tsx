@@ -23,7 +23,7 @@ export function ItemActionSheet({
 }) {
   const s = useStyles(makeStyles);
   const { c } = useTheme();
-  const { actions, run } = useItemActions(item);
+  const { actions, run, titleOf } = useItemActions(item);
   const normal = actions.filter((a) => !a.destructive);
   const destructive = actions.filter((a) => a.destructive);
   const group = (list: typeof actions, first: boolean) => (
@@ -32,14 +32,14 @@ export function ItemActionSheet({
         <SheetRow
           key={a.id}
           last={i === list.length - 1}
-          accessibilityLabel={a.title}
+          accessibilityLabel={titleOf(a)}
           preferredFocus={isTV && first && i === 0}
           onPress={() => {
             onClose();
             run(a);
           }}>
           <Icon name={a.icon} size={scaled(iconSize.md)} color={a.destructive ? c.danger : c.text} />
-          <Text style={[s.rowText, a.destructive && { color: c.danger }]}>{a.title}</Text>
+          <Text style={[s.rowText, a.destructive && { color: c.danger }]}>{titleOf(a)}</Text>
         </SheetRow>
       ))}
     </View>

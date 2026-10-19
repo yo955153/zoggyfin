@@ -1,7 +1,7 @@
 import * as Application from 'expo-application';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Platform, ScrollView, Switch, Text, View } from 'react-native';
+import { Platform, ScrollView, Switch, Text, View } from 'react-native';
 
 import { dropApi } from '@/api/client';
 import { logout } from '@/api/jellyfin';
@@ -13,24 +13,14 @@ import { Avatar } from '@/components/avatar';
 import { Icon, type IconName } from '@/components/icon';
 import { type Option, OptionSheet } from '@/components/option-sheet';
 import { Touchable } from '@/components/touchable';
+import { DOWNLOAD_QUALITY_OPTIONS, downloadsSupported, useDownloadLists } from '@/downloads';
+import { confirmDestructive as confirm } from '@/lib/confirm';
+import { formatBytes } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { isTV } from '@/platform/tv';
 import { APPEARANCE_OPTIONS, useAppearance } from '@/settings/appearance';
 import { QUALITY_OPTIONS, qualityLabel, SKIP_OPTIONS, usePlaybackSettings } from '@/settings/playback';
 import { createStyles, type AppTheme, font, iconSize, mediaColors, radius, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
-
-function confirm(title: string, message: string, action: string): Promise<boolean> {
-  if (Platform.OS === 'web') {
-    // RN Web has no Alert with buttons.
-    return Promise.resolve(typeof window !== 'undefined' && window.confirm(`${title}\n\n${message}`));
-  }
-  return new Promise((resolve) =>
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-      { text: action, style: 'destructive', onPress: () => resolve(true) },
-    ]),
-  );
-}
 
 export default function SettingsScreen() {
   const styles = useStyles(makeStyles);
@@ -83,6 +73,8 @@ export default function SettingsScreen() {
           <AppearanceSection />
 
           <PlaybackSection />
+
+          {downloadsSupported ? <DownloadsSection /> : null}
 
           <Group title="Server">
             <InfoRow icon="server" label="Name" value={session.serverName} />
@@ -189,6 +181,35 @@ function PlaybackSection() {
         selected={sheet ? [sheet.selected] : []}
         onSelect={(v) => sheet?.set(v)}
         onClose={() => setPicker(null)}
+      />
+    </Group>
+  );
+}
+
+function DownloadsSection() {
+  const quality = usePlaybackSettings((st) => st.downloadQuality);
+  const update = usePlaybackSettings((st) => st.update);
+  const [open, setOpen] = useState(false);
+  const { appBytes, groups } = useDownloadLists();
+  const count = groups.reduce((n, g) => n + g.records.length, 0);
+  const label = DOWNLOAD_QUALITY_OPTIONS.find((o) => o.value === quality)?.label ?? 'Original';
+  return (
+    <Group title="Downloads" footer="Original keeps the file as it is on the server when this device can play it. Other choices ask the server for a smaller copy of videos. Music downloads keep the original file.">
+      <SettingsRow icon="arrow.down.circle" label="Download quality" value={label} onPress={() => setOpen(true)} />
+      <SettingsRow
+        icon="internaldrive"
+        label="On this device"
+        value={`${count} ${count === 1 ? 'item' : 'items'} · ${formatBytes(appBytes)}`}
+        onPress={() => router.navigate('/(tabs)/(downloads)/downloads')}
+        last
+      />
+      <OptionSheet
+        visible={open}
+        title="Download quality"
+        options={DOWNLOAD_QUALITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+        selected={[quality]}
+        onSelect={(v) => update({ downloadQuality: v })}
+        onClose={() => setOpen(false)}
       />
     </Group>
   );
