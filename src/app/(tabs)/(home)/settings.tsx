@@ -15,18 +15,23 @@ import { type Option, OptionSheet } from '@/components/option-sheet';
 import { Touchable } from '@/components/touchable';
 import { DOWNLOAD_QUALITY_OPTIONS, downloadsSupported, useDownloadLists } from '@/downloads';
 import { confirmDestructive as confirm } from '@/lib/confirm';
+import { devOffline, setDevOffline } from '@/lib/dev-offline';
+import { checkServer } from '@/lib/online';
 import { formatBytes } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { isTV } from '@/platform/tv';
 import { APPEARANCE_OPTIONS, useAppearance } from '@/settings/appearance';
 import { QUALITY_OPTIONS, qualityLabel, SKIP_OPTIONS, usePlaybackSettings } from '@/settings/playback';
 import { createStyles, type AppTheme, font, iconSize, mediaColors, radius, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
+import { useSidebarInset } from '@/theme/sidebar-inset';
 
 export default function SettingsScreen() {
   const styles = useStyles(makeStyles);
   const { c } = useTheme();
   const { session, api } = useApi();
   const [busy, setBusy] = useState(false);
+  // The iPad sidebar floats over the content: center the column in the space beside it.
+  const sidebar = useSidebarInset();
   const id = clientIdentity();
 
   const signOut = async () => {
@@ -54,7 +59,7 @@ export default function SettingsScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Settings', headerStyle: { backgroundColor: c.bgGrouped }, contentStyle: { backgroundColor: c.bgGrouped } }} />
-      <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.page} contentContainerStyle={styles.content}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.page} contentContainerStyle={[styles.content, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}>
         <View style={styles.inner}>
           <Group>
             <View style={[styles.row, styles.account]}>
@@ -91,6 +96,8 @@ export default function SettingsScreen() {
               last
             />
           </Group>
+
+          {__DEV__ ? <DevSection /> : null}
 
           <Group>
             <ActionRow label="Clear cache" onPress={clearCache} />
@@ -200,7 +207,7 @@ function DownloadsSection() {
         icon="internaldrive"
         label="On this device"
         value={`${count} ${count === 1 ? 'item' : 'items'} · ${formatBytes(appBytes)}`}
-        onPress={() => router.navigate('/(tabs)/(downloads)/downloads')}
+        onPress={() => router.navigate('/(tabs)/(saved)/downloads')}
         last
       />
       <OptionSheet
@@ -210,6 +217,30 @@ function DownloadsSection() {
         selected={[quality]}
         onSelect={(v) => update({ downloadQuality: v })}
         onClose={() => setOpen(false)}
+      />
+    </Group>
+  );
+}
+
+/** Development builds only: test offline mode on a simulator. */
+function DevSection() {
+  const [on, setOn] = useState(devOffline());
+  const { c } = useTheme();
+  const toggle = (v: boolean) => {
+    setDevOffline(v);
+    setOn(v);
+    void checkServer();
+  };
+  return (
+    <Group title="Development" footer="Every request to the server fails, as with no connection. Only in development builds.">
+      <SettingsRow
+        icon="wifi.exclamationmark"
+        label="Simulate no server"
+        onPress={() => toggle(!on)}
+        role="switch"
+        checked={on}
+        last
+        trailing={<Switch value={on} onValueChange={toggle} trackColor={{ true: c.accent, false: c.surface3 }} thumbColor={mediaColors.white} {...webSwitchColors} accessibilityLabel="Simulate no server" />}
       />
     </Group>
   );

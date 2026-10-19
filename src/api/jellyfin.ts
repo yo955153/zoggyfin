@@ -22,6 +22,8 @@ import { getUserDataApi } from '@jellyfin/sdk/lib/utils/api/user-data-api';
 import { getUserViewApi } from '@jellyfin/sdk/lib/utils/api/user-view-api';
 import axios, { isCancel } from 'axios';
 
+import { devOffline } from '@/lib/dev-offline';
+
 import type { LibraryQuery } from './query-keys';
 import { serverUrlCandidates } from './server-url';
 import type {
@@ -785,6 +787,7 @@ export async function updatePlayState(
 
 /** True when the server answers. Never throws. */
 export async function ping(baseUrl: string, timeoutMs = 4000): Promise<boolean> {
+  if (devOffline()) return false;
   try {
     const res = await axios.get(`${baseUrl.replace(/\/+$/, '')}/System/Ping`, { timeout: timeoutMs });
     return res.status >= 200 && res.status < 300;

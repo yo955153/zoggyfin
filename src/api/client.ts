@@ -2,6 +2,7 @@ import { type Api, Jellyfin } from '@jellyfin/sdk';
 import { type AxiosInstance, create as createAxios, isAxiosError } from 'axios';
 
 import { clientIdentity } from '@/auth/identity';
+import { devOffline, offlineError } from '@/lib/dev-offline';
 
 import { buildAuthHeader } from './auth-header';
 
@@ -38,6 +39,7 @@ function makeAxios(baseUrl: string, token: string | null): AxiosInstance {
   // An instance of our own, so these interceptors never see unrelated requests.
   const instance = createAxios({ timeout: REQUEST_TIMEOUT_MS });
   instance.interceptors.request.use((config) => {
+    if (devOffline()) throw offlineError();
     const url = config.baseURL ? `${config.baseURL}${config.url ?? ''}` : config.url;
     if (isForServer(url, baseUrl)) {
       config.headers.set('Authorization', buildAuthHeader(clientIdentity(), token));
