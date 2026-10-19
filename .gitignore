@@ -3,8 +3,8 @@
 node_modules/
 .expo/
 dist/
-ios/
-android/
+/ios/
+/android/
 *.log
 .DS_Store
 web-build/

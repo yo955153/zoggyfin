@@ -1,6 +1,6 @@
 {
   "platforms": ["apple"],
   "apple": {
-    "modules": ["ZoggyfinNativeModule"]
+    "modules": ["ZoggyfinNativeModule", "ZoggyfinVolumeModule"]
   }
 }
