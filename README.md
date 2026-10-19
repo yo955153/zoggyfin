@@ -171,6 +171,27 @@ Offline use (no sign-in needed):
 - When the host ends a session, a guest that streams the host's file leaves the player; a
   guest with its own download keeps its place. Toasts show above the full-screen players.
 
+Admin panel (administrators of a server only):
+
+- Settings, Admin (one row per server), or the shield on the server row. iPad, the Mac app
+  and wide web windows show the sections on the left and the section on the right.
+- Dashboard: server name, version, operating system, "Restart pending", sessions, running
+  tasks and storage per library folder (Jellyfin 10.11 and later).
+- Now playing: who plays what, on which device and app, with progress, Direct Play, Direct
+  Stream or Transcode (and why), and the bitrate. Message, pause or resume, stop and stop
+  transcode. The list refreshes every 5 s while the screen is open.
+- Users: last activity and last sign-in, admin and disabled marks. Per user: library access,
+  downloads, remote access, transcoding, SyncPlay, the bitrate limit, the parental rating,
+  enable or disable, a new password or no password, and delete (type the name to confirm).
+  "Invite someone" opens the invite flow.
+- Libraries (scan, refresh metadata), scheduled tasks (run now, stop, last and next run),
+  the activity log (filters and paging), devices (remove signs a device out) and the server
+  log files (a monospace viewer with search that loads large files in parts).
+- Restart and shut down the server (type the server name to confirm). Plugins and
+  transcoding settings stay in the web dashboard: "Open web dashboard".
+- Development builds: Settings, Development, "Admin fixture data" (or `?adminFixtures=1` on
+  the web) shows the panel with made-up data and sends no request to a server.
+
 The design is in [docs/specs](docs/specs/) and [docs/design](docs/design/).
 
 The native app includes a small local module, `modules/zoggyfin-native`, that reports

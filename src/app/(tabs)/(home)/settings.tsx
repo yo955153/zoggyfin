@@ -11,6 +11,7 @@ import { Avatar } from '@/components/avatar';
 import { Icon } from '@/components/icon';
 import { type Option, OptionSheet } from '@/components/option-sheet';
 import { DOWNLOAD_QUALITY_OPTIONS, downloadsSupported, useDownloadLists } from '@/downloads';
+import { AdminFixturesGroup, AdminSettingsGroup, AdminShieldButton } from '@/features/admin/entry';
 import { openAddServer, signOutUser } from '@/features/servers/actions';
 import { ConnectionStatus } from '@/features/servers/connection-status';
 import { ActionRow, Group, InfoRow, makeSettingsStyles, SettingsRow, webSwitchColors } from '@/features/settings/rows';
@@ -80,6 +81,8 @@ export default function SettingsScreen() {
 
           <ServersSection />
 
+          <AdminSettingsGroup />
+
           <AppearanceSection />
 
           <PlaybackSection />
@@ -104,6 +107,7 @@ export default function SettingsScreen() {
           </Group>
 
           {__DEV__ ? <DevSection /> : null}
+          {__DEV__ ? <AdminFixturesGroup /> : null}
 
           <Group>
             <ActionRow label="Clear cache" onPress={clearCache} />
@@ -134,6 +138,7 @@ function ServersSection() {
             onPress={() => router.push({ pathname: '/(tabs)/(home)/server/[id]', params: { id: sv.id } })}
             trailing={
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <AdminShieldButton serverId={sv.id} serverName={sv.name} />
                 {active?.serverId === sv.id ? <Icon name="checkmark" size={scaled(iconSize.sm)} color={c.accent} weight="semibold" /> : null}
                 <Icon name="chevron.right" size={scaled(iconSize.sm - 2)} color={c.text3} weight="semibold" />
               </View>
