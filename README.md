@@ -65,7 +65,32 @@ Phase 3 ("Music and audio"):
   and Mix. Audiobook libraries open in the same browser.
 - Web: Media Session controls and Space/←/→ keys. Noto Sans Arabic is bundled for the web.
 
-Downloads are not in yet.
+Phase 4 ("Downloads and playlists"):
+
+- Downloads (iOS and iPadOS) use a background URL session through
+  @kesha-antonov/react-native-background-downloader. Two files download at a time. Downloads
+  continue when the app is in the background, and the app finds them again after a restart.
+  Each download goes through a tested state machine: queued, downloading, paused, then
+  completed, failed (with retry and backoff) or cancelled.
+- Movies, episodes, seasons, series, songs, albums and playlists can be downloaded. A video
+  downloads as the original file when the device can play it directly. Otherwise the server
+  makes a copy at the "Download quality" setting (Original, 1080p, 720p or 480p). Images,
+  subtitles, lyrics and item metadata download with the media.
+- Files are in `Documents/downloads/<item id>/` and are not in iCloud backups. Records are
+  in MMKV with a schema version and migrations.
+- Downloads tab: in-progress rows with progress, speed, time left, pause, resume, cancel and
+  retry. Downloaded items are grouped by show or album, with sizes, swipe to delete and a
+  storage bar. The tab shows a badge while downloads run.
+- Offline mode: the app plays downloads from the device first. A banner shows when the server
+  is unreachable. Home shows downloads first, and search looks in downloads. Playback progress
+  goes into an outbox and goes to the server when the server is reachable again.
+- Playlists: "Add to playlist" from every action menu, the full player and the queue (Save),
+  with "New playlist" in the same sheet. Playlist pages: rename, delete, drag to reorder,
+  swipe or tap the bin to remove, play, shuffle and download. Changes show at once and roll
+  back if the server refuses them.
+- Web: playlists work fully. Downloads are not on the web.
+- Development builds have "Simulate no server" in Settings to test offline mode.
+
 The design is in [docs/specs](docs/specs/) and [docs/design](docs/design/).
 
 The native app includes a small local module, `modules/zoggyfin-native`, that reports
