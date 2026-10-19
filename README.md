@@ -42,6 +42,9 @@ Phase 2b ("Platform base and restyle"):
   items without a picture, skeletons while loading and Arabic text rules.
 - Item pages pick their hero from the artwork: a tall backdrop, a wide 16:9 image (videos with
   only a wide thumbnail), square album art or a circle for people.
+- The project builds on `react-native-tvos` (aliased as `react-native`) with
+  `@react-native-tvos/config-tv`. Phone, tablet and web builds are unchanged. `EXPO_TV=1`
+  makes prebuild generate TV targets; the TV layout comes in a later phase.
 
 Music playback and downloads are not in yet.
 The design is in [docs/specs](docs/specs/) and [docs/design](docs/design/).
