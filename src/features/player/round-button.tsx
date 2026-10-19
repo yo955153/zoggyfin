@@ -1,0 +1,76 @@
+import * as Haptics from 'expo-haptics';
+import type { ReactNode } from 'react';
+import { Platform, Pressable, type StyleProp, StyleSheet, type ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+
+import { Icon } from '@/components/icon';
+
+import { Glass } from './glass';
+import { c, motion } from './tokens';
+
+/**
+ * A round glass button over video. Press-in scales to 0.92 (snappy spring
+ * back); with Reduce Motion only the opacity changes.
+ */
+export function RoundButton({
+  icon,
+  label,
+  size,
+  glyph,
+  onPress,
+  glass = true,
+  haptic,
+  style,
+  children,
+}: {
+  icon?: string;
+  label: string;
+  size: number;
+  glyph: number;
+  onPress: () => void;
+  glass?: boolean;
+  haptic?: boolean;
+  style?: StyleProp<ViewStyle>;
+  children?: ReactNode;
+}) {
+  const pressed = useSharedValue(0);
+  const reduced = useReducedMotion();
+  const anim = useAnimatedStyle(() => {
+    const p = pressed.get();
+    return reduced
+      ? { opacity: 1 - p * 0.3 }
+      : { transform: [{ scale: 1 - p * (1 - motion.press.buttonScale) }] };
+  });
+  const body = (
+    <>
+      {icon ? <Icon name={icon} size={glyph} color={c.textOnMedia} weight="semibold" /> : null}
+      {children}
+    </>
+  );
+  const round = { width: size, height: size, borderRadius: size / 2 };
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={size < 44 ? (44 - size) / 2 : 0}
+      onPressIn={() => pressed.set(withTiming(1, { duration: motion.duration.press }))}
+      onPressOut={() => pressed.set(withSpring(0, motion.spring.snappy))}
+      onPress={() => {
+        if (haptic && Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress();
+      }}
+      style={style}>
+      <Animated.View style={[round, anim]}>
+        {glass ? (
+          <Glass style={[styles.center, round]}>{body}</Glass>
+        ) : (
+          <Animated.View style={[styles.center, round]}>{body}</Animated.View>
+        )}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  center: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+});

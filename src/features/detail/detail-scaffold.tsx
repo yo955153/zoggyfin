@@ -62,6 +62,8 @@ export function DetailScaffold<Row>({
   const { actions, run } = useItemActions(item);
   const [sheet, setSheet] = useState(false);
   const favorite = !!item.UserData?.IsFavorite;
+  // Resume / Start over: only for a single video with a saved position.
+  const resumable = !!item.UserData?.PlaybackPositionTicks && ['Movie', 'Episode', 'Video', 'MusicVideo'].includes(item.Type ?? '');
   const favAction = actions.find((a) => a.id === (favorite ? 'builtin.unfavorite' : 'builtin.favorite'));
 
   const heroHeight = wide ? Math.min(360, width * 0.3) : Math.min(width * 0.62, 340);
@@ -86,6 +88,9 @@ export function DetailScaffold<Row>({
             onPress={() => player.play({ item })}
             style={wide ? styles.playWide : styles.playNarrow}
           />
+        ) : null}
+        {playable && resumable ? (
+          <IconButton icon="arrow.counterclockwise" label="Start over" onPress={() => player.play({ item, startPositionTicks: 0 })} />
         ) : null}
         {favAction ? (
           <IconButton

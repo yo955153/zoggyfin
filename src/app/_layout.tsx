@@ -64,6 +64,18 @@ export default function RootLayout() {
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
               <Stack.Protected guard={!!session}>
                 <Stack.Screen name="(tabs)" />
+                <Stack.Screen
+                  name="player"
+                  options={{
+                    presentation: 'transparentModal',
+                    animation: 'fade',
+                    animationDuration: 240,
+                    contentStyle: { backgroundColor: '#000000' },
+                    autoHideHomeIndicator: true,
+                    orientation: 'default',
+                    gestureEnabled: false,
+                  }}
+                />
               </Stack.Protected>
               <Stack.Protected guard={!session}>
                 <Stack.Screen name="sign-in" />

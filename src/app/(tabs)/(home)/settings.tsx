@@ -1,7 +1,7 @@
 import * as Application from 'expo-application';
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { dropApi } from '@/api/client';
 import { logout } from '@/api/jellyfin';
@@ -11,8 +11,11 @@ import { clientIdentity } from '@/auth/identity';
 import { useSessionStore } from '@/auth/session-store';
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
+import { Icon } from '@/components/icon';
+import { type Option, OptionSheet } from '@/components/option-sheet';
 import { toast } from '@/lib/toast';
-import { colors, radius, size, spacing, type } from '@/theme';
+import { QUALITY_OPTIONS, qualityLabel, SKIP_OPTIONS, usePlaybackSettings } from '@/settings/playback';
+import { colors, iconSize, radius, size, spacing, type } from '@/theme';
 
 function confirm(title: string, message: string, action: string): Promise<boolean> {
   if (Platform.OS === 'web') {
@@ -77,6 +80,8 @@ export default function SettingsScreen() {
             <Row label="User" value={session.userName} last />
           </Section>
 
+          <PlaybackSection />
+
           <Section title="This device">
             <Row label="Device" value={id.device} />
             <Row label="App version" value={`${Application.nativeApplicationVersion ?? id.version}${Application.nativeBuildVersion ? ` (${Application.nativeBuildVersion})` : ''}`} last />
@@ -88,6 +93,65 @@ export default function SettingsScreen() {
         </View>
       </ScrollView>
     </>
+  );
+}
+
+type PickerKey = 'wifi' | 'cellular' | 'back' | 'forward' | null;
+
+function PlaybackSection() {
+  const st = usePlaybackSettings();
+  const [picker, setPicker] = useState<PickerKey>(null);
+  const quality: Option<number>[] = QUALITY_OPTIONS.map((q) => ({ value: q.value, label: q.label }));
+  const skips: Option<number>[] = SKIP_OPTIONS.map((n) => ({ value: n, label: `${n} seconds` }));
+  const sheet =
+    picker === 'wifi'
+      ? { title: 'Streaming quality on Wi-Fi', options: quality, selected: st.wifiBitrate, set: (v: number) => st.update({ wifiBitrate: v }) }
+      : picker === 'cellular'
+        ? { title: 'Streaming quality on cellular', options: quality, selected: st.cellularBitrate, set: (v: number) => st.update({ cellularBitrate: v }) }
+        : picker === 'back'
+          ? { title: 'Skip back', options: skips, selected: st.skipBackSeconds, set: (v: number) => st.update({ skipBackSeconds: v }) }
+          : picker === 'forward'
+            ? { title: 'Skip forward', options: skips, selected: st.skipForwardSeconds, set: (v: number) => st.update({ skipForwardSeconds: v }) }
+            : null;
+  return (
+    <Section title="Playback">
+      <PickRow label="Quality on Wi-Fi" value={qualityLabel(st.wifiBitrate)} onPress={() => setPicker('wifi')} />
+      {Platform.OS !== 'web' ? (
+        <PickRow label="Quality on cellular" value={qualityLabel(st.cellularBitrate)} onPress={() => setPicker('cellular')} />
+      ) : null}
+      <PickRow label="Skip back" value={`${st.skipBackSeconds} s`} onPress={() => setPicker('back')} />
+      <PickRow label="Skip forward" value={`${st.skipForwardSeconds} s`} onPress={() => setPicker('forward')} />
+      <View style={styles.row}>
+        <Text style={styles.label}>Play next episode automatically</Text>
+        <Switch value={st.autoplayNext} onValueChange={(v) => st.update({ autoplayNext: v })} trackColor={{ true: colors.accent }} />
+      </View>
+      <OptionSheet
+        visible={sheet !== null}
+        title={sheet?.title ?? ''}
+        options={sheet?.options ?? []}
+        selected={sheet ? [sheet.selected] : []}
+        onSelect={(v) => sheet?.set(v)}
+        onClose={() => setPicker(null)}
+      />
+    </Section>
+  );
+}
+
+function PickRow({ label, value, onPress }: { label: string; value: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value}`}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.row, styles.rowBorder, (pressed || hovered) && styles.rowPressed]}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.pick}>
+        <Text style={styles.value} numberOfLines={1}>
+          {value}
+        </Text>
+        <Icon name="chevron.right" size={iconSize.md} color={colors.textTertiary} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -125,5 +189,7 @@ const styles = StyleSheet.create({
   rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.separator },
   label: { ...type.body, color: colors.text },
   value: { ...type.body, color: colors.textSecondary, flexShrink: 1, textAlign: 'right' },
+  pick: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 1 },
+  rowPressed: { backgroundColor: colors.pressedRow },
   footnote: { ...type.caption, color: colors.textTertiary, textAlign: 'center', marginTop: spacing.md, lineHeight: 17 },
 });
