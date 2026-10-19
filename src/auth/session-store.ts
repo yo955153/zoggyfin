@@ -7,6 +7,7 @@ import { secureStore } from '@/storage/secure';
 import {
   type AccountRef,
   type AccountsData,
+  addServer as addServerTo,
   addSignIn,
   cacheStorageKey,
   EMPTY_ACCOUNTS,
@@ -112,6 +113,8 @@ interface SessionState {
   /** Signs one user out (the active one or another). */
   removeUser: (ref: AccountRef) => void;
   removeServer: (serverId: string) => void;
+  /** Saves a server with no user, or adds addresses to a saved one (invites). */
+  addServer: (server: Parameters<typeof addServerTo>[1]) => void;
   updateServer: (serverId: string, patch: ServerPatch) => void;
   /** The connection check picked an address for a server. */
   setServerUrl: (serverId: string, url: string) => void;
@@ -181,6 +184,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
       const accounts = removeServerFrom(get().accounts, serverId);
       commit(accounts, prev && prev.serverId !== serverId ? prev : sessionOf(accounts, accounts.active));
     },
+    addServer: (server) => commit(addServerTo(get().accounts, server), get().session),
     updateServer: (serverId, patch) => {
       const accounts = updateServerIn(get().accounts, serverId, patch);
       const s = get().session;

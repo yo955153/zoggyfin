@@ -158,6 +158,30 @@ export function addSignIn(data: AccountsData, f: SignInFacts): AccountsData {
   return { ...replaceServer(data, server), active: { serverId: server.id, userId: f.user.userId } };
 }
 
+/**
+ * Saves a server with no signed-in user (an invite whose server does not
+ * answer yet), or adds new addresses to a saved one. The active account stays.
+ */
+export function addServer(data: AccountsData, f: { serverId: string; serverName: string; addresses: readonly ServerAddress[] }): AccountsData {
+  const prev = findServer(data, f.serverId);
+  if (prev) {
+    let addresses = prev.addresses;
+    for (const a of f.addresses) addresses = addAddress(addresses, a.url, a.kind);
+    return replaceServer(data, { ...prev, addresses });
+  }
+  if (!f.addresses.length) return data;
+  return replaceServer(data, {
+    id: f.serverId,
+    name: f.serverName || 'Jellyfin',
+    version: null,
+    addresses: [...f.addresses],
+    mode: 'auto',
+    wifi: NO_WIFI_RULE,
+    lastUrl: null,
+    users: [],
+  });
+}
+
 /** The account to use after `gone` is removed: another user on the same server first, then any user. */
 function nextActive(data: AccountsData, gone: AccountRef | null): AccountRef | null {
   if (data.active && findUser(data, data.active)) return data.active;

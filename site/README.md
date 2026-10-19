@@ -6,17 +6,27 @@ The static pages for `zoggyfin.zog-tech.com`. The App Store listing links to the
 |---|---|
 | `/` | `public/index.html` |
 | `/download` | `public/download/index.html` (Mac DMG, TestFlight) |
+| `/join` | `public/join/index.html` (invite links; see below) |
+| `/.well-known/apple-app-site-association` | iOS universal links for `/join*` |
+| `/.well-known/assetlinks.json` | Android App Links (release signing certificate) |
 | `/privacy` | `public/privacy/index.html` |
 | `/support` | `public/support/index.html` |
 | any other path | `public/404.html` |
 
 All pages use the one stylesheet `public/style.css`. The pages are plain HTML: no build
-step and no external requests. The only script is `public/download/download.js`: it reads
+step and no external requests. Scripts come from the same origin only. `public/download/download.js` reads
 `/download/latest.json` and shows the newest Mac version and its notes. nginx serves that
 file from the update feed (`https://releases.zog-tech.com/zoggyfin/latest.json`), so the
 page needs no change for a new release. The Content-Security-Policy in `nginx.conf` allows
 scripts and requests from the same origin only. Add a page as
 `public/<name>/index.html`; nginx serves it at `/<name>`.
+
+The `/join` page reads the invite from the URL fragment in the browser and sends
+nothing. `public/join/join-core.js` has the logic and has unit tests
+(`src/invite/__tests__/join-page.test.ts`). `public/join/config.js` has the store and
+download links: set `appStoreUrl` and `androidUrl` when they exist. `public/join/qrcode.js`
+is qrcode-generator (MIT). `public/_headers` (and `nginx.conf`) serve the two
+`.well-known` files as `application/json` with no redirect.
 
 Rules: no personal names or personal domains. The owner is Zog Tech, Inc. The contact is
 admin@zog-tech.com.

@@ -8,6 +8,7 @@ import { describeError } from '@/api/errors';
 import { findServer } from '@/api/jellyfin';
 import { useAccounts } from '@/auth/session-store';
 import { Button } from '@/components/button';
+import { InviteEntry } from '@/features/invite/invite-entry';
 import { TextField } from '@/components/text-field';
 import { LanAccessHelp, NearbyServers } from '@/features/servers/nearby-servers';
 import { askIfReinstalled } from '@/features/servers/reinstall';
@@ -127,6 +128,7 @@ export default function ServerScreen() {
           {discovery.phase !== 'primer' ? (
             <NearbyServers discovery={discovery} savedIds={savedServers.map((x) => x.id)} onChoose={choose} />
           ) : null}
+          {!adding ? <InviteEntry /> : null}
           <Text style={styles.footnote}>
             {discovery.phase === 'off'
               ? 'Zoggyfin is a client for Jellyfin. It connects only to the server you enter.'

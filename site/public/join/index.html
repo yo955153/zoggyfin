@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join on Zoggyfin</title>
+<meta name="description" content="You are invited to a Jellyfin server. Get Zoggyfin and join.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Cpath d='M26 92 C 34 66, 52 38, 82 22 C 86 20, 90 23, 88 28 C 80 48, 82 70, 104 92 Z' fill='%23FF7A59'/%3E%3Crect x='14' y='100' width='100' height='7' rx='3.5' fill='%23FF7A59'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+<meta name="robots" content="noindex">
+<script src="/join/config.js" defer></script>
+<script src="/join/join-core.js" defer></script>
+<script src="/join/qrcode.js" defer></script>
+<script src="/join/join.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+<header><a href="/"><svg viewBox="0 0 128 128" width="36" height="36" aria-hidden="true"><defs><linearGradient id="fin" x1="0.15" y1="1" x2="0.85" y2="0"><stop offset="0" stop-color="#FF6A4D"/><stop offset="1" stop-color="#FFA270"/></linearGradient></defs><path d="M26 92 C 34 66, 52 38, 82 22 C 86 20, 90 23, 88 28 C 80 48, 82 70, 104 92 Z" fill="url(#fin)"/><rect x="14" y="100" width="70" height="7" rx="3.5" fill="#FF7A59"/><rect x="92" y="100" width="22" height="7" rx="3.5" fill="#FF7A59" opacity="0.45"/></svg>zoggyfin</a><nav><a href="/download">Download</a><a href="/privacy">Privacy</a><a href="/support">Support</a></nav></header>
+<main>
+<h1 id="title">You are invited</h1>
+<p class="lede" id="lede">Open this link on the device where you want to watch.</p>
+
+<div id="invite" hidden>
+<p class="card" id="tunnel" hidden></p>
+
+<section id="primary" hidden>
+<p class="actions"><a class="button big" id="get" href="/download">Get Zoggyfin</a></p>
+<p class="muted" id="get-note" hidden></p>
+<ol>
+<li>Tap <strong id="get-label">Get Zoggyfin</strong>. This copies your invite.</li>
+<li>Install Zoggyfin and open it.</li>
+<li>Tap <strong>Paste invite</strong>, then <strong>Join</strong>.</li>
+</ol>
+</section>
+<p class="muted" id="android-soon" hidden>Zoggyfin for Android comes soon. You can join on an iPhone, iPad or Mac now.</p>
+<p class="note" id="copied" role="status" aria-live="polite" hidden></p>
+
+<p class="actions"><a class="button secondary" id="open" href="zoggyfin://join">Open in Zoggyfin</a><button class="button secondary" id="copy" type="button">Copy invite</button></p>
+<p class="muted">Have Zoggyfin already? Tap <strong>Open in Zoggyfin</strong>. Zoggyfin signs you in, then you set your own password.</p>
+
+<details class="card" id="others">
+<summary>Other devices</summary>
+<h3>iPhone and iPad</h3>
+<p><a id="link-ios" href="https://testflight.apple.com/join/qRFABNBJ">Get Zoggyfin on TestFlight</a>. Install the TestFlight app from the App Store first.</p>
+<h3>Mac</h3>
+<p><a href="/download">Get Zoggyfin for Mac</a> (Apple silicon). In Zoggyfin, select <strong>Paste invite</strong>.</p>
+<h3>Android</h3>
+<p id="link-android">Zoggyfin for Android comes soon.</p>
+<h3>Scan on another device</h3>
+<p class="muted">Scan this code with the camera of the other device. It opens this page there.</p>
+<p><img id="qr" class="qr" alt="QR code of this invite" width="232" height="232" hidden></p>
+</details>
+<p class="muted">This page reads the invite in your browser. It sends nothing to a server.</p>
+</div>
+
+<div id="broken" hidden>
+<p>This invite link is not complete. Copy the full link from the message and open it again, or ask for a new invite.</p>
+</div>
+<noscript><p>Turn on JavaScript to read the invite, or open the link on a device with Zoggyfin.</p></noscript>
+</main>
+<footer>&copy; 2026 Zog Tech, Inc. Zoggyfin is open source under the MPL-2.0. It is not affiliated with the Jellyfin project. Contact: <a href="mailto:admin@zog-tech.com">admin@zog-tech.com</a></footer>
+</div>
+</body>
+</html>

@@ -12,6 +12,7 @@ compile_error!("build the release with panic = \"unwind\" (Cargo.toml [profile.r
 mod debug;
 mod discovery;
 mod downloads;
+mod links;
 #[cfg(target_os = "macos")]
 mod media_macos;
 mod menu;
@@ -75,6 +76,7 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::new().build());
     #[cfg(target_os = "macos")]
@@ -107,6 +109,7 @@ pub fn run() {
             downloads::files_disk_space,
             now_playing_update,
             now_playing_clear,
+            links::desktop_take_links,
             discovery::discovery_udp,
             discovery::discovery_interfaces,
             discovery::discovery_lan_probe,
@@ -129,6 +132,7 @@ pub fn run() {
             if update::offer_move_to_applications(app.handle()) {
                 std::process::exit(0);
             }
+            links::setup(app);
             let handle = app.handle();
             let data_dir = handle.path().app_data_dir()?;
             app.manage::<downloads::DownloadsState>(Arc::new(downloads::Downloads::new(data_dir.clone())));

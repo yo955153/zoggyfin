@@ -1,0 +1,10 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["HF45WH64UK.com.zogtech.zoggyfin"],
+        "components": [{ "/": "/join*", "comment": "Invite links. The invite is in the fragment." }]
+      }
+    ]
+  }
+}

@@ -441,6 +441,57 @@ the iOS UDP path stays off and iOS uses the HTTP scan. To turn it on:
    `modules/zoggyfin-discovery/ios/ZoggyfinDiscoveryModule.swift`.
 6. Make a new native build. An over-the-air update cannot turn it on.
 
+## Invites
+
+A server administrator adds a person and sends one link. The person taps the link, gets
+the app and is signed in. The admin never opens the Jellyfin dashboard for this.
+
+- **Admin side.** Settings, Servers, <server>, Invite someone. The row shows only when
+  the signed-in user has `Policy.IsAdministrator`. The short way is a name and Send.
+  "Options" holds the libraries (all by default), Allow downloads, Allow access away
+  from home, the addresses and "Include my extensions". The app sends
+  `POST /Users/New` with a one-time password (24 characters from a secure random
+  source), then `POST /Users/{id}/Policy`. The person is never an administrator and is
+  hidden from the server's sign-in screen. The share sheet opens with the message, and
+  the screen shows a QR code of the link. "Pending invites" lists the users of invites
+  from this device that never signed in. Resend sets a new one-time password, so the
+  old link stops working. Cancel invite deletes the user.
+- **The link.** `https://zoggyfin.zog-tech.com/join#<payload>`. The payload is in the
+  fragment, so it never reaches a web server log. It is base64url JSON with a version
+  (`v: 1`): the server Id and name, an ordered address list with a label per address,
+  the username, the one-time password, the inviter's name and, optionally, up to 10
+  extension manifest URLs. The app checks every field: sizes, a hex server Id, and
+  http or https addresses only. The app never logs a payload.
+- **Addresses.** Labels: Internet, Tailscale (100.64.0.0/10, `fd7a:115c:a1e0::/48` or a
+  `*.ts.net` name), VPN (a private address saved as external, or marked "VPN" by the
+  admin, for example WireGuard) and Home network. By default the invite has all
+  addresses except Home network ones. The admin sees a warning only when no chosen
+  address works away from home. When every address is Tailscale or VPN, the page and the
+  app say "Connect to <Server>'s Tailscale (or VPN) first, then tap Join."
+- **The /join page.** A static page on the site. It reads the fragment in the browser
+  and sends nothing. It finds the platform and shows one big button: iPhone and iPad go
+  to the App Store link (TestFlight until it exists), Android to the APK or the Play
+  Store (configured; "comes soon" until then), Mac to the disk image. The button first
+  copies the invite link. "Open in Zoggyfin" uses `zoggyfin://join#…` (an `intent://`
+  link on Android, with the invite in the path). "Other devices" lists all options and
+  a QR code. The page adds the Smart App Banner with the join link as the argument.
+- **Opening the link.** iOS universal links and Android App Links open the app for
+  `/join`. `app/+native-intent.tsx` takes the payload from `zoggyfin://join#…`,
+  `zoggyfin://join/…` or the https link, keeps it in memory and opens
+  `/accept-invite`. The Mac app gets `zoggyfin://` links through the Tauri deep-link
+  plugin (`desktop/src-tauri/src/links.rs`).
+- **No app yet.** After the install, the first screen has "Paste invite". The app reads
+  the clipboard only after this tap, so iOS shows its paste prompt. "I have an invite
+  link" opens a field for the link.
+- **Join.** "Join <Server> as <username>?". The app saves the server with all addresses
+  and probes them at the same time. Only an address that answers with the server Id of
+  the invite gets the password. When no address answers, the invite stays in the secure
+  store and the screen says "Cannot reach <Server> yet". When a different server answers,
+  the app refuses. After the sign-in, the person sets an own password
+  (`POST /Users/Password` with the one-time password as `CurrentPw`). Skip shows one
+  reminder. The account becomes active at the end. Then the extension system's confirm
+  screen offers the invite's extensions.
+
 ## Servers and accounts
 
 The app keeps many servers, each with one or more signed-in users. Tokens are in the

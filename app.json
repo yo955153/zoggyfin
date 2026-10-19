@@ -10,6 +10,7 @@
     "ios": {
       "bundleIdentifier": "com.zogtech.zoggyfin",
       "supportsTablet": true,
+      "associatedDomains": ["applinks:zoggyfin.zog-tech.com"],
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -32,6 +33,12 @@
       },
       "predictiveBackGestureEnabled": false,
       "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "zoggyfin.zog-tech.com", "pathPrefix": "/join" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
         {
           "action": "SEND",
           "category": ["DEFAULT"],

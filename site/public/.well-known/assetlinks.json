@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.zogtech.zoggyfin",
+      "sha256_cert_fingerprints": ["6A:09:FF:F1:E0:2E:06:E1:28:B6:DA:09:AE:C7:70:1A:68:37:64:AC:11:19:37:52:FD:7E:CE:9D:21:2C:5B:32"]
+    }
+  }
+]

@@ -25,6 +25,8 @@ import { startOfflineServices } from '@/features/offline/bootstrap';
 import { toast } from '@/lib/toast';
 import { startUpdateChecks } from '@/platform/updates';
 import { audioSession } from '@/player/audio/session';
+import '@/invite/wiring';
+import { useInviteLinks } from '@/invite/use-invite-links';
 import { mediaColors, useTheme } from '@/theme';
 import { AppThemeProvider } from '@/theme/provider';
 
@@ -74,6 +76,8 @@ export default function RootLayout() {
 function Root({ session }: { session: boolean }) {
   const { c } = useTheme();
   const noAccount = useNoAccountStore((st) => st.open) && !session;
+  // Invite links in the desktop app, and the extension offer after a join.
+  useInviteLinks();
   useEffect(() => {
     if (session) setNoAccountOpen(false);
   }, [session]);

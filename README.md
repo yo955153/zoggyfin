@@ -115,6 +115,18 @@ Servers and accounts:
 - An install with one saved account moves to the new format at the first start, with no
   new sign-in. See "Server addresses" in the design.
 
+Invites:
+
+- An administrator adds a person in a few taps: Settings, Servers, <server>, Invite
+  someone. Type a name and tap Send. The app makes the Jellyfin user with a one-time
+  password and opens the share sheet with a link. A QR code shows the same link.
+- The link is `https://zoggyfin.zog-tech.com/join#…`. The invite is in the fragment, so
+  no server log gets it. It has all useful addresses of the server (internet, Tailscale,
+  VPN), so it works also when the server is reachable only over Tailscale or WireGuard.
+- With the app, the link opens the app. Without the app, the page gives the right
+  download and copies the invite; after the install, "Paste invite" on the first screen
+  joins. The person sets an own password at once. See "Invites" in the design.
+
 Desktop app (macOS on Apple Silicon):
 
 - A Tauri 2 window around the web build, in [desktop/](desktop/). Video plays through libmpv:

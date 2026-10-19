@@ -16,6 +16,7 @@ import { Sheet } from '@/components/sheet';
 import { EmptyState } from '@/components/states';
 import { TextField } from '@/components/text-field';
 import { Touchable } from '@/components/touchable';
+import { InviteSection } from '@/features/invite/invite-section';
 import { openAddUser, removeServerFlow, signOutUser, switchAccount } from '@/features/servers/actions';
 import { checkAgain, ConnectionStatus } from '@/features/servers/connection-status';
 import { ActionRow, Group, InfoRow, makeSettingsStyles, SettingsRow, webSwitchColors } from '@/features/settings/rows';
@@ -84,6 +85,7 @@ export default function ServerScreen() {
           <ModeSection server={server} />
           {networkSource.available && Platform.OS !== 'web' ? <WifiSection server={server} /> : null}
           <UsersSection server={server} />
+          <InviteSection serverId={server.id} />
           <Group title="About">
             <InfoRow icon="server.rack" label="Name" value={server.name} />
             <InfoRow icon="info.circle" label="Version" value={server.version ? `Jellyfin ${server.version}` : 'Unknown'} last />

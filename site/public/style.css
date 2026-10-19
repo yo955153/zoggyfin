@@ -31,3 +31,8 @@ footer a{color:var(--muted)}
 h3{font-size:17px;margin:20px 0 4px}
 ol{padding-left:22px}
 code{font:15px ui-monospace,SFMono-Regular,Menlo,monospace}
+button.button{border:0;cursor:pointer;font-family:inherit}
+.button.big{display:block;text-align:center;font-size:19px;padding:17px 24px;width:100%}
+.note{background:var(--surface);border-left:3px solid var(--accent);border-radius:8px;padding:10px 14px}
+details.card summary{cursor:pointer;font-weight:600}
+.qr{background:#fff;border-radius:12px;image-rendering:pixelated}
