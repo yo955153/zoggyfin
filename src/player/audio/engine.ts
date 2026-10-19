@@ -1,0 +1,270 @@
+/**
+ * The audio engine: one expo-audio `AudioPlaylist` for the app's life. On
+ * iOS it is an AVQueuePlayer, which preloads the next item and plays it
+ * without a gap; on the web it is an HTML audio element with the next one
+ * preloaded. Both handle the lock screen / Media Session, interruptions
+ * (calls, Siri) and route changes (pause when headphones are unplugged).
+ *
+ * The queue lives in JavaScript (queue.ts). The native playlist only holds
+ * a window: what has played since the last load, the current track and the
+ * one after it. Inserting before the current item would make expo-audio
+ * rebuild the playlist and restart the current track, so the engine only
+ * appends and only removes items after the current one.
+ */
+import { type AudioPlaylist, createAudioPlaylist, setAudioModeAsync } from 'expo-audio';
+
+export interface EngineTrack {
+  /** The queue entry key. */
+  key: string;
+  uri: string;
+}
+
+export interface LockScreenInfo {
+  title: string;
+  artist?: string;
+  albumTitle?: string;
+  artworkUrl?: string;
+}
+
+/** `tracks` shows next/previous on the lock screen; `seek` shows skip back/forward (long-form). */
+export type LockScreenControls = 'tracks' | 'seek';
+
+export type AudioEngineEvent =
+  | { type: 'status'; position: number; duration: number; playing: boolean; buffering: boolean; loaded: boolean }
+  /** The playlist moved to another track by itself (end of a track, lock screen, headset). */
+  | { type: 'track'; key: string; previousKey: string | null; at: number }
+  /** The last track ended and nothing follows. */
+  | { type: 'ended' }
+  | { type: 'error'; message: string };
+
+export type AudioEngineListener = (e: AudioEngineEvent) => void;
+
+export class AudioEngine {
+  private playlist: AudioPlaylist | null = null;
+  private keys: string[] = [];
+  private listeners = new Set<AudioEngineListener>();
+  private pendingStart: number | null = null;
+  private pendingPlay = false;
+  private lastIndex = 0;
+  private lastPosition = 0;
+  private lastDuration = 0;
+  private lockControls: LockScreenControls | null = null;
+  private modeSet = false;
+  private rate = 1;
+  /** Ignore status from before a load (the native side can deliver late events). */
+  private loading = false;
+
+  subscribe(l: AudioEngineListener): () => void {
+    this.listeners.add(l);
+    return () => this.listeners.delete(l);
+  }
+
+  private emit(e: AudioEngineEvent) {
+    this.listeners.forEach((l) => l(e));
+  }
+
+  private ensure(): AudioPlaylist {
+    if (this.playlist) return this.playlist;
+    const p = createAudioPlaylist({ sources: [], updateInterval: 500, loop: 'none' });
+    p.addListener('playlistStatusUpdate', (s) => {
+      const index = s.currentIndex ?? 0;
+      if (this.pendingStart !== null && s.isLoaded && index === 0) {
+        const start = this.pendingStart;
+        this.pendingStart = null;
+        void p.seekTo(start).finally(() => {
+          if (this.pendingPlay) p.play();
+          this.pendingPlay = false;
+        });
+      }
+      // Until the new track is ready (and has seeked to its start), keep reporting the start position.
+      if (this.loading && s.isLoaded && this.pendingStart === null) this.loading = false;
+      this.lastIndex = index;
+      if (!this.loading && s.currentTime >= 0) this.lastPosition = s.currentTime;
+      if (s.duration > 0) this.lastDuration = s.duration;
+      this.emit({
+        type: 'status',
+        position: this.lastPosition,
+        duration: s.duration,
+        playing: s.playing,
+        buffering: s.isBuffering,
+        loaded: s.isLoaded,
+      });
+      if (s.didJustFinish && index >= this.keys.length - 1) this.emit({ type: 'ended' });
+    });
+    p.addListener('trackChanged', ({ previousIndex, currentIndex }) => {
+      const key = this.keys[currentIndex];
+      if (!key) return;
+      this.lastIndex = currentIndex;
+      this.emit({ type: 'track', key, previousKey: this.keys[previousIndex] ?? null, at: Date.now() });
+    });
+    this.playlist = p;
+    return p;
+  }
+
+  private async audioMode() {
+    if (this.modeSet) return;
+    this.modeSet = true;
+    try {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        interruptionMode: 'doNotMix',
+        allowsRecording: false,
+        shouldRouteThroughEarpiece: false,
+      });
+    } catch {
+      this.modeSet = false;
+    }
+  }
+
+  /** The video player sets its own audio session; set ours again before the next load. */
+  resetAudioMode(): void {
+    this.modeSet = false;
+  }
+
+  get loaded(): boolean {
+    return this.playlist !== null && this.keys.length > 0;
+  }
+
+  get position(): number {
+    return this.lastPosition;
+  }
+
+  get duration(): number {
+    return this.lastDuration;
+  }
+
+  get currentKey(): string | null {
+    return this.keys[this.lastIndex] ?? null;
+  }
+
+  /** The key the playlist plays after the current one, if any. */
+  get nextKey(): string | null {
+    return this.keys[this.lastIndex + 1] ?? null;
+  }
+
+  /** Replaces what plays: the current track (from `startSeconds`) and the one after it. */
+  async load(current: EngineTrack, next: EngineTrack | null, startSeconds: number, autoplay: boolean): Promise<void> {
+    await this.audioMode();
+    const p = this.ensure();
+    this.loading = true;
+    p.pause();
+    p.clear();
+    this.keys = [];
+    this.lastIndex = 0;
+    this.lastPosition = startSeconds;
+    this.lastDuration = 0;
+    p.add({ uri: current.uri });
+    this.keys.push(current.key);
+    if (next) {
+      p.add({ uri: next.uri });
+      this.keys.push(next.key);
+    }
+    if (this.rate !== 1) p.playbackRate = this.rate;
+    if (startSeconds > 0.5) {
+      this.pendingStart = startSeconds;
+      this.pendingPlay = autoplay;
+    } else {
+      this.pendingStart = null;
+      this.pendingPlay = false;
+      if (autoplay) p.play();
+    }
+  }
+
+  /** Sets the track after the current one (or none) without touching the current one. */
+  setNext(next: EngineTrack | null): void {
+    const p = this.playlist;
+    if (!p || !this.keys.length) return;
+    const cur = this.lastIndex;
+    if (next && this.keys.length === cur + 2 && this.keys[cur + 1] === next.key) return;
+    if (!next && this.keys.length === cur + 1) return;
+    for (let i = this.keys.length - 1; i > cur; i--) {
+      p.remove(i);
+      this.keys.pop();
+    }
+    if (next) {
+      p.add({ uri: next.uri });
+      this.keys.push(next.key);
+    }
+  }
+
+  /** Moves to the preloaded next track (gapless path). */
+  next(): void {
+    this.playlist?.next();
+  }
+
+  play(): void {
+    if (this.pendingStart !== null) {
+      this.pendingPlay = true;
+      return;
+    }
+    this.playlist?.play();
+  }
+
+  pause(): void {
+    this.pendingPlay = false;
+    this.playlist?.pause();
+  }
+
+  seekTo(seconds: number): void {
+    const p = this.playlist;
+    if (!p) return;
+    const s = Math.max(0, seconds);
+    if (this.pendingStart !== null) {
+      this.pendingStart = s;
+      return;
+    }
+    this.lastPosition = s;
+    void p.seekTo(s);
+  }
+
+  setRate(rate: number): void {
+    this.rate = rate;
+    if (this.playlist) this.playlist.playbackRate = rate;
+  }
+
+  setVolume(volume: number): void {
+    if (this.playlist) this.playlist.volume = Math.max(0, Math.min(1, volume));
+  }
+
+  setLockScreen(info: LockScreenInfo, controls: LockScreenControls): void {
+    const p = this.playlist;
+    if (!p) return;
+    const meta = { title: info.title, artist: info.artist, albumTitle: info.albumTitle, artworkUrl: info.artworkUrl };
+    if (this.lockControls !== controls) {
+      this.lockControls = controls;
+      p.setActiveForLockScreen(true, meta, {
+        showNextTrack: controls === 'tracks',
+        showPreviousTrack: controls === 'tracks',
+        showSeekForward: controls === 'seek',
+        showSeekBackward: controls === 'seek',
+      });
+    } else {
+      p.updateLockScreenMetadata(meta);
+    }
+  }
+
+  unload(): void {
+    const p = this.playlist;
+    this.pendingStart = null;
+    this.pendingPlay = false;
+    this.keys = [];
+    this.lastIndex = 0;
+    if (!p) return;
+    try {
+      p.pause();
+      p.clear();
+      if (this.lockControls) p.clearLockScreenControls();
+    } catch {
+      // Already gone.
+    }
+    this.lockControls = null;
+  }
+}
+
+let engine: AudioEngine | null = null;
+
+export function audioEngine(): AudioEngine {
+  engine ??= new AudioEngine();
+  return engine;
+}

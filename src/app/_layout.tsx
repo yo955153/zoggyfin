@@ -16,6 +16,7 @@ import {
 import { useSession, useSessionStore } from '@/auth/session-store';
 import { ToastHost } from '@/components/toast-host';
 import { toast } from '@/lib/toast';
+import { audioSession } from '@/player/audio/session';
 import { mediaColors, useTheme } from '@/theme';
 import { AppThemeProvider } from '@/theme/provider';
 
@@ -56,6 +57,10 @@ export default function RootLayout() {
 
 function Root({ session }: { session: boolean }) {
   const { c } = useTheme();
+  // Bring back the last audio queue (paused) after a restart.
+  useEffect(() => {
+    if (session) audioSession().restore();
+  }, [session]);
   return (
           <View style={[styles.flex, { backgroundColor: c.bg }]}>
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
@@ -70,6 +75,16 @@ function Root({ session }: { session: boolean }) {
                     contentStyle: { backgroundColor: mediaColors.black },
                     autoHideHomeIndicator: true,
                     orientation: 'default',
+                    gestureEnabled: false,
+                  }}
+                />
+                <Stack.Screen
+                  name="now-playing"
+                  options={{
+                    presentation: 'transparentModal',
+                    animation: 'slide_from_bottom',
+                    animationDuration: 300,
+                    contentStyle: { backgroundColor: mediaColors.black },
                     gestureEnabled: false,
                   }}
                 />

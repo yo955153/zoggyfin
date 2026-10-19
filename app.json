@@ -67,7 +67,8 @@
             "topShelfWide2x": "./assets/images/tv/topshelf-wide-4640x1440.png"
           }
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -114,3 +114,20 @@ export function secondsToTicks(seconds: number): number {
 export function ticksToSecondsExact(ticks: number | null | undefined): number {
   return ticks ? ticks / 10_000_000 : 0;
 }
+
+/** The report body Jellyfin expects. */
+export function toServerReport(r: PlaybackReport) {
+  return {
+    ItemId: r.itemId,
+    MediaSourceId: r.mediaSourceId,
+    PlaySessionId: r.playSessionId,
+    PlayMethod: r.playMethod,
+    CanSeek: r.canSeek,
+    PositionTicks: r.positionTicks,
+    IsPaused: r.isPaused,
+    IsMuted: r.isMuted,
+    PlaybackRate: r.playbackRate,
+    AudioStreamIndex: r.audioStreamIndex ?? undefined,
+    SubtitleStreamIndex: r.subtitleStreamIndex ?? -1,
+  };
+}

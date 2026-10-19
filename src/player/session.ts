@@ -22,7 +22,7 @@ import { mediaCapabilities } from './capabilities';
 import { buildDeviceProfile } from './device-profile';
 import { getEngine } from './engine';
 import type { EngineEvent } from './engine-types';
-import { type PlaybackReport, ProgressReporter, secondsToTicks, ticksToSecondsExact } from './progress-reporter';
+import { ProgressReporter, secondsToTicks, ticksToSecondsExact, toServerReport } from './progress-reporter';
 import { normalizeSegments } from './segments';
 import { setPlayerState, initialPlayerState, playerState, type NowPlaying } from './store';
 import { audioSwitchNeedsStream, pickSource, planStream, playbackInfoBody, type StreamServer } from './stream';
@@ -53,22 +53,6 @@ async function onCellular(): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function toServerReport(r: PlaybackReport) {
-  return {
-    ItemId: r.itemId,
-    MediaSourceId: r.mediaSourceId,
-    PlaySessionId: r.playSessionId,
-    PlayMethod: r.playMethod,
-    CanSeek: r.canSeek,
-    PositionTicks: r.positionTicks,
-    IsPaused: r.isPaused,
-    IsMuted: r.isMuted,
-    PlaybackRate: r.playbackRate,
-    AudioStreamIndex: r.audioStreamIndex,
-    SubtitleStreamIndex: r.subtitleStreamIndex ?? -1,
-  };
 }
 
 function artworkUrl(item: BaseItemDto, server: StreamServer): string | undefined {
