@@ -94,6 +94,7 @@ export class HostRoom {
             stream: this.stream,
             onlyHostControls: this.onlyHostControls,
             anchor: this.currentAnchor(),
+            you: peerId,
           },
           [peerId],
         );

@@ -76,26 +76,28 @@ describe('DriftCorrector', () => {
     expect(d.decide({ expected: 10.1, actual: 10, groupRate: 1, now: 0 })).toEqual({ kind: 'none' });
   });
 
-  it('speeds up when behind and slows down when ahead, within 8 %', () => {
+  it('speeds up when behind and slows down when ahead, in two steps (3 % and 6 %)', () => {
     const d = new DriftCorrector();
-    expect(d.decide({ expected: 10.4, actual: 10, groupRate: 1, now: 0 })).toEqual({ kind: 'rate', rate: 1.08 });
+    expect(d.decide({ expected: 10.5, actual: 10, groupRate: 1, now: 0 })).toEqual({ kind: 'rate', rate: 1.06 });
+    expect(d.decide({ expected: 10.3, actual: 10, groupRate: 1, now: 500 })).toEqual({ kind: 'rate', rate: 1.03 });
     const e = new DriftCorrector();
-    expect(e.decide({ expected: 10, actual: 10.2, groupRate: 1, now: 0 })).toEqual({ kind: 'rate', rate: 0.95 });
+    expect(e.decide({ expected: 10, actual: 10.2, groupRate: 1, now: 0 })).toEqual({ kind: 'rate', rate: 0.97 });
   });
 
   it('scales the nudge to the group rate', () => {
     const d = new DriftCorrector();
-    expect(d.decide({ expected: 10.2, actual: 10, groupRate: 2, now: 0 })).toEqual({ kind: 'rate', rate: 2.1 });
+    expect(d.decide({ expected: 10.2, actual: 10, groupRate: 2, now: 0 })).toEqual({ kind: 'rate', rate: 2.06 });
   });
 
-  it('keeps nudging until the drift is under 40 ms, then restores the rate', () => {
+  it('keeps nudging until the drift passes zero by 10 ms, then restores the rate', () => {
     const d = new DriftCorrector();
     d.decide({ expected: 10.3, actual: 10, groupRate: 1, now: 0 });
     expect(d.isNudging).toBe(true);
-    expect(d.decide({ expected: 10.1, actual: 10, groupRate: 1, now: 500 }).kind).toBe('rate');
-    expect(d.decide({ expected: 10.02, actual: 10, groupRate: 1, now: 1000 })).toEqual({ kind: 'rate', rate: 1 });
+    expect(d.decide({ expected: 10.1, actual: 10, groupRate: 1, now: 500 })).toEqual({ kind: 'rate', rate: 1.03 });
+    expect(d.decide({ expected: 10, actual: 10.005, groupRate: 1, now: 750 })).toEqual({ kind: 'rate', rate: 1.03 });
+    expect(d.decide({ expected: 10, actual: 10.02, groupRate: 1, now: 1000 })).toEqual({ kind: 'rate', rate: 1 });
     expect(d.isNudging).toBe(false);
-    expect(d.decide({ expected: 10.02, actual: 10, groupRate: 1, now: 1500 })).toEqual({ kind: 'none' });
+    expect(d.decide({ expected: 10.02, actual: 10, groupRate: 1, now: 30_000 })).toEqual({ kind: 'none' });
   });
 
   it('seeks above 1 s with a lead, then waits for the cooldown', () => {
@@ -103,6 +105,15 @@ describe('DriftCorrector', () => {
     expect(d.decide({ expected: 20, actual: 15, groupRate: 1, now: 0 })).toEqual({ kind: 'seek', position: 20.1 });
     expect(d.decide({ expected: 22, actual: 15, groupRate: 1, now: 1000 })).toEqual({ kind: 'none' });
     expect(d.decide({ expected: 22, actual: 15, groupRate: 1, now: 1600 }).kind).toBe('seek');
+  });
+
+  it('corrects a smaller drift (50 ms) just after a start, but not later', () => {
+    const d = new DriftCorrector();
+    d.noteSeek(0);
+    expect(d.decide({ expected: 10.1, actual: 10, groupRate: 1, now: 2000 }).kind).toBe('rate');
+    const e = new DriftCorrector();
+    e.noteSeek(0);
+    expect(e.decide({ expected: 10.1, actual: 10, groupRate: 1, now: 20_000 })).toEqual({ kind: 'none' });
   });
 
   it('waits after a user seek', () => {

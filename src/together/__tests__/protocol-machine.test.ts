@@ -61,9 +61,10 @@ describe('protocol', () => {
     expect(decodeJoinContext(encodeJoinContext({ name: 'iPhone', have: true }))).toEqual({ v: 1, name: 'iPhone', have: true });
     expect(decodeJoinContext('{"v":9,"name":"x","have":true}')).toBeNull();
     expect(decodeJoinContext(null)).toBeNull();
-    const ad = encodeAdvert({ sessionId: 's1', hostName: 'H'.repeat(100), itemId: 'i1', itemName: 'Film' });
+    const ad = encodeAdvert({ sessionId: 's1', hostName: 'H'.repeat(100), itemId: 'i1', itemName: 'Film', serverId: 'srv' });
     expect(ad.h).toHaveLength(60);
-    expect(decodeAdvert(ad)).toEqual({ sessionId: 's1', hostName: 'H'.repeat(60), itemId: 'i1', itemName: 'Film' });
+    expect(decodeAdvert(ad)).toEqual({ sessionId: 's1', hostName: 'H'.repeat(60), itemId: 'i1', itemName: 'Film', serverId: 'srv' });
+    expect(decodeAdvert({ v: '1', s: 's', i: 'i' })?.serverId).toBeNull();
     expect(decodeAdvert({ v: '0', s: 's', i: 'i' })).toBeNull();
   });
 });

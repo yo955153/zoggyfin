@@ -44,7 +44,9 @@ export class Follower {
   private pending = new Set<number>();
   private timers: unknown[] = [];
   private unsubBuffering: (() => void) | null = null;
+  /** The other guests (this guest is left out). */
   members: Member[] = [];
+  private selfId: string | null = null;
   onlyHostControls = false;
   private local = false;
 
@@ -99,6 +101,7 @@ export class Follower {
         this.deps.onChange?.();
         return;
       case 'welcome':
+        this.selfId = message.you ?? null;
         this.onlyHostControls = message.onlyHostControls;
         this.anchors.setAnchor(message.anchor);
         this.deps.onChange?.();
@@ -111,7 +114,7 @@ export class Follower {
         this.deps.onChange?.();
         return;
       case 'members':
-        this.members = message.members;
+        this.members = message.members.filter((m) => m.id !== this.selfId);
         this.onlyHostControls = message.onlyHostControls;
         this.deps.onChange?.();
         return;

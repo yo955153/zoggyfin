@@ -13,6 +13,8 @@ export const PROTOCOL_VERSION = 1;
 /** The slim item facts a guest needs to show and match the item. */
 export interface SharedItem {
   id: string;
+  /** The Jellyfin server of the host's download, when known. */
+  serverId?: string | null;
   name: string;
   type: string;
   seriesName?: string | null;
@@ -67,6 +69,8 @@ export type Message =
       stream: StreamRef | null;
       onlyHostControls: boolean;
       anchor: Anchor;
+      /** The guest's member id, so it can leave itself out of the members list. */
+      you?: string;
     }
   /** Clock sync: the guest sends t0 (its clock); the host answers with t1 (receive) and t2 (send), host clock. */
   | { t: 'ping'; id: number; t0: number }
@@ -118,7 +122,8 @@ function valid(x: Record<string, unknown>): boolean {
         isItem(x.item) &&
         (x.stream === null || (isObj(x.stream) && str(x.stream.service) && str(x.stream.path))) &&
         bool(x.onlyHostControls) &&
-        isAnchor(x.anchor)
+        isAnchor(x.anchor) &&
+        (x.you === undefined || str(x.you))
       );
     case 'ping':
       return num(x.id) && num(x.t0);
@@ -202,6 +207,8 @@ export interface Advert {
   hostName: string;
   itemId: string;
   itemName: string;
+  /** The server of the shared download, or null. */
+  serverId: string | null;
 }
 
 const MAX_ADVERT_VALUE = 60;
@@ -213,10 +220,11 @@ export function encodeAdvert(a: Advert): Record<string, string> {
     h: a.hostName.slice(0, MAX_ADVERT_VALUE),
     i: a.itemId.slice(0, 64),
     n: a.itemName.slice(0, MAX_ADVERT_VALUE),
+    ...(a.serverId ? { sv: a.serverId.slice(0, 64) } : {}),
   };
 }
 
 export function decodeAdvert(info: Record<string, string> | null | undefined): Advert | null {
   if (!info || info.v !== String(PROTOCOL_VERSION) || !info.s || !info.i) return null;
-  return { sessionId: info.s, hostName: info.h ?? 'Nearby device', itemId: info.i, itemName: info.n ?? '' };
+  return { sessionId: info.s, hostName: info.h ?? 'Nearby device', itemId: info.i, itemName: info.n ?? '', serverId: info.sv ?? null };
 }
