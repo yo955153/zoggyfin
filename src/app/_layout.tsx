@@ -108,6 +108,8 @@ function Root({ session }: { session: boolean }) {
                     animationDuration: 240,
                     contentStyle: { backgroundColor: mediaColors.black },
                     autoHideHomeIndicator: true,
+                    // Android: the video uses the whole screen; a swipe from the edge shows the system bar.
+                    navigationBarHidden: true,
                     orientation: 'default',
                     gestureEnabled: false,
                   }}

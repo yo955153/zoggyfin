@@ -17,8 +17,8 @@ function Accessory() {
   return <MiniPlayer inline={placement === 'inline'} />;
 }
 
-/** Native tab bar height, for the floating mini player on web and older iOS. */
-const TAB_BAR_HEIGHT = Platform.OS === 'web' ? 68 : 49;
+/** Native tab bar height, for the floating mini player on web, Android and older iOS. Material 3 bars are 80 dp. */
+const TAB_BAR_HEIGHT = Platform.OS === 'web' ? 68 : Platform.OS === 'android' ? 80 : 49;
 
 function FloatingMiniPlayer() {
   const insets = useSafeAreaInsets();
@@ -51,7 +51,7 @@ function useDownloadsBadge(): string | null {
 
 export default function TabsLayout() {
   const mini = useMiniPlayerVisible();
-  const { c } = useTheme();
+  const { c, scheme } = useTheme();
   const badge = useDownloadsBadge();
   const tabs = (
     <NativeTabs
@@ -62,6 +62,19 @@ export default function TabsLayout() {
         ? {
             indicatorColor: c.accentSoft,
             labelStyle: { color: c.text2, fontWeight: '600' as const, fontSize: 13, fontFamily: fontFamily.web },
+          }
+        : null)}
+      {...(Platform.OS === 'android'
+        ? {
+            // Material 3 defaults to its own purple palette: use the app's graphite and Ember.
+            backgroundColor: scheme === 'light' ? c.bgGrouped : c.surface,
+            indicatorColor: c.accentSoft,
+            rippleColor: c.accentSoft,
+            iconColor: { default: c.text2, selected: c.accent },
+            labelStyle: { default: { color: c.text2, fontSize: 12 }, selected: { color: c.accent, fontSize: 12 } },
+            badgeBackgroundColor: c.accent,
+            badgeTextColor: c.onAccent,
+            labelVisibilityMode: 'labeled' as const,
           }
         : null)}>
       {HAS_ACCESSORY && mini ? (
