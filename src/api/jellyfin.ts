@@ -9,6 +9,8 @@ import { getAuthenticationApi } from '@jellyfin/sdk/lib/utils/api/authentication
 import { getFilterApi } from '@jellyfin/sdk/lib/utils/api/filter-api';
 import { getGenreApi } from '@jellyfin/sdk/lib/utils/api/genre-api';
 import { getLibraryApi } from '@jellyfin/sdk/lib/utils/api/library-api';
+import { getMediaInfoApi } from '@jellyfin/sdk/lib/utils/api/media-info-api';
+import { getMediaSegmentApi } from '@jellyfin/sdk/lib/utils/api/media-segment-api';
 import { getPersonApi } from '@jellyfin/sdk/lib/utils/api/person-api';
 import { getPlaylistApi } from '@jellyfin/sdk/lib/utils/api/playlist-api';
 import { getSessionApi } from '@jellyfin/sdk/lib/utils/api/session-api';
@@ -28,6 +30,11 @@ import type {
   ItemFields,
   ItemFilter,
   ItemSortBy,
+  MediaSegmentDto,
+  PlaybackInfoDto,
+  PlaybackInfoResponse,
+  PlaybackProgressInfo,
+  PlaybackStopInfo,
   PublicSystemInfo,
   QueryFiltersLegacy,
   QuickConnectResult,
@@ -401,4 +408,108 @@ export async function search(api: Api, userId: string, term: string, signal?: Ab
     getPersonApi(api).getPersons({ userId, searchTerm: term, limit: 12, enableImageTypes: ['Primary'] }, opts),
   ]);
   return [...(artists.data.Items ?? []), ...(items.data.Items ?? []), ...(people.data.Items ?? [])];
+}
+
+// ---- Playback --------------------------------------------------------------------
+
+/** POST /Items/{id}/PlaybackInfo with the device profile. The answer picks direct play or a transcode. */
+export async function getPlaybackInfo(api: Api, itemId: string, body: PlaybackInfoDto): Promise<PlaybackInfoResponse> {
+  const res = await getMediaInfoApi(api).getPostedPlaybackInfo({ itemId, userId: body.UserId ?? undefined, playbackInfoDto: body });
+  const data = res.data;
+  if (data.ErrorCode) throw new Error(playbackErrorText(data.ErrorCode));
+  return data;
+}
+
+function playbackErrorText(code: string): string {
+  switch (code) {
+    case 'NotAllowed':
+      return 'Your account is not allowed to play this item.';
+    case 'NoCompatibleStream':
+      return 'The server has no stream this device can play.';
+    case 'RateLimitExceeded':
+      return 'The server is busy. Try again in a moment.';
+    default:
+      return `The server cannot play this item (${code}).`;
+  }
+}
+
+export async function reportPlaybackStart(api: Api, info: PlaybackProgressInfo): Promise<void> {
+  await getSessionApi(api).reportPlaybackStart({ playbackStartInfo: info });
+}
+
+export async function reportPlaybackProgress(api: Api, info: PlaybackProgressInfo): Promise<void> {
+  await getSessionApi(api).reportPlaybackProgress({ playbackProgressInfo: info });
+}
+
+export async function reportPlaybackStopped(api: Api, info: PlaybackStopInfo): Promise<void> {
+  await getSessionApi(api).reportPlaybackStopped({ playbackStopInfo: info });
+}
+
+/**
+ * Intro, credits and recap segments. Media segments are new in 10.10; an
+ * older server, a missing provider or any error gives an empty list.
+ */
+export async function getMediaSegments(api: Api, itemId: string): Promise<MediaSegmentDto[]> {
+  try {
+    const res = await getMediaSegmentApi(api).getItemSegments({
+      itemId,
+      includeSegmentTypes: ['Intro', 'Outro', 'Recap', 'Preview', 'Commercial'],
+    });
+    return res.data.Items ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** The episode after `episode` in its series, or null at the end. */
+export async function getNextEpisode(api: Api, userId: string, episode: BaseItemDto): Promise<BaseItemDto | null> {
+  if (!episode.SeriesId || !episode.Id) return null;
+  const res = await getShowApi(api).getEpisodes({
+    seriesId: episode.SeriesId,
+    userId,
+    startItemId: episode.Id,
+    limit: 2,
+    ...tile,
+  });
+  const items = res.data.Items ?? [];
+  const next = items.find((e) => e.Id !== episode.Id);
+  return next ?? null;
+}
+
+/**
+ * What "Play" on a container plays: a show starts at Next Up (or the first
+ * episode), a season at its first unwatched episode, a collection at its first item.
+ */
+export async function resolvePlayable(api: Api, userId: string, item: BaseItemDto): Promise<BaseItemDto | null> {
+  const lib = getLibraryApi(api);
+  switch (item.Type) {
+    case 'Series': {
+      const next = await getNextUp(api, userId, item.Id ?? undefined);
+      if (next[0]) return next[0];
+      const res = await getShowApi(api).getEpisodes({ seriesId: item.Id ?? '', userId, limit: 1, ...tile });
+      return res.data.Items?.[0] ?? null;
+    }
+    case 'Season': {
+      const res = await getShowApi(api).getEpisodes({
+        seriesId: item.SeriesId ?? item.ParentId ?? '',
+        seasonId: item.Id ?? undefined,
+        userId,
+        ...tile,
+      });
+      const eps = res.data.Items ?? [];
+      return eps.find((e) => !e.UserData?.Played) ?? eps[0] ?? null;
+    }
+    case 'BoxSet': {
+      const res = await lib.getItems({ userId, parentId: item.Id ?? undefined, sortBy: ['PremiereDate', 'SortName'], limit: 1, ...tile });
+      return res.data.Items?.[0] ?? null;
+    }
+    default:
+      return item;
+  }
+}
+
+/** A text file from the server (subtitles). The request carries the auth header. */
+export async function getText(api: Api, url: string): Promise<string> {
+  const res = await api.axiosInstance.get<string>(url, { responseType: 'text', transformResponse: (d: unknown) => d });
+  return typeof res.data === 'string' ? res.data : String(res.data);
 }
