@@ -128,7 +128,9 @@ codesign --force --timestamp --options runtime \
   --entitlements "$TAURI_DIR/entitlements.plist" \
   --sign "$APPLE_SIGNING_IDENTITY" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
-codesign -dv --verbose=2 "$APP" 2>&1 | grep -q "flags=.*runtime" || { echo "No hardened runtime on the app." >&2; exit 1; }
+# Capture first: with pipefail, `grep -q` closes the pipe early and codesign fails on SIGPIPE.
+SIGN_INFO="$(codesign -dv --verbose=2 "$APP" 2>&1)"
+grep -q "flags=.*runtime" <<<"$SIGN_INFO" || { echo "No hardened runtime on the app." >&2; exit 1; }
 
 notarize() { # file
   xcrun notarytool submit "$1" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" \
