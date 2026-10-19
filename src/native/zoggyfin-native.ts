@@ -1,0 +1,6 @@
+/** Web: no native module. The web player probes the browser instead. */
+export function isHardwareDecodeSupported(_codec: 'av1' | 'hevc' | 'h264' | 'vp9'): boolean {
+  return false;
+}
+
+export const hasNativeKeyInput = false;

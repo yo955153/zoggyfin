@@ -14,7 +14,8 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
-        "NSLocalNetworkUsageDescription": "Zoggyfin connects to your Jellyfin server on the local network."
+        "NSLocalNetworkUsageDescription": "Zoggyfin connects to your Jellyfin server on the local network.",
+        "CADisableMinimumFrameDurationOnPhone": true
       }
     },
     "android": {
@@ -38,7 +39,14 @@
         }
       ],
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": true,
+          "supportsPictureInPicture": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

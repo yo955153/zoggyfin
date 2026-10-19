@@ -1,0 +1,7 @@
+{
+  "name": "zoggyfin-native",
+  "version": "0.1.0",
+  "description": "Small native helpers for Zoggyfin: decoder capabilities and hardware keyboard input.",
+  "license": "MPL-2.0",
+  "private": true
+}
