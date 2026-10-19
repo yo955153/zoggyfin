@@ -41,7 +41,7 @@ A build that technically works but has any of these is a failure.
 
 - Replacing the Jellyfin server, transcoding on the phone, metadata scraping.
 - Live TV, Seerr requests, Streamystats, KefinTweaks, custom links.
-- tvOS. Android ships after iOS is solid, but nothing iOS-only goes in shared JS.
+- Android phones ship after iOS is solid, but nothing iOS-only goes in shared JS.
 
 ## Constraints
 
@@ -97,6 +97,12 @@ One Expo code base for all targets. Every phase keeps all of them working.
   secure-context-only APIs (use fallbacks). The server URL can also be preset at deploy
   time through a runtime config file (`/config.json`), so a LAN deploy opens straight on
   the login screen of its own server.
+- **TV (Google TV / Android TV, Fire TV, Apple TV)**: the project uses
+  `react-native-tvos` (aliased as `react-native`) with `@react-native-tvos/config-tv`.
+  TV builds get a 10-foot layout: a side navigation rail instead of tabs, large tiles,
+  a clear focus ring, D-pad focus order that never traps, Back/Menu that always goes
+  back, no touch gestures. Players map remote keys (play/pause, seek, back). Fire TV has
+  no Google services. Not on TV: watch together, downloads, extension web panels.
 - Native-only modules (MPV, background downloader, Google Cast, CarPlay, Live Activity)
   live behind `*.native.ts` / `*.web.ts` files or a capability check, so the web build
   never imports them.
@@ -249,6 +255,9 @@ skip lengths, clear cache.
 1. **Foundation**: project, auth (server URL, login, Quick Connect), API layer, query
    cache, tab shell, image resolver, Home, Library, item detail, Search.
 2. **Video**: device profile, expo-video player with all phase-1 features, progress reporting.
+2b. **Platform base and restyle**: switch to react-native-tvos, add Android phone,
+   Android TV and Apple TV builds with the TV navigation, then restyle all phase 1
+   screens to docs/design/.
 3. **Music and audio**: expo-audio queue, mini player, full player, lyrics, Instant Mix,
    long-form audio features.
 4. **Downloads and playlists**: background downloads, Downloads tab, offline playback,
@@ -259,6 +268,9 @@ skip lengths, clear cache.
    downloads, Android, the web deployment and a pass over iPad and Mac polish
    (keyboard shortcuts, pointer, multi-window), and the extension system.
 7. **Together, part 2**: voice chat and messages in a session.
+8. **Roku (separate project, later)**: Roku apps use BrightScript/SceneGraph, so React
+   Native cannot target them. A separate Roku channel in this repo (`roku/`) reuses the
+   Jellyfin API knowledge, the device-profile rules and the design tokens.
 
 Every phase checks iPhone, iPad and web before it is done.
 
