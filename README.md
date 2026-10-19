@@ -46,11 +46,31 @@ Phase 2b ("Platform base and restyle"):
   `@react-native-tvos/config-tv`. Phone, tablet and web builds are unchanged. `EXPO_TV=1`
   makes prebuild generate TV targets; the TV layout comes in a later phase.
 
-Music playback and downloads are not in yet.
+Phase 3 ("Music and audio"):
+
+- Audio plays with expo-audio through the server's universal endpoint, in the background and
+  on the lock screen (artwork, play/pause, next/previous, seek). Interruptions and unplugged
+  headphones pause. The queue lives in JavaScript; the native playlist holds the current and
+  the next track, so the next track starts without a reload.
+- Queue: play now, play next, add to queue, drag to reorder, swipe to remove, clear, shuffle
+  and repeat (off, all, one). The queue and the position come back after a restart.
+- Full player (always dark): art-tinted background, scrubber, volume, AirPlay, a queue panel,
+  synced or plain lyrics when the server has them, favourite, go to album or artist. On wide
+  windows the queue or lyrics sit beside the player.
+- Long-form mode for audiobooks, long tracks and spoken-word albums: resume per item
+  ("Resumes where you left off"), speed 0.75–2×, 15/30 s skips, a sleep timer (minutes or end
+  of track) and chapters. Positions are kept on the device and reported to the server.
+- Instant Mix from a song, album, artist or genre. Music tab: sort and favourites filter per
+  tab, Recently played and Most played rows, album, artist and genre pages with Play, Shuffle
+  and Mix. Audiobook libraries open in the same browser.
+- Web: Media Session controls and Space/←/→ keys. Noto Sans Arabic is bundled for the web.
+
+Downloads are not in yet.
 The design is in [docs/specs](docs/specs/) and [docs/design](docs/design/).
 
 The native app includes a small local module, `modules/zoggyfin-native`, that reports
-hardware decoders and hardware keyboard presses. It builds with the app.
+hardware decoders and hardware keyboard presses and draws the system volume slider.
+It builds with the app.
 
 ## Run a development build
 
