@@ -19,6 +19,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { useImageServer } from '@/api/use-api';
 import { Icon, type IconName } from '@/components/icon';
+import { ToastHost } from '@/components/toast-host';
 import { useHideDevToolsButton } from '@/lib/dev-tools';
 import { episodeLabel } from '@/lib/format';
 import { KeyInput } from '@/native/key-input';
@@ -34,8 +35,8 @@ import { TogetherSheetHost } from '@/features/together/together-sheet';
 import { TogetherPill } from '@/features/together/together-pill';
 import { useSessionStore } from '@/auth/session-store';
 import { features } from '@/platform/tv';
-import { nearbySupported } from '@/together/nearby';
-import { openTogetherSheet } from '@/together/store';
+import { nearby, nearbySupported } from '@/together/nearby';
+import { openTogetherSheet, togetherState } from '@/together/store';
 import { syncPlaySupported } from '@/together/syncplay';
 
 import { AirPlayButton } from './airplay-button';
@@ -59,17 +60,20 @@ function skipIcon(dir: 'back' | 'forward', seconds: number): IconName {
 
 function leave() {
   if (router.canGoBack()) router.back();
-  else router.replace('/');
+  else router.replace(useSessionStore.getState().session ? '/' : '/sign-in');
 }
 
-/** Close: stop playback and leave the player. */
+/** Close: stop playback and leave the player. A nearby guest also leaves the session. */
 function closePlayer() {
+  const t = togetherState();
+  if (t.mode === 'nearby' && t.role === 'guest') void nearby().stopAll();
   void videoSession().stop();
   leave();
 }
 
-/** Minimize: keep playing in the mini player. */
+/** Minimize: keep playing in the mini player. With no account (a nearby guest) there is no mini player. */
 function minimizePlayer() {
+  if (!useSessionStore.getState().session) return;
   if (playerState().now) setPlayerState({ presentation: 'mini' });
   videoSession().refreshLists();
   leave();
@@ -107,6 +111,17 @@ export function PlayerScreen() {
   const [poke, setPoke] = useState(0);
   const [dismissal, setDismissal] = useState<{ itemId: string; at: number } | null>(null);
   const [ripple, setRipple] = useState<{ side: 'left' | 'right'; seconds: number; key: number } | null>(null);
+
+  // With no account, a player with nothing to play (a link, a fallback route) goes to the sign-in screen.
+  // A short wait: a play request sets the item just after the route opens.
+  useEffect(() => {
+    if (signedIn || now || status !== 'idle') return;
+    const t = setTimeout(() => {
+      const st = playerState();
+      if (!useSessionStore.getState().session && !st.now && st.status === 'idle') router.replace('/sign-in');
+    }, 800);
+    return () => clearTimeout(t);
+  }, [signedIn, now, status]);
 
   // When the route goes away without Close (system back, web back), keep playing in the mini player.
   useEffect(() => {
@@ -204,7 +219,7 @@ export function PlayerScreen() {
         dragY.set(Math.max(0, e.translationY));
       })
       .onEnd((e) => {
-        if (e.translationY > 140 || e.velocityY > 900) {
+        if (signedIn && (e.translationY > 140 || e.velocityY > 900)) {
           dragY.set(withTiming(height, { duration: motion.duration.base, easing: ease.exit }));
           scheduleOnRN(minimizePlayer);
         } else {
@@ -216,7 +231,7 @@ export function PlayerScreen() {
       else if (e.scale < 0.92) scheduleOnRN(setFill, false);
     });
     return Gesture.Simultaneous(pinch, Gesture.Race(pan, Gesture.Exclusive(double, single)));
-  }, [toggleControls, onDoubleTap, dragY, height]);
+  }, [toggleControls, onDoubleTap, dragY, height, signedIn]);
 
   const s = videoSession();
   const hasNext = !!now?.next;
@@ -517,6 +532,8 @@ export function PlayerScreen() {
       <PlayerSheet visible={sheet === 'tracks'} title="Audio & Subtitles" sections={trackSections} onClose={() => setSheet(null)} />
       <PlayerSheet visible={sheet === 'settings'} title="Playback" sections={settingsSections} onClose={() => setSheet(null)} />
       <TogetherSheetHost where="player" />
+      {/* Under the top bar and the Together pill, so it does not cover the controls. */}
+      <ToastHost overlay offset={player.closeSize + spacing.sm * 2 + 32} />
     </KeyInput>
   );
 }

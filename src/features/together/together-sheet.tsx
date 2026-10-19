@@ -16,7 +16,7 @@ import { usePlayerStore } from '@/player/store';
 import { createStyles, type AppTheme, font, radius, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
 import { canHostNearby, nearby, nearbySupported } from '@/together/nearby';
 import { features } from '@/platform/tv';
-import { closeTogetherSheet, openTogetherSheet, type TogetherState, useTogetherStore } from '@/together/store';
+import { closeTogetherSheet, openTogetherSheet, type SheetPlace, type TogetherState, useTogetherStore } from '@/together/store';
 import { canSyncPlay, syncPlay, syncPlaySupported } from '@/together/syncplay';
 import { groupStateLabel } from '@/together/syncplay-logic';
 
@@ -31,7 +31,7 @@ export function useTogetherEntry(item: BaseItemDto): (() => void) | null {
 }
 
 /** Mount once per screen that can open the sheet; it shows only for its own screen. */
-export function TogetherSheetHost({ where }: { where: 'player' | 'item' }) {
+export function TogetherSheetHost({ where }: { where: SheetPlace }) {
   const open = useTogetherStore((s) => s.sheet.open && s.sheet.where === where);
   return open ? <TogetherSheet /> : null;
 }
@@ -39,7 +39,8 @@ export function TogetherSheetHost({ where }: { where: 'player' | 'item' }) {
 function TogetherSheet() {
   const st = useTogetherStore();
   const playing = usePlayerStore((s) => s.now?.item ?? null);
-  const item: BaseItemDto | null = st.sheet.item ?? playing;
+  // The join place (sign-in screen, offline banner) only joins; hosting starts from a playing download.
+  const item: BaseItemDto | null = st.sheet.where === 'join' ? null : (st.sheet.item ?? playing);
   const signedIn = useSessionStore((s) => !!s.session);
   const offline = useOffline();
   const nearbySession = st.mode === 'nearby' && st.phase.name !== 'browsing' && st.phase.name !== 'idle';

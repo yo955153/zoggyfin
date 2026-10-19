@@ -27,7 +27,7 @@ import { bindVideoPort, type BoundPort, whenPlayerReady } from './player-binding
 import { realTimers } from './player-port';
 import { decode, decodeAdvert, decodeJoinContext, encode, encodeAdvert, encodeJoinContext, type Message, type SharedItem } from './protocol';
 import { HostRoom } from './room';
-import { openTogetherSheet, setTogether, togetherState } from './store';
+import { closeTogetherSheet, initialTogether, openTogetherSheet, setTogether, togetherState } from './store';
 import { syncLog } from './sync-log';
 
 /** True where nearby mode can run: the native app with the module, not TV. */
@@ -91,6 +91,19 @@ function toBaseItem(s: SharedItem): BaseItemDto {
 
 function pathOf(uri: string): string {
   return decodeURIComponent(uri.replace(/^file:\/\//, ''));
+}
+
+/** Leaves the full-screen player, when it shows. */
+function leavePlayer(): void {
+  if (playerState().presentation !== 'full') return;
+  if (router.canGoBack()) router.back();
+  else router.replace(useSessionStore.getState().session ? '/' : '/sign-in');
+}
+
+/** The session state with no session (the sheet keeps its place). */
+function noSession() {
+  const { sheet, syncplay, onlyHostControls } = togetherState();
+  return { ...initialTogether, sheet, syncplay, onlyHostControls };
 }
 
 class NearbyController {
@@ -344,6 +357,13 @@ class NearbyController {
       return;
     }
     if (token !== this.loadToken) return;
+    // A sheet on another screen (item page, sign-in) closes first: two modals cannot open at once.
+    const sheet = togetherState().sheet;
+    if (sheet.open && sheet.where !== 'player') {
+      closeTogetherSheet();
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      if (token !== this.loadToken) return;
+    }
     void videoSession().playSource({ item: toBaseItem(item), uri, startSeconds: start, autoplay: false, record: r });
     router.navigate('/player');
     const ok = await whenPlayerReady(30_000);
@@ -374,14 +394,28 @@ class NearbyController {
     this.closeGuest(message);
   }
 
-  /** The guest's session is over: stop following, keep the state for the sheet. */
+  /**
+   * The guest's session is over (the host ended it, the link was lost, or the
+   * media failed). A streamed file is gone with the host: the player stops and
+   * closes. With its own download the guest keeps the player, paused at the
+   * same position, and watches on alone. The toast tells why. A guest with no
+   * account (joined from the sign-in screen) has no player outside the
+   * session, so its player closes too.
+   */
   private closeGuest(message: string): void {
-    const streaming = togetherState().source === 'stream';
+    const source = togetherState().source;
+    const keep = source === 'local' && !!useSessionStore.getState().session;
+    if (keep) this.port?.pause();
     this.teardownGuest();
-    if (streaming) void videoSession().stop();
-    else this.port?.pause();
-    setTogether({ notice: message });
+    this.port = null;
+    this.unlisten();
     toast(message, { icon: 'person.2.slash' });
+    if (source !== null && !keep) {
+      closeTogetherSheet();
+      leavePlayer();
+      void videoSession().stop();
+    }
+    setTogether(noSession());
   }
 
   private teardownGuest(): void {
@@ -413,28 +447,22 @@ class NearbyController {
       this.port = null;
       syncLog.stop();
     } else if (this.follower) {
-      const streaming = togetherState().source === 'stream';
+      const source = togetherState().source;
+      const close = source === 'stream' || (source === 'local' && !useSessionStore.getState().session);
       this.follower.leave();
       await new Promise((r) => setTimeout(r, 200));
       this.teardownGuest();
-      if (streaming) void videoSession().stop();
+      this.port = null;
+      // The host's file is not there without the session: close the player.
+      if (close) {
+        leavePlayer();
+        void videoSession().stop();
+      }
     } else {
       n?.stop();
     }
     this.unlisten();
-    setTogether({
-      mode: 'none',
-      role: null,
-      phase: IDLE,
-      item: null,
-      members: [],
-      requests: [],
-      hosts: [],
-      sync: null,
-      waiting: false,
-      source: null,
-      hostName: null,
-    });
+    setTogether({ ...noSession(), notice: togetherState().notice });
   }
 
   /** Clears an ended session from the sheet. */

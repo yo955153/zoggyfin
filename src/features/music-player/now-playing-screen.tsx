@@ -14,6 +14,7 @@ import type { BaseItemDto } from '@/api/types';
 import { useApi } from '@/api/use-api';
 import { Icon, type IconName } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
+import { ToastHost } from '@/components/toast-host';
 import { canDownload, downloads, findDownload } from '@/downloads';
 import { openAddToPlaylist } from '@/features/playlists/add-to-playlist';
 import { useHideDevToolsButton } from '@/lib/dev-tools';
@@ -590,6 +591,7 @@ export function NowPlayingScreen() {
       <ArtBackground item={item} />
       <Animated.View style={[styles.root, frameStyle, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>{body}</Animated.View>
       <PlayerSheet visible={sheet !== null} title={sheetTitle} sections={sheetSections} onClose={() => setSheet(null)} />
+      <ToastHost overlay />
     </KeyInput>
   );
 }

@@ -17,9 +17,18 @@ import { Touchable } from './touchable';
  * bar (top trailing on wide windows), so it never covers the tab bar or the
  * mini player. It slides 12 pt and fades in with the `smooth` spring, fades
  * out in 160 ms, and a swipe up dismisses it.
+ *
+ * The root layout has one host. A full-screen player is a native modal over
+ * the root view, so it mounts its own host with `overlay`; while an overlay
+ * host is mounted, the root host shows nothing. `offset` moves the toast
+ * down, under the player's top controls.
  */
-export function ToastHost() {
-  const current = useToastStore((st) => st.current);
+export function ToastHost({ overlay = false, offset = 0 }: { overlay?: boolean; offset?: number }) {
+  const overlays = useToastStore((st) => st.overlays);
+  const addOverlay = useToastStore((st) => st.addOverlay);
+  const removeOverlay = useToastStore((st) => st.removeOverlay);
+  const shown = useToastStore((st) => st.current);
+  const current = overlay || overlays === 0 ? shown : null;
   const hide = useToastStore((st) => st.hide);
   const insets = useSafeAreaInsets();
   const l = useLayout();
@@ -27,6 +36,12 @@ export function ToastHost() {
   const { c } = useTheme();
   const y = useSharedValue(-12);
   const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    if (!overlay) return;
+    addOverlay();
+    return removeOverlay;
+  }, [overlay, addOverlay, removeOverlay]);
 
   useEffect(() => {
     if (!current) return;
@@ -61,7 +76,7 @@ export function ToastHost() {
   return (
     <View
       pointerEvents="box-none"
-      style={[s.host, { top: insets.top + spacing.sm }, wide ? { right: l.gutter, alignItems: 'flex-end' } : s.centered]}>
+      style={[s.host, { top: insets.top + spacing.sm + offset }, wide ? { right: l.gutter, alignItems: 'flex-end' } : s.centered]}>
       <GestureDetector gesture={swipe}>
         {/* The fade-out sits on a wrapper, so it does not fight the swipe style's opacity. */}
         <Animated.View key={current.id} exiting={FadeOut.duration(motion.duration.fast)}>

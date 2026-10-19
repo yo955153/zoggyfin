@@ -11,6 +11,9 @@ import type { Advert, Member, SharedItem } from './protocol';
 
 export type TogetherMode = 'none' | 'nearby' | 'syncplay';
 
+/** The screen that shows the session sheet. `join`: a screen with no item (sign-in, offline banner) that only joins. */
+export type SheetPlace = 'player' | 'item' | 'join';
+
 export interface JoinRequest {
   inviteId: string;
   peerId: string;
@@ -61,7 +64,7 @@ export interface TogetherState {
   /** A short message for the session sheet ("Only the host controls playback."). */
   notice: string | null;
   /** The session sheet: open or closed, the screen that shows it and the item it starts with. */
-  sheet: { open: boolean; where: 'player' | 'item'; item: BaseItemDto | null };
+  sheet: { open: boolean; where: SheetPlace; item: BaseItemDto | null };
   syncplay: {
     groups: SyncPlayGroupView[];
     group: SyncPlayGroupView | null;
@@ -95,7 +98,7 @@ export const setTogether = (patch: Partial<TogetherState>) => useTogetherStore.s
 export const setSyncPlayView = (patch: Partial<TogetherState['syncplay']>) =>
   useTogetherStore.setState((s) => ({ syncplay: { ...s.syncplay, ...patch } }));
 
-export function openTogetherSheet(where: 'player' | 'item', item: BaseItemDto | null): void {
+export function openTogetherSheet(where: SheetPlace, item: BaseItemDto | null): void {
   setTogether({ sheet: { open: true, where, item } });
 }
 
