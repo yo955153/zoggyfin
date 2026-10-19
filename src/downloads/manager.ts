@@ -23,6 +23,7 @@ import { randomId } from '@/lib/id';
 import { toast } from '@/lib/toast';
 import { mediaCapabilities } from '@/player/capabilities';
 import { buildDeviceProfile } from '@/player/device-profile';
+import { mayHaveLyrics } from '@/player/audio/lyrics';
 import { pickSource, playbackInfoBody, type StreamServer } from '@/player/stream';
 import { MAX_BITRATE, usePlaybackSettings } from '@/settings/playback';
 
@@ -118,7 +119,7 @@ class DownloadManager {
     return engine.supported;
   }
 
-  /** Starts the engine once per launch, after sign-in. Safe to call more than once. */
+  /** Starts the engine once per launch (signed in or not). Safe to call more than once. */
   async init(): Promise<void> {
     if (this.started || !engine.supported) return;
     this.started = true;
@@ -350,7 +351,7 @@ class DownloadManager {
         }
       }
       out.subtitles = saved;
-    } else {
+    } else if (mayHaveLyrics(r.item)) {
       try {
         const lyrics = await jf.getLyrics(ctx.api, r.itemId);
         if (lyrics?.Lyrics?.length) {

@@ -288,9 +288,39 @@ The spike results are in `docs/specs/watch-together-spike.md`.
   (`Unpause`, `Pause`, `Seek`, `Stop`) become anchors on the server clock; the device
   reports `Buffering` and `Ready`. The group queue loads its current item paused, and
   Next / Previous move in the queue. Speed changes are not shared (SyncPlay has none).
-- **Deviations**: a guest needs the app signed in to open the player today (the sign-in
-  screen has no nearby entry yet). Audio items are not shared yet; nearby and SyncPlay
-  sessions are for video.
+- **End of a session**: when the host ends the session or the link is lost, a guest that
+  streams the host's file leaves the player (the file is gone). A guest that plays its own
+  download keeps the player, paused at the same position, and the session state clears.
+  A toast tells why. Closing the player as a guest also leaves the session.
+- **Toasts in the players**: the video and music players are native modals over the root
+  view, so each mounts its own toast host (under the top controls in the video player).
+  While a player's host is mounted, the root host shows nothing.
+- **Deviations**: audio items are not shared yet; nearby and SyncPlay sessions are for
+  video. Sharing audio needs the guest's audio engine (expo-audio and its queue) bound to
+  the session, which the player binding does not do (it binds the video player only).
+  This is not a small change, so it waits for a later phase.
+
+## Offline use (no sign-in)
+
+The app never asks for a sign-in for what works with no server
+(`src/features/offline/entries.ts`, unit-tested). With no account signed in, or when the
+server does not answer:
+
+- **Downloads** shows when a download is on the device, from any saved or removed server.
+  On the sign-in screen it is a "Downloads" button that opens the Downloads list
+  (route `/offline`). Signed in and offline, the Home offline banner links to the
+  Downloads tab. Everything there plays from the device. With no account, item pages do
+  not open (they need the server), and progress goes into the outbox for the download's
+  own server and user.
+- **Join a nearby session** shows where the nearby module exists (not on the web or an old
+  build): on the sign-in screen and in the Home offline banner.
+- **Host a nearby session**: play a download (from Downloads), then the player's
+  "Watch together" button.
+- Signing out of the last account keeps the downloads, so these entries stay.
+
+The download engine starts at launch, signed in or not, so the app finds the files. The
+players and `/offline` open with no account only after the sign-in screen has shown, so
+a route fallback while signed out goes to the sign-in screen, never to an empty player.
 
 ## Settings
 

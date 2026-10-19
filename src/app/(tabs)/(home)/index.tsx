@@ -58,7 +58,7 @@ export default function HomeScreen() {
         style={s.flex}
         contentContainerStyle={s.content}
         refreshControl={isTV ? undefined : <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={c.text2} />}>
-        <OfflineBanner />
+        <OfflineBanner entries />
         {sections.map((sec) => (
           <View key={sec.id}>
             <sec.component />

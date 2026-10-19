@@ -37,7 +37,7 @@ import type { PlayRequest } from '../types';
 import { type AudioEngineEvent, audioEngine, type EngineTrack } from './engine';
 import { type AudioItem, artistLine, isAudioItemLike, slimItem } from './item';
 import { isLongFormItem, isLongFormList } from './long-form';
-import { fromLyricDto } from './lyrics';
+import { fromLyricDto, mayHaveLyrics } from './lyrics';
 import { resumeSeconds } from './positions';
 import { positions } from './resume';
 import {
@@ -81,7 +81,9 @@ interface Ctx {
 /** The download record when the item is another server's download (not the active server), else null. */
 function foreignRecord(itemId: string | null | undefined) {
   const r = findDownload(itemId);
-  return r && r.state === 'completed' && isForeignDownload(r, useSessionStore.getState().session?.serverId) ? r : null;
+  const active = useSessionStore.getState().session?.serverId;
+  // With no account signed in, every download counts as another server's: no server calls.
+  return r && r.state === 'completed' && (!active || isForeignDownload(r, active)) ? r : null;
 }
 
 function context(): Ctx {
@@ -333,14 +335,15 @@ class AudioSession {
 
   private trackFor(entry: QueueEntry<AudioItem> | null): EngineTrack | null {
     if (!entry) return null;
-    const { server, userId } = context();
     const profile = buildDeviceProfile(mediaCapabilities(), { maxBitrate: this.bitrate || bitrateFor(usePlaybackSettings.getState(), false) });
     const playSessionId = randomId().replace(/-/g, '');
     // A downloaded track plays from the device; the server URL is built only when it is not.
     // A download from any saved server plays from the device.
-    const choice = chooseMedia(findDownload(entry.item.Id), documentsDir(), null, () =>
-      universalAudioUrl(server, entry.item.Id, profile, { userId, maxBitrate: profile.MaxStreamingBitrate ?? this.bitrate, playSessionId }),
-    );
+    // The server (and a sign-in) is needed only for a track that is not on the device.
+    const choice = chooseMedia(findDownload(entry.item.Id), documentsDir(), null, () => {
+      const { server, userId } = context();
+      return universalAudioUrl(server, entry.item.Id, profile, { userId, maxBitrate: profile.MaxStreamingBitrate ?? this.bitrate, playSessionId });
+    });
     const playMethod = choice.kind === 'local' ? 'DirectPlay' : predictPlayMethod(entry.item, profile, profile.MaxStreamingBitrate ?? this.bitrate);
     this.tracks.set(entry.key, { playSessionId, playMethod, url: choice.uri });
     return { key: entry.key, uri: choice.uri };
@@ -515,10 +518,11 @@ class AudioSession {
     } catch {
       // Not signed in.
     }
-    void this.loadLyrics(entry.item.Id);
+    void this.loadLyrics(entry.item);
   }
 
-  private async loadLyrics(itemId: string) {
+  private async loadLyrics(item: AudioItem) {
+    const itemId = item.Id;
     const cur = audioState().lyrics;
     if (cur?.itemId === itemId && cur.status !== 'loading') return;
     setAudioState({ lyrics: { itemId, status: 'loading' } });
@@ -528,7 +532,9 @@ class AudioSession {
       const saved = local?.state === 'completed' && local.hasLyrics ? localExtraUri(local, 'lyrics.json') : null;
       const text = saved ? await readLocalText(saved) : null;
       // Another server's download: only its saved lyrics, never a call to the active server.
-      const dto = text ? (JSON.parse(text) as LyricDto) : foreignRecord(itemId) ? null : await jf.getLyrics(api, itemId);
+      // No request when the item has no lyrics: the 404 would log a CORS error on the web.
+      const ask = !text && !foreignRecord(itemId) && mayHaveLyrics(item);
+      const dto = text ? (JSON.parse(text) as LyricDto) : ask ? await jf.getLyrics(api, itemId) : null;
       const lyrics = fromLyricDto(dto);
       if (currentEntry(audioState().queue)?.item.Id !== itemId) return;
       setAudioState({ lyrics: lyrics ? { itemId, status: 'ready', lyrics } : { itemId, status: 'none' } });
@@ -615,7 +621,6 @@ class AudioSession {
   async play(request: PlayRequest): Promise<void> {
     const id = ++this.loadId;
     try {
-      const { api, userId } = context();
       let items: BaseItemDto[];
       let start = 0;
       let ctxItem: BaseItemDto | null = request.context ?? null;
@@ -624,7 +629,7 @@ class AudioSession {
         start = Math.max(0, request.index ?? request.list.findIndex((i) => i.Id === request.item.Id));
       } else if (CONTAINERS.has(request.item.Type ?? '')) {
         if (playerState().now?.kind !== 'audio') setPlayerState({ ...initialPlayerState, status: 'loading', presentation: 'mini', now: null });
-        items = await serverOrLocal(() => jf.getAudioTracks(api, userId, request.item), () => downloadedChildren(request.item.Id));
+        items = await this.tracksOf(request.item);
         ctxItem = request.item;
       } else {
         items = [request.item, ...(request.queue ?? [])];
@@ -661,6 +666,8 @@ class AudioSession {
 
   private async tracksOf(item: BaseItemDto): Promise<BaseItemDto[]> {
     if (!CONTAINERS.has(item.Type ?? '')) return [item];
+    // With no account signed in, only the downloaded tracks.
+    if (!useSessionStore.getState().session) return downloadedChildren(item.Id) ?? [];
     const { api, userId } = context();
     return serverOrLocal(() => jf.getAudioTracks(api, userId, item), () => downloadedChildren(item.Id));
   }

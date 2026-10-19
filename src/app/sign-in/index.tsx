@@ -9,10 +9,13 @@ import { findServer } from '@/api/jellyfin';
 import { useAccounts } from '@/auth/session-store';
 import { Button } from '@/components/button';
 import { TextField } from '@/components/text-field';
+import { setNoAccountOpen, useOfflineEntries } from '@/features/offline/use-offline-entries';
+import { TogetherSheetHost } from '@/features/together/together-sheet';
 import { loadRuntimeConfig } from '@/lib/runtime-config';
 import { pageIsHttps } from '@/servers/connection';
 import { MIXED_CONTENT_TEXT } from '@/servers/status';
 import { storage } from '@/storage/kv';
+import { openTogetherSheet } from '@/together/store';
 import { createStyles, type AppTheme, font, scaled, sizes, spacing, type, useStyles } from '@/theme';
 
 const LAST_SERVER_KEY = 'server.lastUrl';
@@ -25,6 +28,11 @@ export default function ServerScreen() {
   const styles = useStyles(makeStyles);
   const adding = usePathname().startsWith('/add-account');
   const saved = useAccounts().servers.length > 0;
+  const entries = useOfflineEntries();
+  // Opens the players and the offline Downloads for use with no account.
+  useEffect(() => {
+    if (!adding) setNoAccountOpen(true);
+  }, [adding]);
   const [address, setAddress] = useState(() => (adding ? '' : (storage.getString(LAST_SERVER_KEY) ?? '')));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,8 +104,26 @@ export default function ServerScreen() {
           ) : null}
           <Button title="Continue" onPress={connect} loading={busy} disabled={!address.trim()} />
           <Text style={styles.footnote}>Zoggyfin is a client for Jellyfin. It connects only to the server you enter.</Text>
+          {/* Downloads and nearby watch together need no account and no server (for example on a plane). */}
+          {!adding && (entries.downloads || entries.joinNearby) ? (
+            <View style={styles.nearby}>
+              <Text style={styles.or}>No server here?</Text>
+              {entries.downloads ? (
+                <Button
+                  title={`Downloads · ${entries.count}`}
+                  variant="tonal"
+                  icon="arrow.down.circle"
+                  onPress={() => router.push('/offline')}
+                />
+              ) : null}
+              {entries.joinNearby ? (
+                <Button title="Join a nearby session" variant="tonal" icon="antenna.radiowaves.left.and.right" onPress={() => openTogetherSheet('join', null)} />
+              ) : null}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
+      {entries.joinNearby && !adding ? <TogetherSheetHost where="join" /> : null}
     </KeyboardAvoidingView>
   );
 }
@@ -111,4 +137,6 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   subtitle: { ...font(type.body), color: c.text2, textAlign: 'center' as const, marginBottom: spacing.md, marginTop: -spacing.sm },
   error: { ...font(type.footnote), color: c.danger },
   footnote: { ...font(type.footnote), color: c.text3, textAlign: 'center' as const, marginTop: spacing.sm },
+  nearby: { gap: spacing.sm, marginTop: spacing.xl },
+  or: { ...font(type.footnote), color: c.text2, textAlign: 'center' as const },
 }));

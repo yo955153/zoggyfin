@@ -142,6 +142,16 @@ Phase 5 ("Watch together"):
   [docs/specs/watch-together-spike.md](docs/specs/watch-together-spike.md).
 - Not on TV. The web has SyncPlay only.
 
+Offline use (no sign-in needed):
+
+- With no account signed in, or when the server does not answer, the app offers
+  "Downloads" (when a download is on the device, from any server) and
+  "Join a nearby session" (iPhone, iPad, Mac). They are on the sign-in screen and in the
+  Home offline banner. Downloads play from the device; play one and use "Watch together"
+  to host a nearby session. Signing out keeps the downloads.
+- When the host ends a session, a guest that streams the host's file leaves the player; a
+  guest with its own download keeps its place. Toasts show above the full-screen players.
+
 The design is in [docs/specs](docs/specs/) and [docs/design](docs/design/).
 
 The native app includes a small local module, `modules/zoggyfin-native`, that reports

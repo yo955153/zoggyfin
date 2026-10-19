@@ -16,6 +16,8 @@ import {
 } from '@/api/query-client';
 import { useSession, useSessionStore } from '@/auth/session-store';
 import { ToastHost } from '@/components/toast-host';
+import { downloads, downloadsSupported } from '@/downloads';
+import { setNoAccountOpen, useNoAccountStore } from '@/features/offline/use-offline-entries';
 import { AddToPlaylistHost } from '@/features/playlists/add-to-playlist';
 import { startOfflineServices } from '@/features/offline/bootstrap';
 import { toast } from '@/lib/toast';
@@ -68,6 +70,14 @@ export default function RootLayout() {
 
 function Root({ session }: { session: boolean }) {
   const { c } = useTheme();
+  const noAccount = useNoAccountStore((st) => st.open) && !session;
+  useEffect(() => {
+    if (session) setNoAccountOpen(false);
+  }, [session]);
+  // Downloads play with no account (see features/offline/entries.ts): the files are found at start, signed in or not.
+  useEffect(() => {
+    if (downloadsSupported) void downloads.init();
+  }, []);
   // Bring back the last audio queue (paused) after a restart.
   useEffect(() => {
     if (!session) return;
@@ -79,6 +89,13 @@ function Root({ session }: { session: boolean }) {
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
               <Stack.Protected guard={session}>
                 <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="add-account" options={{ presentation: 'modal' }} />
+              </Stack.Protected>
+              <Stack.Protected guard={!session}>
+                <Stack.Screen name="sign-in" />
+              </Stack.Protected>
+              {/* The players and the offline Downloads also open with no account: downloads and nearby sessions need no sign-in. */}
+              <Stack.Protected guard={session || noAccount}>
                 <Stack.Screen
                   name="player"
                   options={{
@@ -101,10 +118,7 @@ function Root({ session }: { session: boolean }) {
                     gestureEnabled: false,
                   }}
                 />
-                <Stack.Screen name="add-account" options={{ presentation: 'modal' }} />
-              </Stack.Protected>
-              <Stack.Protected guard={!session}>
-                <Stack.Screen name="sign-in" />
+                <Stack.Screen name="offline" />
               </Stack.Protected>
             </Stack>
             {session ? <AddToPlaylistHost /> : null}
