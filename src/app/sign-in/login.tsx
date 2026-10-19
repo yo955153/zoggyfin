@@ -14,6 +14,9 @@ import {
 import { completeSignIn, type ServerInfo } from '@/auth/sign-in';
 import { Button } from '@/components/button';
 import { TextField, type TextFieldRef } from '@/components/text-field';
+import { LanAccessHelp } from '@/features/servers/nearby-servers';
+import { lanHelpAfterFailure, openLanSettings } from '@/features/servers/use-server-discovery';
+import { type LanHelp, withLanRetry } from '@/servers/discovery/lan-access';
 import { createStyles, type AppTheme, font, radius, scaled, sizes, spacing, type, useStyles } from '@/theme';
 
 const POLL_MS = 2000;
@@ -39,6 +42,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lanHelp, setLanHelp] = useState<LanHelp | null>(null);
   const [qcEnabled, setQcEnabled] = useState(false);
   const [qcCode, setQcCode] = useState<string | null>(null);
   const passwordRef = useRef<TextFieldRef>(null);
@@ -50,11 +54,15 @@ export default function LoginScreen() {
   const signIn = async () => {
     setBusy(true);
     setError(null);
+    setLanHelp(null);
     try {
-      finish(await authenticateByName(api, username.trim(), password));
+      // A private address gets one retry: the local network prompt can still be open.
+      finish(await withLanRetry(server.url, () => authenticateByName(api, username.trim(), password)));
     } catch (e) {
       const d = describeError(e);
-      setError(d.kind === 'auth' ? 'Wrong username or password.' : `${d.title}. ${d.message}`);
+      const help = await lanHelpAfterFailure(server.url, e);
+      if (help) setLanHelp(help);
+      else setError(d.kind === 'auth' ? 'Wrong username or password.' : `${d.title}. ${d.message}`);
       setBusy(false);
     }
   };
@@ -157,6 +165,7 @@ export default function LoginScreen() {
                   {error}
                 </Text>
               ) : null}
+              {lanHelp ? <LanAccessHelp kind={lanHelp} onOpenSettings={openLanSettings} /> : null}
               <Button title="Sign in" onPress={signIn} loading={busy} disabled={!username.trim()} />
               {qcEnabled ? (
                 <Button title="Use Quick Connect" icon="qrcode" variant="tonal" onPress={startQuickConnect} />

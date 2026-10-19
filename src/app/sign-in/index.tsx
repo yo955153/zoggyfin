@@ -9,10 +9,14 @@ import { findServer } from '@/api/jellyfin';
 import { useAccounts } from '@/auth/session-store';
 import { Button } from '@/components/button';
 import { TextField } from '@/components/text-field';
+import { LanAccessHelp, NearbyServers } from '@/features/servers/nearby-servers';
+import { lanHelpAfterFailure, openLanSettings, useServerDiscovery } from '@/features/servers/use-server-discovery';
 import { setNoAccountOpen, useOfflineEntries } from '@/features/offline/use-offline-entries';
 import { TogetherSheetHost } from '@/features/together/together-sheet';
 import { loadRuntimeConfig } from '@/lib/runtime-config';
 import { pageIsHttps } from '@/servers/connection';
+import { type LanHelp, withLanRetry } from '@/servers/discovery/lan-access';
+import type { DiscoveredServer } from '@/servers/discovery/types';
 import { MIXED_CONTENT_TEXT } from '@/servers/status';
 import { storage } from '@/storage/kv';
 import { openTogetherSheet } from '@/together/store';
@@ -27,7 +31,9 @@ const LAST_SERVER_KEY = 'server.lastUrl';
 export default function ServerScreen() {
   const styles = useStyles(makeStyles);
   const adding = usePathname().startsWith('/add-account');
-  const saved = useAccounts().servers.length > 0;
+  const savedServers = useAccounts().servers;
+  const saved = savedServers.length > 0;
+  const discovery = useServerDiscovery();
   const entries = useOfflineEntries();
   // Opens the players and the offline Downloads for use with no account.
   useEffect(() => {
@@ -36,6 +42,7 @@ export default function ServerScreen() {
   const [address, setAddress] = useState(() => (adding ? '' : (storage.getString(LAST_SERVER_KEY) ?? '')));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lanHelp, setLanHelp] = useState<LanHelp | null>(null);
 
   useEffect(() => {
     // The preset of a self-hosted web build is for the first server only.
@@ -51,15 +58,17 @@ export default function ServerScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const connect = async () => {
+  const connect = async (typed: string = address) => {
     setError(null);
-    if (pageIsHttps() && /^http:\/\//i.test(address.trim())) {
+    setLanHelp(null);
+    if (pageIsHttps() && /^http:\/\//i.test(typed.trim())) {
       setError(MIXED_CONTENT_TEXT);
       return;
     }
     setBusy(true);
     try {
-      const { url, info } = await findServer(address);
+      // A private address gets one retry: the local network prompt can still be open.
+      const { url, info } = await withLanRetry(typed, () => findServer(typed));
       storage.set(LAST_SERVER_KEY, url);
       router.push({
         pathname: adding ? '/add-account/login' : '/sign-in/login',
@@ -67,11 +76,18 @@ export default function ServerScreen() {
       });
     } catch (e) {
       const d = describeError(e);
-      if (pageIsHttps() && d.kind === 'offline' && !/^https:\/\//i.test(address.trim())) setError(`${d.title}. ${MIXED_CONTENT_TEXT}`);
+      const help = await lanHelpAfterFailure(typed, e);
+      if (help) setLanHelp(help);
+      else if (pageIsHttps() && d.kind === 'offline' && !/^https:\/\//i.test(typed.trim())) setError(`${d.title}. ${MIXED_CONTENT_TEXT}`);
       else setError(d.kind === 'unknown' ? d.message : `${d.title}. ${d.message}`);
     } finally {
       setBusy(false);
     }
+  };
+
+  const choose = (server: DiscoveredServer) => {
+    setAddress(server.address);
+    void connect(server.address);
   };
 
   return (
@@ -83,6 +99,7 @@ export default function ServerScreen() {
             zoggyfin
           </Text>
           <Text style={styles.subtitle}>{adding ? 'Enter the address of the server to add.' : 'Enter your server address.'}</Text>
+          {discovery.phase === 'primer' ? <NearbyServers discovery={discovery} savedIds={[]} onChoose={() => undefined} /> : null}
           <TextField
             label="Server address"
             value={address}
@@ -94,7 +111,7 @@ export default function ServerScreen() {
             textContentType="URL"
             clearButtonMode="while-editing"
             returnKeyType="go"
-            onSubmitEditing={connect}
+            onSubmitEditing={() => connect()}
             accessibilityLabel="Server address"
           />
           {error ? (
@@ -102,8 +119,16 @@ export default function ServerScreen() {
               {error}
             </Text>
           ) : null}
-          <Button title="Continue" onPress={connect} loading={busy} disabled={!address.trim()} />
-          <Text style={styles.footnote}>Zoggyfin is a client for Jellyfin. It connects only to the server you enter.</Text>
+          {lanHelp ? <LanAccessHelp kind={lanHelp} onOpenSettings={openLanSettings} /> : null}
+          <Button title="Continue" onPress={() => connect()} loading={busy} disabled={!address.trim()} />
+          {discovery.phase !== 'primer' ? (
+            <NearbyServers discovery={discovery} savedIds={savedServers.map((x) => x.id)} onChoose={choose} />
+          ) : null}
+          <Text style={styles.footnote}>
+            {discovery.phase === 'off'
+              ? 'Zoggyfin is a client for Jellyfin. It connects only to the server you enter.'
+              : 'Zoggyfin is a client for Jellyfin. It searches the local network only while this page is open.'}
+          </Text>
           {/* Downloads and nearby watch together need no account and no server (for example on a plane). */}
           {!adding && (entries.downloads || entries.joinNearby) ? (
             <View style={styles.nearby}>

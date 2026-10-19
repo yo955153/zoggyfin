@@ -363,6 +363,84 @@ addresses in Settings, Servers. "Find addresses" reads `LocalAddress` from
 - **Web.** A browser blocks an http address from an https page (mixed content). The app
   does not probe such an address and shows a clear message.
 
+## Server discovery
+
+The server address screen (the first screen, and Settings, Servers, Add server) shows
+"Servers on this network": each Jellyfin server found nearby, with its name, version and
+address. A tap fills the address and opens the sign-in. A refresh button searches again.
+The list shows "Searching…" during a search, and "No servers found. Make sure you are on
+the same network as the server." when it finds nothing. Code: `src/servers/discovery/`,
+`src/features/servers/nearby-servers.tsx`, `modules/zoggyfin-discovery`,
+`desktop/src-tauri/src/discovery.rs`.
+
+- **When.** Discovery runs only while the screen has the focus. It stops at once when the
+  user leaves the screen. It never runs in the background.
+- **UDP.** Jellyfin's own protocol: the datagram `who is JellyfinServer?` to port 7359 on
+  255.255.255.255 and on the directed broadcast address of each interface. Each server
+  answers with JSON (`Address`, `Id`, `Name`, `EndpointAddress`). The app collects answers
+  for 2 s, then reads `/System/Info/Public` once per server for the version. Android
+  (Kotlin, with a `WifiManager.MulticastLock`) and the Mac app (Rust) send it. iOS sends
+  it only with the Multicast Networking entitlement (see below).
+- **HTTP scan.** `GET http://<ip>:8096/System/Info/Public` to each host of the device's own
+  subnet: at most a /22 (1022 hosts), only private ranges, near hosts first, 64 requests
+  at a time, 400 ms per request, 4 s in total. Only an answer with `ProductName`
+  "Jellyfin Server" and an `Id` counts. The address and netmask come from netinfo and the
+  discovery module. This is the main path on iOS.
+- **Merge.** One entry per server Id (with or without dashes). The address from a UDP
+  answer wins, because the server chose it. A saved server shows "Saved".
+- **Web.** A browser cannot send UDP or scan the network safely. The web shows no
+  discovery and keeps the `/config.json` default server.
+
+### Local network access (iOS, Mac app)
+
+iOS and macOS ask the user before the app can reach the local network. Without care, the
+prompt comes in the middle of the first sign-in, and that request fails.
+
+- **First start.** Before the address field, a card says "Find servers on your network.
+  Zoggyfin needs local network access to reach a server at home." Continue shows the
+  system prompt on purpose and waits for the answer; then the search starts. "Not now"
+  hides the card (for a user with an internet address); the refresh button then shows
+  the prompt. The card shows only once.
+- **Check.** iOS has no API for this permission. The discovery module advertises a Bonjour
+  service (`_zgf-lan._tcp`, in `NSBonjourServices`) for a moment and browses for it: the
+  browser sees the service when access is on, and waits with "policy denied"
+  (kDNSServiceErr_PolicyDenied) when access is off. The Mac app sends a UDP datagram to
+  the local network: macOS refuses it with EHOSTUNREACH until the user allows access.
+  With no module (an over-the-air update to an older build), the app reads the HTTP
+  scan: almost all requests failing at once means that access is off.
+- **Access off.** The screen shows "Local network access is off" with "Open Settings".
+  Internet addresses still work.
+- **Retry.** When a connection or sign-in to a local network address fails with a network
+  error, the app tries once more after 1.5 s (the prompt can still be open). Then it
+  shows the same help instead of a generic error, unless the check says that access is on.
+- **Address classes** (`src/servers/address-class.ts`, one shared classifier). Local
+  network: the RFC 1918 ranges (10/8, 172.16/12 and the /16 block for home routers),
+  link-local 169.254/16 and `.local` names. Tailscale
+  (100.64/10, `*.ts.net`) is a VPN, not the local network: a failure there says "Check
+  that Tailscale is connected". When a 10.x address fails while a VPN tunnel is up (an
+  IPv4 address on a utun, tun, wg or ppp interface, or Android's VPN network), the help
+  also names the VPN, because WireGuard often uses 10.x addresses.
+
+### UDP discovery on iOS (off)
+
+Sending a broadcast on iOS needs the Multicast Networking entitlement
+(`com.apple.developer.networking.multicast`). Apple gives it only on request. Until then
+the iOS UDP path stays off and iOS uses the HTTP scan. To turn it on:
+
+1. Sign in to developer.apple.com with the Account Holder role. Open the request form
+   "Multicast Networking Entitlement Request" (developer.apple.com/contact/request/networking-multicast).
+2. Give the bundle id `com.zogtech.zoggyfin` and the reason: the app sends Jellyfin's
+   discovery broadcast (UDP port 7359) to find media servers on the local network, only
+   while the user is on the server address screen.
+3. After approval, in Certificates, Identifiers & Profiles, open the App ID and turn on
+   the Multicast Networking capability, then make new provisioning profiles (EAS does
+   this on the next build when the capability is on).
+4. Add `"com.apple.developer.networking.multicast": true` to `ios.entitlements` in
+   `app.json`.
+5. Set `udpDiscoveryEnabled = true` in
+   `modules/zoggyfin-discovery/ios/ZoggyfinDiscoveryModule.swift`.
+6. Make a new native build. An over-the-air update cannot turn it on.
+
 ## Servers and accounts
 
 The app keeps many servers, each with one or more signed-in users. Tokens are in the

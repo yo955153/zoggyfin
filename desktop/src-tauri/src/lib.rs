@@ -10,6 +10,7 @@ compile_error!("build the release with panic = \"unwind\" (Cargo.toml [profile.r
 
 #[cfg(debug_assertions)]
 mod debug;
+mod discovery;
 mod downloads;
 #[cfg(target_os = "macos")]
 mod media_macos;
@@ -106,6 +107,10 @@ pub fn run() {
             downloads::files_disk_space,
             now_playing_update,
             now_playing_clear,
+            discovery::discovery_udp,
+            discovery::discovery_interfaces,
+            discovery::discovery_lan_probe,
+            discovery::discovery_open_settings,
             #[cfg(target_os = "macos")]
             update::update_check,
             #[cfg(target_os = "macos")]

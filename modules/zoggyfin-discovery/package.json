@@ -1,0 +1,7 @@
+{
+  "name": "zoggyfin-discovery",
+  "version": "0.1.0",
+  "description": "Finds Jellyfin servers on the local network for Zoggyfin and checks local network access.",
+  "license": "MPL-2.0",
+  "private": true
+}
