@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand';
 
+import type { DownloadQuality } from '@/downloads/types';
 import { readJson, writeJson } from '@/storage/json';
 
 /** Bitrate choices in bits per second. `0` = no limit beyond the server's own. */
@@ -35,6 +36,8 @@ export interface PlaybackSettings {
   skipBackSeconds: number;
   skipForwardSeconds: number;
   autoplayNext: boolean;
+  /** Video downloads: 0 keeps the original file when it plays here; else the maximum height. */
+  downloadQuality: DownloadQuality;
 }
 
 const KEY = 'settings.playback.v1';
@@ -45,6 +48,7 @@ export const DEFAULT_PLAYBACK_SETTINGS: PlaybackSettings = {
   skipBackSeconds: 10,
   skipForwardSeconds: 10,
   autoplayNext: true,
+  downloadQuality: 0,
 };
 
 interface Store extends PlaybackSettings {
@@ -63,6 +67,7 @@ export const usePlaybackSettings = create<Store>((set, get) => ({
       skipBackSeconds: s.skipBackSeconds,
       skipForwardSeconds: s.skipForwardSeconds,
       autoplayNext: s.autoplayNext,
+      downloadQuality: s.downloadQuality,
     };
     writeJson(KEY, saved);
   },

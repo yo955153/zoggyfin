@@ -68,7 +68,8 @@
           }
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "@kesha-antonov/react-native-background-downloader"
     ],
     "experiments": {
       "typedRoutes": true,

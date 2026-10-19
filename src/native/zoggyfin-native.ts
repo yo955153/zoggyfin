@@ -3,4 +3,8 @@ export function isHardwareDecodeSupported(_codec: 'av1' | 'hevc' | 'h264' | 'vp9
   return false;
 }
 
+export function excludeFromBackup(_path: string): boolean {
+  return false;
+}
+
 export const hasNativeKeyInput = false;

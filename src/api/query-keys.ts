@@ -69,6 +69,8 @@ export const queryKeys = {
     [...scopeKey(s), 'music', libraryId, tab, options ?? {}] as const,
   /** Recently and most played songs. Invalidated after audio playback. */
   played: (s: SessionScope, libraryId: string, kind: string) => [...scopeKey(s), 'played', libraryId, kind] as const,
+  /** The user's playlists for the Add to playlist sheet. */
+  playlists: (s: SessionScope, mediaType?: string) => [...scopeKey(s), 'playlists', mediaType ?? 'all'] as const,
   similar: (s: SessionScope, itemId: string) => [...scopeKey(s), 'similar', itemId] as const,
   search: (s: SessionScope, term: string) =>
     [...scopeKey(s), 'search', term.trim().toLowerCase()] as const,

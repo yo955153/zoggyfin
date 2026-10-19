@@ -17,6 +17,9 @@ importers:
       '@jellyfin/sdk':
         specifier: ^1.0.1
         version: 1.0.1(axios@1.20.0)
+      '@kesha-antonov/react-native-background-downloader':
+        specifier: 4.6.3
+        version: 4.6.3(react-native-tvos@0.88.0-0)
       '@react-native-tvos/config-tv':
         specifier: 0.1.7
         version: 0.1.7(expo@58.0.16)
@@ -56,6 +59,9 @@ importers:
       expo-device:
         specifier: ~58.0.5
         version: 58.0.5(expo@58.0.16)
+      expo-file-system:
+        specifier: ~58.0.10
+        version: 58.0.10(expo@58.0.16)(react-native-tvos@0.88.0-0)
       expo-font:
         specifier: ~58.0.9
         version: 58.0.9(expo@58.0.16)(react-native-tvos@0.88.0-0)(react@19.3.0)
@@ -1107,6 +1113,11 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@kesha-antonov/react-native-background-downloader@4.6.3':
+    resolution: {integrity: sha512-0ZJp9m23ym7RwbFMhuPVYu3oo7eCs6q5XaGcgpx5nCV8BRvCsSY35FwtIyb2Q9j2H2Ugqqq8yxLFdofelHEuSg==}
+    peerDependencies:
+      react-native: '>=0.57.0'
 
   '@napi-rs/wasm-runtime@1.2.5':
     resolution: {integrity: sha512-HshSvXzmBxNzqejd3k/KemgQ3hdREUYFRRrgxOZ+gPljDIsO2SDZrVZMd4Z/HsxudQbE62OVyVFE8z9BCurfjA==}
@@ -6408,6 +6419,10 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
+  '@kesha-antonov/react-native-background-downloader@4.6.3(react-native-tvos@0.88.0-0)':
+    dependencies:
+      react-native: react-native-tvos@0.88.0-0(@babel/core@7.29.7)(@react-native/metro-config@0.88.0(@babel/core@7.29.7))(@types/react@19.3.0)(react-native-tvos@0.88.0-0)(react@19.3.0)
+
   '@napi-rs/wasm-runtime@1.2.5(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
       '@emnapi/core': 1.10.0
@@ -6788,9 +6803,7 @@ snapshots:
       metro-runtime: 0.87.1
     transitivePeerDependencies:
       - '@babel/core'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 

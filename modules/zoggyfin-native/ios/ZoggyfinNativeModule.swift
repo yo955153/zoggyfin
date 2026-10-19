@@ -6,8 +6,9 @@ import CoreMedia
 import ExpoModulesCore
 import VideoToolbox
 
-/// Decoder capabilities for the device profile, and a view that receives
-/// hardware keyboard presses (iPad and Mac keyboards).
+/// Decoder capabilities for the device profile, the backup flag for
+/// downloads, and a view that receives hardware keyboard presses (iPad and
+/// Mac keyboards).
 public class ZoggyfinNativeModule: Module {
   public func definition() -> ModuleDefinition {
     Name("ZoggyfinNative")
@@ -28,6 +29,21 @@ public class ZoggyfinNativeModule: Module {
       case "vp9":
         return VTIsHardwareDecodeSupported(kCMVideoCodecType_VP9)
       default:
+        return false
+      }
+    }
+
+    /// Keeps a file or folder (downloads) out of iCloud and computer backups.
+    /// Returns false when the path does not exist or the flag cannot be set.
+    Function("excludeFromBackup") { (path: String) -> Bool in
+      var url = URL(fileURLWithPath: path)
+      guard FileManager.default.fileExists(atPath: url.path) else { return false }
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      do {
+        try url.setResourceValues(values)
+        return true
+      } catch {
         return false
       }
     }

@@ -676,3 +676,120 @@ export async function getText(api: Api, url: string): Promise<string> {
   const res = await api.axiosInstance.get<string>(url, { responseType: 'text', transformResponse: (d: unknown) => d });
   return typeof res.data === 'string' ? res.data : String(res.data);
 }
+
+// ---- Playlists -------------------------------------------------------------------
+
+/** The user's playlists, newest first. `mediaType` keeps only audio or only video playlists. */
+export async function getPlaylists(api: Api, userId: string, mediaType?: 'Audio' | 'Video'): Promise<BaseItemDto[]> {
+  const res = await getLibraryApi(api).getItems({
+    userId,
+    includeItemTypes: ['Playlist'],
+    recursive: true,
+    sortBy: ['DateCreated', 'SortName'],
+    sortOrder: ['Descending', 'Ascending'],
+    mediaTypes: mediaType ? [mediaType] : undefined,
+    limit: 200,
+    ...tile,
+  });
+  return res.data.Items ?? [];
+}
+
+/** Creates a playlist with the items in it. Returns the new playlist id. */
+export async function createPlaylist(
+  api: Api,
+  userId: string,
+  name: string,
+  ids: string[],
+  mediaType: 'Audio' | 'Video',
+): Promise<string> {
+  const res = await getPlaylistApi(api).createPlaylist({
+    createPlaylistDto: { Name: name, Ids: ids, UserId: userId, MediaType: mediaType, IsPublic: false },
+  });
+  const id = res.data.Id;
+  if (!id) throw new Error('The server did not make the playlist.');
+  return id;
+}
+
+export async function addToPlaylist(api: Api, userId: string, playlistId: string, ids: string[]): Promise<void> {
+  await getPlaylistApi(api).addItemToPlaylist({ playlistId, ids, userId });
+}
+
+/** `entryIds` are the PlaylistItemId values of the entries, not the item ids. */
+export async function removeFromPlaylist(api: Api, playlistId: string, entryIds: string[]): Promise<void> {
+  await getPlaylistApi(api).removeItemFromPlaylist({ playlistId, entryIds });
+}
+
+/** Moves one entry (its PlaylistItemId) to `newIndex`. */
+export async function movePlaylistItem(api: Api, playlistId: string, entryId: string, newIndex: number): Promise<void> {
+  await getPlaylistApi(api).moveItem({ playlistId, itemId: entryId, newIndex });
+}
+
+export async function renamePlaylist(api: Api, playlistId: string, name: string): Promise<void> {
+  await getPlaylistApi(api).updatePlaylist({ playlistId, updatePlaylistDto: { Name: name } });
+}
+
+export async function deletePlaylist(api: Api, playlistId: string): Promise<void> {
+  await getLibraryApi(api).deleteItem({ itemId: playlistId });
+}
+
+// ---- Downloads and offline progress ---------------------------------------------
+
+/**
+ * The items a container download holds, with their media sources: an
+ * album's tracks, a playlist's entries, a season's or a show's episodes,
+ * a collection's items.
+ */
+export async function getDownloadChildren(api: Api, userId: string, item: BaseItemDto): Promise<BaseItemDto[]> {
+  const id = item.Id ?? '';
+  const fields: ItemFields[] = [...TILE_FIELDS, 'MediaSources', 'Chapters', 'Overview'];
+  switch (item.Type) {
+    case 'Playlist': {
+      const res = await getPlaylistApi(api).getPlaylistItems({ playlistId: id, userId, ...tile, fields });
+      return res.data.Items ?? [];
+    }
+    case 'Season': {
+      const res = await getShowApi(api).getEpisodes({ seriesId: item.SeriesId ?? item.ParentId ?? '', seasonId: id, userId, ...tile, fields });
+      return res.data.Items ?? [];
+    }
+    case 'Series': {
+      const res = await getShowApi(api).getEpisodes({ seriesId: id, userId, ...tile, fields });
+      return res.data.Items ?? [];
+    }
+    case 'BoxSet':
+    case 'Folder': {
+      const res = await getLibraryApi(api).getItems({ userId, parentId: id, recursive: true, mediaTypes: ['Video', 'Audio'], ...tile, fields });
+      return res.data.Items ?? [];
+    }
+    default:
+      return getAudioTracks(api, userId, item);
+  }
+}
+
+/** Writes a position and played state made offline. Jellyfin 10.9+ (POST /UserItems/{id}/UserData). */
+export async function updatePlayState(
+  api: Api,
+  userId: string,
+  itemId: string,
+  state: { positionTicks: number; played: boolean; at: number },
+): Promise<void> {
+  await getUserDataApi(api).updateItemUserData({
+    itemId,
+    userId,
+    updateUserItemDataDto: {
+      PlaybackPositionTicks: state.played ? 0 : state.positionTicks,
+      Played: state.played,
+      LastPlayedDate: new Date(state.at).toISOString(),
+    },
+  });
+}
+
+/** True when the server answers. Never throws. */
+export async function ping(baseUrl: string, timeoutMs = 4000): Promise<boolean> {
+  try {
+    const res = await axios.get(`${baseUrl.replace(/\/+$/, '')}/System/Ping`, { timeout: timeoutMs });
+    return res.status >= 200 && res.status < 300;
+  } catch (e) {
+    // Any HTTP answer means the server is there.
+    return !!(e as { response?: unknown }).response;
+  }
+}
