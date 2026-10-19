@@ -79,7 +79,7 @@ export function useItemActions(item: BaseItemDto | undefined) {
               await (s.collections[id] ? downloads.removeGroup(id) : downloads.remove(id));
               toast('Download removed', { icon: 'checkmark' });
             },
-            openDownloads: () => router.navigate('/(tabs)/(downloads)/downloads'),
+            openDownloads: () => router.navigate('/(tabs)/(saved)/downloads'),
           }
         : null),
     };

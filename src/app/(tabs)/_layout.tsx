@@ -81,7 +81,7 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Music</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="music.note" md="music_note" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(downloads)" disableAutomaticContentInsets hidden={!features.downloads}>
+      <NativeTabs.Trigger name="(saved)" disableAutomaticContentInsets hidden={!features.downloads}>
         <NativeTabs.Trigger.Label>Downloads</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'arrow.down.circle', selected: 'arrow.down.circle.fill' }} md="download" />
         <NativeTabs.Trigger.Badge hidden={!badge}>{badge ?? undefined}</NativeTabs.Trigger.Badge>

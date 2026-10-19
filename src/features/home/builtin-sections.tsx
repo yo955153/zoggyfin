@@ -107,7 +107,7 @@ function DownloadedRow() {
       title="Downloads"
       shape={shapeForList(items, 'poster')}
       items={items}
-      onSeeAll={() => router.navigate('/(tabs)/(downloads)/downloads')}
+      onSeeAll={() => router.navigate('/(tabs)/(saved)/downloads')}
       tileSubtitle={(it) => {
         const g = groups.find((x) => x.id === it.Id);
         return g && g.records.length > 1 ? `${g.records.length} ${g.type === 'Series' ? 'episodes' : 'songs'}` : undefined;

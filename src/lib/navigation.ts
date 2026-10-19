@@ -4,8 +4,8 @@ import { useCallback } from 'react';
 import type { BaseItemDto } from '@/api/types';
 
 /** Tab stacks that hold the shared detail routes. */
-export type TabGroup = '(home)' | '(library)' | '(music)' | '(search)' | '(downloads)';
-const GROUPS: readonly TabGroup[] = ['(home)', '(library)', '(music)', '(search)', '(downloads)'];
+export type TabGroup = '(home)' | '(library)' | '(music)' | '(search)' | '(saved)';
+const GROUPS: readonly TabGroup[] = ['(home)', '(library)', '(music)', '(search)', '(saved)'];
 
 /** The tab the user is in, so a pushed detail page stays in that tab's stack. */
 export function useTabGroup(): TabGroup {
