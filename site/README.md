@@ -23,10 +23,18 @@ admin@zog-tech.com.
 
 ## Run and deploy
 
-- Local: `docker compose up -d` in this folder serves the pages with nginx on port 8798.
-- Production: the server has a checkout of this repository, registered as the app
-  `zoggyfin-site` of the `zog` deploy CLI (compose file `site/docker-compose.yml`, project
-  `zoggyfin-site`). Push to `main`, then run `zog deploy zoggyfin-site` on the server.
-  The container mounts `public/` and `nginx.conf` read-only, so a deploy needs no image build.
-  After a change to `nginx.conf`, also run `docker restart zoggyfin-site`.
-- The Cloudflare tunnel sends `zoggyfin.zog-tech.com` to port 8798 on the server.
+The site moves from nginx on the home server to Cloudflare Pages (project `zoggyfin-site`).
+Until the switch, the old nginx files (`nginx.conf`, `docker-compose.yml`) stay here.
+
+- `wrangler.toml` names the Pages project. `public/` is the output folder; there is no build.
+- `public/_headers` sets the security headers, the cache rules and the JSON type of the
+  `.well-known` files. `public/_redirects` serves `/download`, `/join`, `/privacy` and
+  `/support` with status 200 and no redirect to a trailing slash. Add a line there for a new page.
+- `functions/download/latest.json.js` serves the update feed at `/download/latest.json`.
+- Local: `pnpm dlx wrangler@4.151.2 pages dev` in this folder serves the site on port 8788.
+- Deploy on push: `.github/workflows/site.yml` deploys when a push to `main` changes `site/`.
+  It uses the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+- Manual deploy: `pnpm site:deploy`. It reads the token from
+  `~/.config/zoggyfin-site/cloudflare.env` (`CLOUDFLARE_API_TOKEN=...` and
+  `CLOUDFLARE_ACCOUNT_ID=...`, not in git). The first deploy creates the project.
+- The token needs the permission Account > Cloudflare Pages > Edit.

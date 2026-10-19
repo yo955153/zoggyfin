@@ -1,0 +1,5 @@
+# Serve each page at its clean path with status 200 (Pages would redirect /privacy to /privacy/).
+/download /download/ 200
+/join /join/ 200
+/privacy /privacy/ 200
+/support /support/ 200

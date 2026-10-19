@@ -75,7 +75,8 @@
     "desktop:build": "expo export --platform web && tauri build --bundles app --config desktop/src-tauri/tauri.conf.json",
     "desktop:release": "bash desktop/scripts/release.sh",
     "desktop:publish": "bash desktop/scripts/publish.sh",
-    "desktop:version": "bash desktop/scripts/version.sh"
+    "desktop:version": "bash desktop/scripts/version.sh",
+    "site:deploy": "bash site/scripts/deploy.sh"
   },
   "private": true,
   "license": "MPL-2.0",
