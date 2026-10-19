@@ -31,6 +31,24 @@ function finish(lines: LyricLine[]): Lyrics | null {
   return { synced: true, lines: sorted };
 }
 
+interface LyricHints {
+  HasLyrics?: boolean | null;
+  MediaStreams?: readonly { Type?: string | null }[] | null;
+  MediaSources?: readonly { MediaStreams?: readonly { Type?: string | null }[] | null }[] | null;
+}
+
+/**
+ * True when the server can have lyrics for this item: `HasLyrics` is not
+ * false, or a media stream is a lyric stream. A server without lyrics answers
+ * 404, and on the web that 404 has no CORS header, so the app does not ask.
+ * An item from an old saved queue has no `HasLyrics`; the app asks for it.
+ */
+export function mayHaveLyrics(item: LyricHints): boolean {
+  const streams = [...(item.MediaStreams ?? []), ...(item.MediaSources ?? []).flatMap((m) => m.MediaStreams ?? [])];
+  if (streams.some((st) => st.Type === 'Lyric')) return true;
+  return item.HasLyrics !== false;
+}
+
 /** The server answer. Null when there are no lyrics. */
 export function fromLyricDto(dto: LyricDtoLike | null | undefined): Lyrics | null {
   const raw = dto?.Lyrics;

@@ -2,7 +2,7 @@ import type { DeviceProfile } from '@/api/types';
 
 import { appleCapabilities, buildDeviceProfile, webCapabilities } from '../../device-profile';
 import { isLongFormItem, isLongFormLibrary, isLongFormList } from '../long-form';
-import { activeLine, fromLyricDto, parseLrc } from '../lyrics';
+import { activeLine, fromLyricDto, mayHaveLyrics, parseLrc } from '../lyrics';
 import { FINISHED_TAIL_SECONDS, PositionStore, resumeSeconds } from '../positions';
 import { formatRemaining, sleepAtEnd, sleepDue, sleepFadeVolume, sleepFor, sleepOff, sleepRemaining } from '../sleep-timer';
 import { formatLine, predictPlayMethod, universalAudioUrl, universalContainers } from '../stream-url';
@@ -36,6 +36,14 @@ describe('long-form detection', () => {
 });
 
 describe('lyrics', () => {
+  it('asks for lyrics only when the item can have them', () => {
+    expect(mayHaveLyrics({ HasLyrics: false })).toBe(false);
+    expect(mayHaveLyrics({ HasLyrics: true })).toBe(true);
+    expect(mayHaveLyrics({ HasLyrics: false, MediaSources: [{ MediaStreams: [{ Type: 'Audio' }, { Type: 'Lyric' }] }] })).toBe(true);
+    // Unknown (an old saved queue): ask.
+    expect(mayHaveLyrics({})).toBe(true);
+  });
+
   it('reads the server answer, sorted, with seconds', () => {
     const l = fromLyricDto({ Lyrics: [{ Text: 'two', Start: 50_000_000 }, { Text: 'one', Start: 10_000_000 }, { Text: '', Start: 70_000_000 }] });
     expect(l?.synced).toBe(true);

@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { type ComponentRef, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { SearchBarCommands } from 'react-native-screens';
 
 import { useSearch } from '@/api/queries';
@@ -299,24 +299,34 @@ function TopResult({ item, onPlay }: { item: BaseItemDto; onPlay: () => void }) 
       <Text style={s.topHeader} accessibilityRole="header">
         Top result
       </Text>
-      <Touchable
-        kind="tile"
-        radius={radius.lg}
-        onPress={() => open(item)}
-        accessibilityRole="button"
-        accessibilityLabel={[item.Name, facts].filter(Boolean).join(', ')}
-        style={s.topCard}>
-        <ItemImage item={item} variant={shape === 'thumb' ? 'landscape' : shape === 'poster' ? 'poster' : 'square'} width={artWidth} aspectRatio={aspect} rounded={radius.sm} circle={shape === 'circle'} hideArtTitle />
-        <View style={s.topBody}>
-          <Text style={[s.topTitle, scriptStyle(item.Name, s.topTitle)]} numberOfLines={2}>
-            {item.Name}
-          </Text>
-          {facts ? <Text style={s.topMeta}>{facts}</Text> : null}
-          {PLAYABLE.has(item.Type ?? '') ? (
-            <Button title={resume ? 'Resume' : 'Play'} icon="play.fill" variant="small" onPress={onPlay} containerStyle={s.topButton} />
-          ) : null}
+      {/* The card press area and the Play button are siblings: a button must not be inside a button (web). */}
+      <View>
+        <Touchable
+          kind="plain"
+          radius={radius.lg}
+          onPress={() => open(item)}
+          accessibilityRole="button"
+          accessibilityLabel={[item.Name, facts].filter(Boolean).join(', ')}
+          containerStyle={StyleSheet.absoluteFill}
+          style={({ pressed, hovered }) => [s.topCardBg, (pressed || hovered) && s.topCardBgActive]}
+        />
+        <View style={s.topCard} pointerEvents="box-none">
+          <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <ItemImage item={item} variant={shape === 'thumb' ? 'landscape' : shape === 'poster' ? 'poster' : 'square'} width={artWidth} aspectRatio={aspect} rounded={radius.sm} circle={shape === 'circle'} hideArtTitle />
+          </View>
+          <View style={s.topBody} pointerEvents="box-none">
+            <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={s.topText}>
+              <Text style={[s.topTitle, scriptStyle(item.Name, s.topTitle)]} numberOfLines={2}>
+                {item.Name}
+              </Text>
+              {facts ? <Text style={s.topMeta}>{facts}</Text> : null}
+            </View>
+            {PLAYABLE.has(item.Type ?? '') ? (
+              <Button title={resume ? 'Resume' : 'Play'} icon="play.fill" variant="small" onPress={onPlay} containerStyle={s.topButton} />
+            ) : null}
+          </View>
         </View>
-      </Touchable>
+      </View>
     </View>
   );
 }
@@ -355,11 +365,11 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
     padding: spacing.md,
-    backgroundColor: c.surface,
-    borderRadius: radius.lg,
-    borderCurve: 'continuous' as const,
   },
-  topBody: { flex: 1, gap: 2 },
+  topCardBg: { flex: 1, backgroundColor: c.surface, borderRadius: radius.lg, borderCurve: 'continuous' as const },
+  topCardBgActive: { backgroundColor: c.surface2 },
+  topBody: { flex: 1 },
+  topText: { gap: 2 },
   topTitle: { ...font(type.headline), color: c.text },
   topMeta: { ...font(type.footnote), color: c.text2 },
   topButton: { alignSelf: 'flex-start' as const, marginTop: spacing.sm },

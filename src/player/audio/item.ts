@@ -13,7 +13,9 @@ export function isAudioItemLike(v: unknown): v is AudioItem {
 export function slimItem(item: BaseItemDto): AudioItem {
   const primary = item.ImageTags?.Primary;
   const source = item.MediaSources?.[0];
-  const audio = (source?.MediaStreams ?? item.MediaStreams ?? []).find((s) => s.Type === 'Audio');
+  const streams = source?.MediaStreams ?? item.MediaStreams ?? [];
+  const audio = streams.find((s) => s.Type === 'Audio');
+  const lyricStream = streams.some((s) => s.Type === 'Lyric');
   return {
     Id: item.Id ?? '',
     ServerId: item.ServerId,
@@ -21,6 +23,8 @@ export function slimItem(item: BaseItemDto): AudioItem {
     Type: item.Type,
     MediaType: item.MediaType,
     RunTimeTicks: item.RunTimeTicks,
+    // Kept so the player asks for lyrics only when they exist (see lyrics.ts).
+    HasLyrics: lyricStream ? true : item.HasLyrics,
     IndexNumber: item.IndexNumber,
     ParentIndexNumber: item.ParentIndexNumber,
     ParentId: item.ParentId,

@@ -228,6 +228,7 @@ export function slimForDownload(item: BaseItemDto): BaseItemDto {
     MediaType: item.MediaType,
     Overview: item.Overview,
     RunTimeTicks: item.RunTimeTicks,
+    HasLyrics: item.HasLyrics,
     ProductionYear: item.ProductionYear,
     PremiereDate: item.PremiereDate,
     OfficialRating: item.OfficialRating,
