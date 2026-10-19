@@ -108,6 +108,16 @@ Servers and accounts:
 - An install with one saved account moves to the new format at the first start, with no
   new sign-in. See "Server addresses" in the design.
 
+Desktop app (first version, macOS on Apple Silicon):
+
+- A Tauri 2 window around the web build, in [desktop/](desktop/). Video plays through libmpv:
+  the original file plays directly (MKV, HEVC, AV1, DTS, ASS and PGS subtitles), with the
+  Zoggyfin player controls over the video. Music uses the web audio engine.
+- Standard Mac menus (⌘, Settings, ⌘F Search), a transparent title bar, and the window keeps
+  its size and position.
+- `pnpm desktop:dev` and `pnpm desktop:build`. Development needs `brew install mpv`.
+  See [desktop/README.md](desktop/README.md) for libmpv licenses, bundling and signing.
+
 The design is in [docs/specs](docs/specs/) and [docs/design](docs/design/).
 
 The native app includes a small local module, `modules/zoggyfin-native`, that reports

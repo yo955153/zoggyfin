@@ -86,7 +86,15 @@ One Expo code base for all targets. Every phase keeps all of them working.
   `useWindowDimensions`, never device checks, so the layout follows the window size.
 - **Mac**: the iPad build runs on Apple Silicon Macs ("Designed for iPad"). Keyboard
   shortcuts (space = play/pause, arrows = seek, ⌘F = search) and pointer hover states
-  work there and on iPad with a keyboard. A Mac Catalyst build is a possible later step.
+  work there and on iPad with a keyboard.
+- **Desktop (macOS first, then Windows and Linux)**: a Tauri 2 app (`desktop/`) around
+  the web build, with libmpv for video (the model of Jellyfin Media Player). It replaces
+  the Mac Catalyst plan. libmpv draws the video under a transparent web view, and the web
+  player controls draw over it. The device profile asks for direct play of almost every
+  file (MKV, HEVC, AV1, DTS, ASS and PGS subtitles); libmpv switches the tracks inside the
+  file. `src/platform/desktop.ts` finds the desktop app; screens use only the player
+  interface. Music uses the web audio engine at first. The shipped app bundles an LGPL
+  build of libmpv. Details: `desktop/README.md`.
 - **Web**: `expo export --platform web`, a static site served by a small container
   (nginx). Video uses expo-video's web player (HLS through hls.js where Safari is not
   the browser), audio uses expo-audio on web, storage uses an MMKV/localStorage adapter,
@@ -330,6 +338,10 @@ and Fire TV builds) waits for phase 6.
    builds), MPV engine, Chromecast, CarPlay, Live Activity for
    downloads, Android, the web deployment and a pass over iPad and Mac polish
    (keyboard shortcuts, pointer, multi-window), and the extension system.
+6b. **Desktop app**: Tauri shell around the web build with libmpv video on Apple Silicon
+   Macs (first version: window, menus, mpv player with the web controls, progress
+   reporting). Then: a bundled LGPL libmpv, Developer ID signing and notarization,
+   downloads in Rust, Windows and Linux builds from the same code.
 7. **Together, part 2**: voice chat and messages in a session.
 8. **Roku (separate project, later)**: Roku apps use BrightScript/SceneGraph, so React
    Native cannot target them. A separate Roku channel in this repo (`roku/`) reuses the
