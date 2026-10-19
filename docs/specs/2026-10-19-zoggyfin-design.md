@@ -200,6 +200,36 @@ this repo.
   small error note.
 - **Docs**: `docs/extensions.md` with the schema and a small sample extension.
 
+## Watch together
+
+People watch or listen to the same item in sync, even with no internet (for example on
+a plane).
+
+- **Nearby mode (no internet, no router)**: Apple Multipeer Connectivity
+  (Bluetooth + peer-to-peer Wi-Fi) between iPhone, iPad and Mac, in a native Expo
+  module behind `src/together/transport`. Android joins later through Wi-Fi Aware, if
+  the iOS 26 API allows it.
+- **Who can join**: anyone nearby with the app. No Jellyfin account is needed. The host
+  sees each join request and accepts it.
+- **Media source**: if the guest has the same item downloaded (match on Jellyfin item id
+  and media source id), each device plays its own file. If not, the host streams its
+  downloaded file to the guest over the peer link (an HTTP range server bound to the
+  peer connection, or Multipeer streams), and the guest player reads it like a local
+  stream. The host can only share items that it has downloaded.
+- **Sync protocol** (transport-independent, unit-tested): the host is the clock. Peers
+  estimate the clock offset with repeated ping/pong (NTP-style, median of samples).
+  Commands carry the host time: `play(at, position)`, `pause(position)`,
+  `seek(position)`, `rate(r)`, `buffering(peer)`. Everyone waits while one peer buffers.
+  Drift above 150 ms is corrected with a small rate change; above 1 s with a seek.
+  Optionally guests may control playback (a host setting).
+- **Internet mode**: Jellyfin SyncPlay with the same session UI, for people who all
+  have accounts on the server.
+- **UI**: a "Watch together" button in the player and on item pages; a session sheet
+  with nearby devices, join requests and the people in the session; a small presence
+  bar in the player.
+- **Later (separate phase)**: voice chat and messages in a session (Multipeer audio
+  locally; WebRTC with a self-hosted signaling server such as LiveKit over the internet).
+
 ## Settings
 
 Servers and accounts (multiple), Quick Connect login, streaming quality (Wi-Fi /
@@ -223,9 +253,12 @@ skip lengths, clear cache.
    long-form audio features.
 4. **Downloads and playlists**: background downloads, Downloads tab, offline playback,
    playlist management.
-5. **Phase 2 features**: MPV engine, Chromecast, SyncPlay, CarPlay, Live Activity for
+5. **Watch together**: a short spike first (two simulators/devices over Multipeer, file
+   streaming and sync accuracy), then nearby mode and SyncPlay internet mode.
+6. **Phase 2 features**: MPV engine, Chromecast, CarPlay, Live Activity for
    downloads, Android, the web deployment and a pass over iPad and Mac polish
    (keyboard shortcuts, pointer, multi-window), and the extension system.
+7. **Together, part 2**: voice chat and messages in a session.
 
 Every phase checks iPhone, iPad and web before it is done.
 
