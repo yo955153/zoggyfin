@@ -511,6 +511,25 @@ wrong account.
   the active account, so an older app version keeps working after a rollback.
 - The self-hosted web build's `/config.json` `defaultServerUrl` fills the address field
   when no server is saved.
+- **One server, one entry.** A saved server is its Id (with or without dashes). A sign-in,
+  Quick Connect, an invite or "Add server" through a new address adds that address to the
+  saved server; it never makes a second entry. Discovery adds the address where it finds a
+  saved server, marked "Found on this network", after the user's own addresses, so it
+  takes over when they do not answer (`src/auth/server-identity.ts`).
+- **Stale addresses.** Each address keeps the time of its last answer (written at most once
+  an hour). After 30 days with no answer, the address list shows "Not reached since
+  <date>" with a Remove button. The app never removes an address by itself.
+- **Reinstalled server.** Jellyfin makes a new server Id and new item Ids on a fresh
+  install. When the user adds a server with a new Id and the name or an address of a saved
+  server, the app asks "Is this the same server as <name>? Your downloads from it can move
+  over." On Yes, after the sign-in, the new server takes the old addresses, connection
+  mode and Wi-Fi rule, and each download is matched to an item of the new server: by
+  provider ids (Tmdb, Imdb, Tvdb, MusicBrainz track), then by file path, then by name,
+  year and type (a key that two items share matches nothing). Matched downloads and their
+  waiting playback reports move to the new server; the files stay where they are. Other
+  downloads stay playable under the old entry, which keeps no users, and their reports
+  never go to the new server. A toast says "Moved 47 of 49 downloads"
+  (`src/downloads/relink.ts`). The old users cannot move: the new server has new user Ids.
 
 ## Quality bar
 
