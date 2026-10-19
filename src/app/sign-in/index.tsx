@@ -10,6 +10,7 @@ import { useAccounts } from '@/auth/session-store';
 import { Button } from '@/components/button';
 import { TextField } from '@/components/text-field';
 import { LanAccessHelp, NearbyServers } from '@/features/servers/nearby-servers';
+import { askIfReinstalled } from '@/features/servers/reinstall';
 import { lanHelpAfterFailure, openLanSettings, useServerDiscovery } from '@/features/servers/use-server-discovery';
 import { setNoAccountOpen, useOfflineEntries } from '@/features/offline/use-offline-entries';
 import { TogetherSheetHost } from '@/features/together/together-sheet';
@@ -70,9 +71,11 @@ export default function ServerScreen() {
       // A private address gets one retry: the local network prompt can still be open.
       const { url, info } = await withLanRetry(typed, () => findServer(typed));
       storage.set(LAST_SERVER_KEY, url);
+      // A new Id with the name or an address of a saved server: maybe the same server after a reinstall.
+      const replaces = await askIfReinstalled({ id: info.Id ?? '', name: info.ServerName ?? '', url });
       router.push({
         pathname: adding ? '/add-account/login' : '/sign-in/login',
-        params: { url, serverId: info.Id ?? '', serverName: info.ServerName ?? 'Jellyfin', version: info.Version ?? '' },
+        params: { url, serverId: info.Id ?? '', serverName: info.ServerName ?? 'Jellyfin', version: info.Version ?? '', replaces: replaces ?? '' },
       });
     } catch (e) {
       const d = describeError(e);

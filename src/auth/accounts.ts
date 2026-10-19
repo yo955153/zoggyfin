@@ -6,7 +6,7 @@
  * Tokens are never in this data. Each one is in the secure store under
  * `tokenKey(serverId, userId)`, the same key that the single-account format used.
  */
-import { addAddress, type ConnectionMode, guessKind, type ServerAddress } from '@/servers/addresses';
+import { addAddress, type ConnectionMode, guessKind, sameServerId, type ServerAddress } from '@/servers/addresses';
 import { NO_WIFI_RULE, type WifiRule } from '@/servers/wifi-rule';
 
 export const ACCOUNTS_SCHEMA_VERSION = 1;
@@ -108,7 +108,8 @@ export function loadAccounts(stored: unknown, legacy: unknown): AccountsData {
 }
 
 export function findServer(data: AccountsData, serverId: string | null | undefined): SavedServer | null {
-  return data.servers.find((s) => s.id === serverId) ?? null;
+  // Jellyfin writes the Id with and without dashes: one server, one entry.
+  return data.servers.find((s) => sameServerId(s.id, serverId)) ?? null;
 }
 
 export function findUser(data: AccountsData, ref: AccountRef | null): SavedUser | null {
@@ -117,8 +118,8 @@ export function findUser(data: AccountsData, ref: AccountRef | null): SavedUser 
 }
 
 function replaceServer(data: AccountsData, server: SavedServer): AccountsData {
-  const exists = data.servers.some((s) => s.id === server.id);
-  return { ...data, servers: exists ? data.servers.map((s) => (s.id === server.id ? server : s)) : [...data.servers, server] };
+  const exists = data.servers.some((s) => sameServerId(s.id, server.id));
+  return { ...data, servers: exists ? data.servers.map((s) => (sameServerId(s.id, server.id) ? server : s)) : [...data.servers, server] };
 }
 
 export interface SignInFacts {
@@ -154,7 +155,7 @@ export function addSignIn(data: AccountsData, f: SignInFacts): AccountsData {
         lastUrl: f.url,
         users: [f.user],
       };
-  return { ...replaceServer(data, server), active: { serverId: f.serverId, userId: f.user.userId } };
+  return { ...replaceServer(data, server), active: { serverId: server.id, userId: f.user.userId } };
 }
 
 /** The account to use after `gone` is removed: another user on the same server first, then any user. */

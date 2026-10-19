@@ -11,6 +11,7 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useSessionStore } from '@/auth/session-store';
 import { discoveryBackend } from '@/servers/discovery/backend';
 import { runDiscovery } from '@/servers/discovery/discover';
 import { lanHelpFor, type LanAccess, type LanHelp } from '@/servers/discovery/lan-access';
@@ -82,6 +83,8 @@ export function useServerDiscovery(): ServerDiscovery {
     void Promise.all([discovery, check]).then(([r, checked]) => {
       if (ctl.signal.aborted) return;
       run.current = null;
+      // A saved server found at a new address keeps that address (the server Id is the same).
+      useSessionStore.getState().learnAddresses(r.servers.map((x) => ({ serverId: x.id, url: x.address })));
       setLan(r.lan === 'granted' || checked === 'granted' ? 'granted' : checked === 'denied' || r.lan === 'denied' ? 'denied' : 'unknown');
       setPhase('done');
     });

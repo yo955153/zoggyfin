@@ -6,6 +6,7 @@ import { Platform, ScrollView, Switch, Text, View } from 'react-native';
 import { findServer as probeServer } from '@/api/jellyfin';
 import { normalizeServerUrl } from '@/api/server-url';
 import { type SavedServer, startUrl } from '@/auth/accounts';
+import { staleSince } from '@/auth/server-identity';
 import { useAccounts, useSession, useSessionStore } from '@/auth/session-store';
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
@@ -185,10 +186,14 @@ function AddressRow({ address, index, server, onPress }: { address: ServerAddres
   const result = info.results[address.url];
   const inUse = info.status === 'connected' && info.url === address.url;
   const last = false;
+  const [now] = useState(() => Date.now());
+  const stale = result?.ok ? null : staleSince(address, now);
   let status = 'Not checked yet';
   if (blockedByMixedContent(address.url, pageIsHttps())) status = failureText('mixed-content');
   else if (result?.ok) status = `Answers in ${result.ms} ms`;
+  else if (stale !== null) status = `Not reached since ${new Date(stale).toLocaleDateString()}`;
   else if (result && !result.ok) status = failureText(result.reason);
+  if (address.found) status = `Found on this network · ${status}`;
   return (
     <Touchable
       kind="row"
@@ -212,6 +217,15 @@ function AddressRow({ address, index, server, onPress }: { address: ServerAddres
           <View style={s.badge}>
             <Text style={s.badgeText}>In use</Text>
           </View>
+        ) : null}
+        {/* One tap removes an address that has not answered for a long time. The app never removes one by itself. */}
+        {stale !== null && server.addresses.length > 1 ? (
+          <Button
+            title="Remove"
+            variant="smallTonal"
+            accessibilityLabel={`Remove ${address.url}`}
+            onPress={() => save(server, { addresses: server.addresses.filter((x) => x.url !== address.url) })}
+          />
         ) : null}
         <Icon name="chevron.right" size={scaled(iconSize.sm - 2)} color={c.text3} weight="semibold" />
       </View>

@@ -23,6 +23,7 @@ import {
   updateServer as updateServerIn,
   updateUser as updateUserIn,
 } from './accounts';
+import { adoptServer as adoptServerIn, learnAddresses as learnAddressesIn, markReached } from './server-identity';
 
 /** One signed-in account on one server: the active one. */
 export interface Session {
@@ -114,6 +115,10 @@ interface SessionState {
   updateServer: (serverId: string, patch: ServerPatch) => void;
   /** The connection check picked an address for a server. */
   setServerUrl: (serverId: string, url: string) => void;
+  /** Discovery found saved servers (same Id) at these addresses. */
+  learnAddresses: (found: readonly { serverId: string; url: string }[]) => void;
+  /** After a reinstall: the new server takes the old one's addresses; the old entry stays only with downloads that did not move. */
+  adoptServer: (oldId: string, newId: string, keepOld: boolean) => void;
   updateUser: (patch: Partial<Pick<Session, 'userName' | 'userImageTag'>>) => void;
 }
 
@@ -133,7 +138,9 @@ export const useSessionStore = create<SessionState>((set, get) => {
   return {
     accounts: initial.data,
     session: initial.session,
-    signIn: (session) => {
+    signIn: (signedIn) => {
+      // A known server keeps its saved Id (Jellyfin writes it with and without dashes).
+      const session = { ...signedIn, serverId: findServer(get().accounts, signedIn.serverId)?.id ?? signedIn.serverId };
       secureStore.set(tokenKey(session.serverId, session.userId), session.token);
       const accounts = addSignIn(get().accounts, {
         serverId: session.serverId,
@@ -190,9 +197,20 @@ export const useSessionStore = create<SessionState>((set, get) => {
       const server = findServer(get().accounts, serverId);
       if (!server || !server.addresses.some((a) => a.url === url)) return;
       const s = get().session;
-      if (server.lastUrl === url && (!s || s.serverId !== serverId || s.serverUrl === url)) return;
-      const accounts = updateServerIn(get().accounts, serverId, { lastUrl: url });
+      const reached = markReached(get().accounts, serverId, url, Date.now());
+      if (server.lastUrl === url && reached === get().accounts && (!s || s.serverId !== serverId || s.serverUrl === url)) return;
+      const accounts = updateServerIn(reached, serverId, { lastUrl: url });
       commit(accounts, s && s.serverId === serverId ? { ...s, serverUrl: url } : s);
+    },
+    learnAddresses: (found) => {
+      const accounts = learnAddressesIn(get().accounts, found, Date.now());
+      if (accounts !== get().accounts) commit(accounts, get().session);
+    },
+    adoptServer: (oldId, newId, keepOld) => {
+      const accounts = adoptServerIn(get().accounts, oldId, newId, keepOld);
+      if (accounts === get().accounts) return;
+      const s = get().session;
+      commit(accounts, s && findServer(accounts, s.serverId) ? s : sessionOf(accounts, accounts.active));
     },
     updateUser: (patch) => {
       const current = get().session;

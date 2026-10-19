@@ -20,6 +20,10 @@ export interface ServerAddress {
   /** A normalized base URL, for example https://jellyfin.example.com. */
   url: string;
   kind: AddressKind;
+  /** The app found this address on the local network (discovery); the user did not type it. */
+  found?: boolean;
+  /** Epoch ms of the last time this address answered as the server. */
+  lastOkAt?: number;
 }
 
 export const PROBE_TIMEOUT_MS = 1500;
@@ -151,8 +155,14 @@ export function pickAddress(
 
 /** Adds an address at the end unless the list has it. Kind is guessed when not given. */
 export function addAddress(list: readonly ServerAddress[], url: string, kind?: AddressKind): ServerAddress[] {
-  if (list.some((a) => a.url === url)) return [...list];
+  if (list.some((a) => sameUrl(a.url, url))) return [...list];
   return [...list, { url, kind: kind ?? guessKind(url) }];
+}
+
+/** Two base URLs of the same place: the case of the scheme and host and a trailing slash do not count. */
+export function sameUrl(a: string, b: string): boolean {
+  const n = (u: string) => u.trim().replace(/\/+$/, '').replace(/^([a-z]+:\/\/[^/]+)/i, (m) => m.toLowerCase());
+  return n(a) === n(b);
 }
 
 /** Moves the address at `from` to `to`, for the order buttons. */

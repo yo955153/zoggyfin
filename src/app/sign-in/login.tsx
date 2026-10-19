@@ -11,10 +11,12 @@ import {
   isQuickConnectEnabled,
   quickConnectState,
 } from '@/api/jellyfin';
+import { useSessionStore } from '@/auth/session-store';
 import { completeSignIn, type ServerInfo } from '@/auth/sign-in';
 import { Button } from '@/components/button';
 import { TextField, type TextFieldRef } from '@/components/text-field';
 import { LanAccessHelp } from '@/features/servers/nearby-servers';
+import { finishReinstall } from '@/features/servers/reinstall';
 import { lanHelpAfterFailure, openLanSettings } from '@/features/servers/use-server-discovery';
 import { type LanHelp, withLanRetry } from '@/servers/discovery/lan-access';
 import { createStyles, type AppTheme, font, radius, scaled, sizes, spacing, type, useStyles } from '@/theme';
@@ -23,7 +25,7 @@ const POLL_MS = 2000;
 
 export default function LoginScreen() {
   const styles = useStyles(makeStyles);
-  const params = useLocalSearchParams<{ url: string; serverId: string; serverName: string; version: string }>();
+  const params = useLocalSearchParams<{ url: string; serverId: string; serverName: string; version: string; replaces?: string }>();
   const server: ServerInfo = {
     url: params.url,
     serverId: params.serverId,
@@ -35,6 +37,11 @@ export default function LoginScreen() {
   /** Signed in already (adding an account): close the sheet over the app after the switch. */
   const finish = (result: Parameters<typeof completeSignIn>[1]) => {
     completeSignIn(server, result);
+    // The user said that this is a reinstalled saved server: move its downloads and addresses.
+    const s = useSessionStore.getState().session;
+    if (params.replaces && s && result.AccessToken) {
+      void finishReinstall(params.replaces, { url: server.url, token: result.AccessToken, serverId: s.serverId, userId: s.userId });
+    }
     if (adding) router.dismissTo('/(tabs)/(home)');
   };
 
