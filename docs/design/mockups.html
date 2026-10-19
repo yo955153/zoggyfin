@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zoggyfin Screen Mockups</title>
+<style>
+/* Tokens: mirror docs/design/theme.ts */
+:root{
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Arabic", system-ui, "Segoe UI", "Noto Sans", "Noto Sans Arabic", "Geeza Pro", sans-serif;
+}
+.dark{
+  --bg:#0B0B0E; --bgGrouped:#0B0B0E; --surface:#16161A; --surface2:#202026; --surface3:#2A2A31;
+  --text:#F5F5F7; --text2:#A8A8B3; --text3:#96969F; --accent:#FF7A59; --onAccent:#1A0B06;
+  --accentSoft:rgba(255,122,89,.16); --success:#3DD68C; --warning:#F2B54B; --danger:#FF6B6B;
+  --sep:rgba(255,255,255,.09); --ctrl:#71717C; --glass:rgba(30,30,36,.72); --glassBorder:rgba(255,255,255,.10);
+  --shadowF:0 10px 30px rgba(0,0,0,.5);
+  color-scheme:dark;
+}
+.light{
+  --bg:#FFFFFF; --bgGrouped:#F2F2F5; --surface:#FFFFFF; --surface2:#EBEBEF; --surface3:#E2E2E7;
+  --text:#111114; --text2:#595963; --text3:#63636C; --accent:#B53A17; --onAccent:#FFFFFF;
+  --accentSoft:rgba(181,58,23,.10); --success:#12703F; --warning:#855300; --danger:#BE2329;
+  --sep:rgba(17,17,20,.12); --ctrl:#7E7E88; --glass:rgba(250,250,252,.78); --glassBorder:rgba(0,0,0,.08);
+  --shadowF:0 10px 30px rgba(20,20,26,.18);
+  color-scheme:light;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:#1B1B1F;color:#EDEDF0;-webkit-font-smoothing:antialiased;padding:48px 40px 80px}
+.page-head{display:flex;align-items:center;gap:16px;margin:0 auto 40px;max-width:1360px}
+.page-head h1{font-size:28px;font-weight:700;letter-spacing:.2px}
+.page-head p{color:#A8A8B3;font-size:15px;margin-top:4px}
+.grid{display:flex;flex-wrap:wrap;gap:44px 40px;justify-content:center;max-width:1360px;margin:0 auto}
+figure{display:flex;flex-direction:column;align-items:center;gap:14px}
+figcaption{font-size:14px;color:#A8A8B3;font-weight:500;max-width:417px;text-align:center;line-height:20px}
+.land figcaption,.wide figcaption{max-width:none}
+.edgefade{position:absolute;left:0;right:0;bottom:0;height:150px;z-index:25;pointer-events:none}
+figcaption b{color:#F5F5F7;font-weight:600}
+
+/* Device frames */
+.phone{width:417px;height:876px;border-radius:66px;background:#2B2B30;padding:12px;box-shadow:0 0 0 2px #3A3A40 inset,0 30px 60px rgba(0,0,0,.45)}
+.screen{position:relative;width:393px;height:852px;border-radius:55px;overflow:hidden;background:var(--bg);color:var(--text)}
+.land .phone{width:876px;height:417px}
+.land .screen{width:852px;height:393px}
+.ipad{width:1204px;height:844px;border-radius:40px;background:#2B2B30;padding:12px;box-shadow:0 0 0 2px #3A3A40 inset,0 30px 60px rgba(0,0,0,.45)}
+.ipad .screen{width:1180px;height:820px;border-radius:28px}
+.island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:124px;height:36px;border-radius:20px;background:#000;z-index:50}
+.status{position:absolute;top:0;left:0;right:0;height:54px;display:flex;justify-content:space-between;align-items:center;padding:6px 34px 0 46px;font-weight:600;font-size:16px;z-index:40}
+.status .sys{display:flex;gap:6px;align-items:center}
+.status svg{width:18px;height:12px}
+.home-ind{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:138px;height:5px;border-radius:3px;background:var(--text);opacity:.85;z-index:60}
+
+/* Icons */
+.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.i.fill{fill:currentColor;stroke:none}
+.i.s{width:17px;height:17px}.i.xs{width:13px;height:13px}.i.l{width:28px;height:28px}.i.xl{width:36px;height:36px}.i.xxl{width:48px;height:48px}
+
+/* Screen content */
+.content{position:absolute;inset:0;overflow:hidden;padding-top:54px}
+.navbar{display:flex;justify-content:space-between;align-items:center;padding:6px 16px 0;height:44px}
+.lt{font-size:34px;line-height:41px;font-weight:700;letter-spacing:.4px;padding:2px 16px 8px}
+.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#5B6B7A,#2E3640);display:grid;place-items:center;font-size:14px;font-weight:600;color:#fff}
+.hbtn{width:34px;height:34px;border-radius:50%;background:var(--surface2);display:grid;place-items:center;color:var(--text)}
+.section-h{display:flex;align-items:center;gap:4px;font-size:20px;line-height:25px;font-weight:600;letter-spacing:-.45px;padding:0 16px 10px}
+.section-h .i{color:var(--text3);width:18px;height:18px}
+.row{display:flex;gap:12px;padding:0 16px;overflow:hidden;margin-bottom:28px}
+.tile{flex:none;display:flex;flex-direction:column;gap:6px}
+.art{position:relative;border-radius:10px;overflow:hidden;background:var(--surface)}
+.art::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.08)}
+.light .art::after{box-shadow:inset 0 0 0 .5px rgba(0,0,0,.08)}
+.poster{width:116px;height:174px}
+.thumb{width:264px;height:148px}
+.square{width:148px;height:148px;border-radius:8px}
+.circle{width:88px;height:88px;border-radius:50%}
+.t1{font-size:14px;line-height:18px;font-weight:600;letter-spacing:-.15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t2{font-size:12px;line-height:16px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prog{position:absolute;left:10px;right:10px;bottom:10px;height:4px;border-radius:2px;background:rgba(255,255,255,.28);overflow:hidden}
+.prog>i{display:block;height:100%;background:#fff;border-radius:2px}
+.scrimb{position:absolute;inset:auto 0 0 0;height:60%;background:linear-gradient(transparent,rgba(0,0,0,.72))}
+.onart{position:absolute;left:10px;right:10px;bottom:20px;color:#fff}
+.onart .t1{font-size:15px}.onart .t2{color:rgba(255,255,255,.78)}
+.badge{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;background:rgba(20,20,24,.6);backdrop-filter:blur(8px);display:grid;place-items:center;color:#fff}
+.badge.ok{background:rgba(20,20,24,.6)}
+.fb-title{position:absolute;left:10px;right:10px;bottom:10px;color:#fff;font-size:15px;line-height:19px;font-weight:600;letter-spacing:-.2px}
+.fb-icon{position:absolute;top:50%;left:50%;transform:translate(-50%,-70%);color:rgba(255,255,255,.5)}
+/* Short labels in lists keep the UI start edge; direction comes from the content. Standalone blocks align by content. */
+.t1[dir=rtl],.t2[dir=rtl],.grow[dir=rtl]{text-align:left}
+.blk[dir=rtl]{text-align:right}
+.ar{line-height:1.18em}
+
+/* Tab bar: iOS 26 floating glass */
+.tabbar{position:absolute;left:16px;right:86px;bottom:26px;height:62px;border-radius:31px;background:var(--glass);backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);border:.5px solid var(--glassBorder);display:flex;justify-content:space-around;align-items:center;box-shadow:var(--shadowF);z-index:30;padding:0 6px}
+.tab{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:600;color:var(--text);width:68px;padding:6px 0;border-radius:24px}
+.tab.on{color:var(--accent);background:var(--accentSoft)}
+.tab .i{width:24px;height:24px}
+.searchbtn{position:absolute;right:16px;bottom:26px;width:62px;height:62px;border-radius:50%;background:var(--glass);backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);border:.5px solid var(--glassBorder);display:grid;place-items:center;box-shadow:var(--shadowF);z-index:30;color:var(--text)}
+.searchbtn.on{color:var(--accent)}
+.mini{position:absolute;left:16px;right:16px;bottom:96px;height:52px;border-radius:26px;background:var(--glass);backdrop-filter:blur(24px) saturate(1.6);-webkit-backdrop-filter:blur(24px) saturate(1.6);border:.5px solid var(--glassBorder);display:flex;align-items:center;gap:10px;padding:0 8px 0 8px;box-shadow:var(--shadowF);z-index:30}
+.mini .art{width:38px;height:38px;border-radius:8px}
+.mini .meta{flex:1;min-width:0}
+.mini .t1{font-size:14px}.mini .t2{font-size:12px}
+.mini .ctl{width:40px;height:40px;display:grid;place-items:center;color:var(--text)}
+.mini .mprog{position:absolute;left:22px;right:22px;bottom:0;height:2px;border-radius:1px;background:var(--sep);overflow:hidden}
+.mini .mprog>i{display:block;height:100%;width:38%;background:var(--accent)}
+
+/* Buttons and chips */
+.btn{height:50px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:17px;font-weight:600;letter-spacing:-.4px}
+.btn.primary{background:var(--accent);color:var(--onAccent)}
+.btn.tonal{background:var(--surface2);color:var(--text)}
+.chips{display:flex;gap:8px;padding:0 16px 14px;overflow:hidden}
+.chip{flex:none;height:32px;padding:0 12px;border-radius:16px;background:var(--surface2);display:flex;align-items:center;gap:6px;font-size:14px;font-weight:500;color:var(--text)}
+.chip.on{background:var(--text);color:var(--bg)}
+.chip .i{width:15px;height:15px}
+
+/* Lists */
+.list{margin:0 16px;border-radius:14px;background:var(--surface);overflow:hidden}
+.light .list{background:var(--surface)}
+.li{display:flex;align-items:center;gap:12px;padding:0 14px;min-height:60px;position:relative}
+.li+.li::before{content:"";position:absolute;top:0;left:var(--inset,14px);right:0;height:.5px;background:var(--sep)}
+.li .grow{flex:1;min-width:0}
+.li .t1{font-size:16px;font-weight:500;letter-spacing:-.3px}
+.li .t2{font-size:13px}
+.num{width:22px;text-align:center;color:var(--text3);font-size:15px;font-variant-numeric:tabular-nums}
+.mono{font-variant-numeric:tabular-nums}
+.muted{color:var(--text3)}
+.acc{color:var(--accent)}
+
+/* Segmented pager strip */
+.seg{display:flex;gap:22px;padding:0 16px;position:relative;height:38px;align-items:center;border-bottom:.5px solid var(--sep);margin-bottom:14px}
+.seg span{font-size:15px;font-weight:600;color:var(--text2);letter-spacing:-.2px}
+.seg span.on{color:var(--text)}
+.seg .ind{position:absolute;bottom:-1px;height:3px;border-radius:2px;background:var(--accent)}
+
+/* Players */
+.np{position:absolute;inset:0;color:#fff;padding:62px 24px 0}
+.grabber{width:40px;height:5px;border-radius:3px;background:rgba(255,255,255,.4);margin:0 auto 26px}
+.scrub{height:6px;border-radius:3px;background:rgba(255,255,255,.25);position:relative}
+.scrub>i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:rgba(255,255,255,.92)}
+.times{display:flex;justify-content:space-between;font-size:12px;font-weight:500;color:rgba(255,255,255,.66);margin-top:8px;font-variant-numeric:tabular-nums}
+.ctrls{display:flex;justify-content:space-between;align-items:center;padding:0 22px}
+.glasspill{background:rgba(20,20,24,.38);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border:.5px solid rgba(255,255,255,.14);border-radius:22px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="house" viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.8l8.5 6.7"/><path d="M5.5 9v10.2a.8.8 0 0 0 .8.8H10v-5.5h4V20h3.7a.8.8 0 0 0 .8-.8V9"/></symbol>
+    <symbol id="stack" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="2.2"/><path d="M6.5 5h11M8.5 2.6h7"/></symbol>
+    <symbol id="note" viewBox="0 0 24 24"><path d="M9 18V5.5l11-2.2V16"/><circle cx="6.5" cy="18" r="2.6"/><circle cx="17.5" cy="16" r="2.6"/></symbol>
+    <symbol id="search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+    <symbol id="down" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8.5M8.3 12.6 12 16.2l3.7-3.6"/></symbol>
+    <symbol id="downsm" viewBox="0 0 24 24"><path d="M12 4v12M6.5 11 12 16.5 17.5 11M5 20.5h14"/></symbol>
+    <symbol id="play" viewBox="0 0 24 24"><path d="M7 4.6v14.8a1 1 0 0 0 1.5.86l12.3-7.4a1 1 0 0 0 0-1.72L8.5 3.74A1 1 0 0 0 7 4.6Z"/></symbol>
+    <symbol id="pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4.2" height="16" rx="1.3"/><rect x="13.8" y="4" width="4.2" height="16" rx="1.3"/></symbol>
+    <symbol id="next" viewBox="0 0 24 24"><path d="M2.5 6.2v11.6a.8.8 0 0 0 1.2.7L12 13v4.8a.8.8 0 0 0 1.2.7l9.3-5.8a.8.8 0 0 0 0-1.4l-9.3-5.8A.8.8 0 0 0 12 6.2V11L3.7 5.5a.8.8 0 0 0-1.2.7Z"/></symbol>
+    <symbol id="prev" viewBox="0 0 24 24"><g transform="translate(24 0) scale(-1 1)"><path d="M2.5 6.2v11.6a.8.8 0 0 0 1.2.7L12 13v4.8a.8.8 0 0 0 1.2.7l9.3-5.8a.8.8 0 0 0 0-1.4l-9.3-5.8A.8.8 0 0 0 12 6.2V11L3.7 5.5a.8.8 0 0 0-1.2.7Z"/></g></symbol>
+    <symbol id="back10" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5"/><path d="M6.6 2.8 6.9 6.5l3.7-.3"/><text x="12" y="15.6" font-size="7.2" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none" font-family="-apple-system,system-ui">10</text></symbol>
+    <symbol id="fwd10" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="m17.4 2.8-.3 3.7-3.7-.3"/><text x="12" y="15.6" font-size="7.2" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none" font-family="-apple-system,system-ui">10</text></symbol>
+    <symbol id="back15" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5"/><path d="M6.6 2.8 6.9 6.5l3.7-.3"/><text x="12" y="15.6" font-size="7.2" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none" font-family="-apple-system,system-ui">15</text></symbol>
+    <symbol id="fwd30" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="m17.4 2.8-.3 3.7-3.7-.3"/><text x="12" y="15.6" font-size="7.2" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none" font-family="-apple-system,system-ui">30</text></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="addlist" viewBox="0 0 24 24"><path d="M4 6h12M4 11h12M4 16h7M17 14v7M13.5 17.5h7"/></symbol>
+    <symbol id="more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18.5" cy="12" r="1.3" fill="currentColor"/></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="checkc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.3 2.8 2.8L16.2 9.6"/></symbol>
+    <symbol id="heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20Z"/></symbol>
+    <symbol id="airplay" viewBox="0 0 24 24"><path d="M6 17H4.5A1.5 1.5 0 0 1 3 15.5v-10A1.5 1.5 0 0 1 4.5 4h15A1.5 1.5 0 0 1 21 5.5v10a1.5 1.5 0 0 1-1.5 1.5H18"/><path d="m12 14 5 6.5H7Z"/></symbol>
+    <symbol id="pip" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><rect x="12" y="11.5" width="7" height="5.5" rx="1" fill="currentColor"/></symbol>
+    <symbol id="cc" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M10.5 10.2a2.3 2.3 0 1 0 0 3.6M17 10.2a2.3 2.3 0 1 0 0 3.6"/></symbol>
+    <symbol id="x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></symbol>
+    <symbol id="sort" viewBox="0 0 24 24"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5"/></symbol>
+    <symbol id="filter" viewBox="0 0 24 24"><path d="M4 7h16M7 12h10M10 17h4"/></symbol>
+    <symbol id="shuffle" viewBox="0 0 24 24"><path d="M3 7h3.5c5 0 6 10 11 10H21M3 17h3.5c1.8 0 3-1.3 4-3M14 9.5c1-1.5 2-2.5 3.5-2.5H21M18.5 4.5 21 7l-2.5 2.5M18.5 14.5 21 17l-2.5 2.5"/></symbol>
+    <symbol id="repeat" viewBox="0 0 24 24"><path d="M4 11V9.5A2.5 2.5 0 0 1 6.5 7H19M16 4l3 3-3 3M20 13v1.5a2.5 2.5 0 0 1-2.5 2.5H5M8 20l-3-3 3-3"/></symbol>
+    <symbol id="queue" viewBox="0 0 24 24"><path d="M4 6h16M4 11h16M4 16h9"/><path d="M16 14.5v6l4.5-3Z" fill="currentColor"/></symbol>
+    <symbol id="quote" viewBox="0 0 24 24"><path d="M4 5.5h16v10H11l-4.5 3.5v-3.5H4Z"/><path d="M8.5 9h7M8.5 12h4.5"/></symbol>
+    <symbol id="moon" viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10Z"/></symbol>
+    <symbol id="chev" viewBox="0 0 24 24"><path d="m9.5 5.5 6.5 6.5-6.5 6.5"/></symbol>
+    <symbol id="chevd" viewBox="0 0 24 24"><path d="m5.5 9.5 6.5 6.5 6.5-6.5"/></symbol>
+    <symbol id="back" viewBox="0 0 24 24"><path d="m14.5 5.5-6.5 6.5 6.5 6.5"/></symbol>
+    <symbol id="retry" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="m17.4 2.8-.3 3.7-3.7-.3"/></symbol>
+    <symbol id="film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
+    <symbol id="tv" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="12.5" rx="2"/><path d="M8 21h8"/></symbol>
+    <symbol id="wave" viewBox="0 0 24 24"><path d="M4 10v4M8 6v12M12 9v6M16 4v16M20 10v4"/></symbol>
+    <symbol id="speaker" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/></symbol>
+    <symbol id="speakerh" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4ZM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
+    <symbol id="sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+    <symbol id="list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol>
+    <symbol id="sidebar" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></symbol>
+    <symbol id="person" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></symbol>
+    <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="eq" viewBox="0 0 24 24"><path d="M6 20V11M10 20V5M14 20v-7M18 20V8" stroke-width="2.6"/></symbol>
+    <symbol id="warn" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4Z"/><path d="M12 10v4.5M12 17.2h.01"/></symbol>
+  </defs>
+</svg>
+
+<header class="page-head">
+  <svg width="52" height="52" viewBox="0 0 128 128" aria-hidden="true"><defs><linearGradient id="hf" x1=".15" y1="1" x2=".85" y2="0"><stop offset="0" stop-color="#FF6A4D"/><stop offset="1" stop-color="#FFA270"/></linearGradient></defs><path d="M26 92 C 34 66, 52 38, 82 22 C 86 20, 90 23, 88 28 C 80 48, 82 70, 104 92 Z" fill="url(#hf)"/><rect x="14" y="100" width="70" height="7" rx="3.5" fill="#FF7A59"/><rect x="92" y="100" width="22" height="7" rx="3.5" fill="#FF7A59" opacity=".45"/></svg>
+  <div><h1>Zoggyfin screen mockups</h1><p>Static reference for docs/design/design-system.md. Sample content only. Artwork is drawn with CSS gradients; tiles marked "generated" use the fallback-art algorithm.</p></div>
+</header>
+
+<div class="grid">
+
+<!-- 1. HOME -->
+<figure><div class="phone"><div class="screen dark">
+  <div class="island"></div><div class="status"><span>9:41</span><span class="sys"><svg viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5" rx="1" fill="currentColor"/><rect x="5" y="5" width="3" height="7" rx="1" fill="currentColor"/><rect x="10" y="2.5" width="3" height="9.5" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor"/></svg><svg viewBox="0 0 26 12" style="width:26px"><rect x=".5" y=".5" width="22" height="11" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/></svg></span></div>
+  <div class="content">
+    <div class="navbar"><span></span><div class="avatar">S</div></div>
+    <div class="lt">Home</div>
+    <div class="section-h">Continue watching<svg class="i"><use href="#chev"/></svg></div>
+    <div class="row">
+      <div class="tile"><div class="art thumb" data-art="Sample Movie"><div class="scrimb"></div><div class="onart"><div class="t1">Sample Movie</div><div class="t2">58 min left</div></div><div class="prog"><i style="width:52%"></i></div></div></div>
+      <div class="tile"><div class="art thumb" data-art="Sample Show S2"><div class="scrimb"></div><div class="onart"><div class="t1">Sample Show</div><div class="t2">S2 · E4 · 12 min left</div></div><div class="prog"><i style="width:78%"></i></div></div></div>
+    </div>
+    <div class="section-h">Next up<svg class="i"><use href="#chev"/></svg></div>
+    <div class="row">
+      <div class="tile" style="width:264px"><div class="art thumb" style="height:148px" data-art="Harbour Lights E5"></div><div class="t1">Harbour Lights</div><div class="t2">S1 · E5 · The Long Night</div></div>
+      <div class="tile" style="width:264px"><div class="art thumb" data-art="Northbound E2"></div><div class="t1">Northbound</div><div class="t2">S3 · E2</div></div>
+    </div>
+    <div class="section-h">Recently added in Movies<svg class="i"><use href="#chev"/></svg></div>
+    <div class="row">
+      <div class="tile" style="width:116px"><div class="art poster" data-art="Quiet Orbit"></div><div class="t1">Quiet Orbit</div><div class="t2">2025</div></div>
+      <div class="tile" style="width:116px"><div class="art poster" data-art="رحلة إلى البحر"></div><div class="t1 ar" dir="rtl">رحلة إلى البحر</div><div class="t2">2024</div></div>
+      <div class="tile" style="width:116px"><div class="art poster" data-art="Paper Kites"></div><div class="t1">Paper Kites</div><div class="t2">2023</div></div>
+      <div class="tile" style="width:116px"><div class="art poster" data-art="Fifth"></div><div class="t1">Fifth</div><div class="t2">2022</div></div>
+    </div>
+  </div>
+  <div class="mini"><div class="art" data-art="Golden Hour Drive"></div><div class="meta"><div class="t1">Golden Hour Drive</div><div class="t2">Jane Doe</div></div><div class="ctl"><svg class="i fill"><use href="#pause"/></svg></div><div class="ctl"><svg class="i fill"><use href="#next"/></svg></div><div class="mprog"><i></i></div></div>
+  <div class="tabbar"><div class="tab on"><svg class="i"><use href="#house"/></svg>Home</div><div class="tab"><svg class="i"><use href="#stack"/></svg>Library</div><div class="tab"><svg class="i"><use href="#note"/></svg>Music</div><div class="tab"><svg class="i"><use href="#down"/></svg>Downloads</div></div>
+  <div class="searchbtn"><svg class="i"><use href="#search"/></svg></div>
+  <div class="home-ind"></div>
+</div></div><figcaption><b>Home</b> · dark · rows scroll sideways, no hero carousel</figcaption></figure>
+
+<!-- 2. LIBRARY GRID -->
+<figure><div class="phone"><div class="screen dark">
+  <div class="island"></div><div class="status"><span>9:41</span><span class="sys">●●●</span></div>
+  <div class="content">
+    <div class="navbar"><span class="acc" style="display:flex;align-items:center;font-size:17px"><svg class="i"><use href="#back"/></svg>Library</span><div style="display:flex;gap:10px"><div class="hbtn"><svg class="i s"><use href="#search"/></svg></div><div class="hbtn"><svg class="i s"><use href="#more"/></svg></div></div></div>
+    <div class="lt">Movies</div>
+    <div class="chips"><div class="chip"><svg class="i"><use href="#sort"/></svg>Date added</div><div class="chip on">Unplayed</div><div class="chip">Favourites</div><div class="chip">Genre<svg class="i"><use href="#chevd"/></svg></div><div class="chip">Year<svg class="i"><use href="#chevd"/></svg></div></div>
+    <div style="display:grid;grid-template-columns:repeat(3,112px);gap:18px 12px;padding:0 16px">
+      <div class="tile"><div class="art" style="width:112px;height:168px" data-art="Quiet Orbit"></div><div class="t1">Quiet Orbit</div><div class="t2">2025</div></div>
+      <div class="tile"><div class="art" style="width:112px;height:168px" data-art="Paper Kites"><div class="badge"><svg class="i xs" style="stroke-width:2.6"><use href="#check"/></svg></div></div><div class="t1">Paper Kites</div><div class="t2">2023</div></div>
+      <div class="tile"><div class="art" style="width:112px;height:168px" data-fallback="The Untitled Home Video" data-icon="film"></div><div class="t1">The Untitled Home…</div><div class="t2">2019 · generated</div></div>
+      <div class="tile"><div class="art" style="width:112px;height:168px" data-art="رحلة إلى البحر"></div><div class="t1 ar" dir="rtl">رحلة إلى البحر</div><div class="t2">2024</div></div>
+      <div class="tile"><div class="art" style="width:112px;height:168px" data-art="Fifth"><div class="badge"><svg class="i xs" style="stroke-width:2.4"><use href="#downsm"/></svg></div></div><div class="t1">Fifth</div><div class="t2">2022</div></div>
+      <div class="tile"><div class="art" style="width:112px;height:168px" data-art="Lantern Street"></div><div class="t1">Lantern Street</div><div class="t2">2021</div></div>
+      <div class="tile"><div class="art" style="width:112px;height:168px" data-fallback="مدينة الضباب" data-icon="film"></div><div class="t1 ar" dir="rtl">مدينة الضباب</div><div class="t2">2020 · generated</div></div>
+      <div class="tile"><div class="art" style="width:112px;height:168px" data-art="Small Hours"></div><div class="t1">Small Hours</div><div class="t2">2020</div></div>
+      <div class="tile"><div class="art" style="width:112px;height:168px" data-art="Second Wind"></div><div class="t1">Second Wind</div><div class="t2">2019</div></div>
+    </div>
+  </div>
+  <div class="tabbar"><div class="tab"><svg class="i"><use href="#house"/></svg>Home</div><div class="tab on"><svg class="i"><use href="#stack"/></svg>Library</div><div class="tab"><svg class="i"><use href="#note"/></svg>Music</div><div class="tab"><svg class="i"><use href="#down"/></svg>Downloads</div></div>
+  <div class="searchbtn"><svg class="i"><use href="#search"/></svg></div>
+  <div class="home-ind"></div>
+</div></div><figcaption><b>Library grid</b> · 3 columns at 393 pt · two generated-art tiles</figcaption></figure>
+
+<!-- 3. MOVIE DETAIL -->
+<figure><div class="phone"><div class="screen dark">
+  <div class="island"></div><div class="status" style="color:#fff"><span>9:41</span><span class="sys">●●●</span></div>
+  <div class="art" style="position:absolute;top:0;left:0;right:0;height:470px;border-radius:0" data-art="Sample Movie backdrop"></div>
+  <div style="position:absolute;top:0;left:0;right:0;height:470px;background:linear-gradient(180deg,rgba(0,0,0,.35) 0%,rgba(11,11,14,0) 22%,rgba(11,11,14,0) 45%,#0B0B0E 100%)"></div>
+  <div style="position:absolute;top:58px;left:16px;right:16px;display:flex;justify-content:space-between;z-index:5">
+    <div class="glasspill" style="width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#fff"><svg class="i"><use href="#back"/></svg></div>
+    <div class="glasspill" style="width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#fff"><svg class="i"><use href="#more"/></svg></div>
+  </div>
+  <div class="content" style="padding-top:300px">
+    <div style="padding:0 20px">
+      <div style="font-size:34px;line-height:38px;font-weight:800;letter-spacing:.2px;text-align:center">Sample Movie</div>
+      <div style="text-align:center;color:var(--text2);font-size:13px;margin:8px 0 16px" class="mono">2024 · Drama · 2 h 8 min · PG-13 · 4K · HDR10</div>
+      <div class="btn primary"><svg class="i fill" style="width:20px;height:20px"><use href="#play"/></svg>Resume 1:02:14</div>
+      <div style="height:3px;border-radius:2px;background:var(--surface3);margin:10px 40px 0;overflow:hidden"><i style="display:block;width:48%;height:100%;background:var(--accent)"></i></div>
+      <div style="display:flex;justify-content:space-between;margin:18px 6px 18px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;font-weight:500;color:var(--text2);width:64px"><div class="hbtn" style="width:44px;height:44px"><svg class="i"><use href="#downsm"/></svg></div>Download</div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;font-weight:500;color:var(--text2);width:64px"><div class="hbtn" style="width:44px;height:44px"><svg class="i"><use href="#addlist"/></svg></div>Playlist</div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;font-weight:500;color:var(--text2);width:64px"><div class="hbtn" style="width:44px;height:44px"><svg class="i"><use href="#check"/></svg></div>Played</div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;font-weight:500;color:var(--text2);width:64px"><div class="hbtn" style="width:44px;height:44px"><svg class="i"><use href="#heart"/></svg></div>Favourite</div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;font-weight:500;color:var(--text2);width:64px"><div class="hbtn" style="width:44px;height:44px"><svg class="i"><use href="#cc"/></svg></div>Tracks</div>
+      </div>
+      <p style="font-size:15px;line-height:21px;color:var(--text2)">A lighthouse keeper finds a radio that picks up voices from the next morning. Sample overview text that runs to three lines and then fades into a More link…<span class="acc" style="font-weight:600"> More</span></p>
+    </div>
+    <div class="section-h" style="margin-top:22px">Cast &amp; crew</div>
+    <div class="row">
+      <div class="tile" style="width:88px;align-items:center"><div class="art circle" data-art="Jane Doe"></div><div class="t1">Jane Doe</div><div class="t2">Mara</div></div>
+      <div class="tile" style="width:88px;align-items:center"><div class="art circle" data-art="John Roe"></div><div class="t1">John Roe</div><div class="t2">Elias</div></div>
+      <div class="tile" style="width:88px;align-items:center"><div class="art circle" style="background:var(--surface2);display:grid;place-items:center;color:var(--text3)"><svg class="i l"><use href="#person"/></svg></div><div class="t1">Sam Lee</div><div class="t2">Director</div></div>
+      <div class="tile" style="width:88px;align-items:center"><div class="art circle" data-art="Alex Kim"></div><div class="t1">Alex Kim</div><div class="t2">Writer</div></div>
+    </div>
+  </div>
+  <div class="tabbar"><div class="tab"><svg class="i"><use href="#house"/></svg>Home</div><div class="tab on"><svg class="i"><use href="#stack"/></svg>Library</div><div class="tab"><svg class="i"><use href="#note"/></svg>Music</div><div class="tab"><svg class="i"><use href="#down"/></svg>Downloads</div></div>
+  <div class="searchbtn"><svg class="i"><use href="#search"/></svg></div>
+  <div class="home-ind"></div>
+</div></div><figcaption><b>Movie detail</b> · backdrop hero fades into the page</figcaption></figure>
+
+<!-- 4. MUSIC SUB-TABS -->
+<figure><div class="phone"><div class="screen dark">
+  <div class="island"></div><div class="status"><span>9:41</span><span class="sys">●●●</span></div>
+  <div class="content">
+    <div class="navbar"><span></span><div style="display:flex;gap:10px"><div class="hbtn"><svg class="i s"><use href="#shuffle"/></svg></div><div class="hbtn"><svg class="i s"><use href="#sort"/></svg></div></div></div>
+    <div class="lt">Music</div>
+    <div class="seg"><span>Albums</span><span class="on">Artists</span><span>Playlists</span><span>Songs</span><span>Genres</span><i class="ind" style="left:73px;width:48px"></i></div>
+    <div style="display:flex;width:786px;transform:translateX(-300px)">
+      <!-- Albums page, partly off screen (mid-swipe) -->
+      <div style="width:393px;display:grid;grid-template-columns:repeat(2,174px);gap:18px 13px;padding:0 16px;align-content:start">
+        <div class="tile"><div class="art" style="width:174px;height:174px;border-radius:8px" data-art="Golden Hour"></div><div class="t1">Golden Hour</div><div class="t2">Jane Doe</div></div>
+        <div class="tile"><div class="art" style="width:174px;height:174px;border-radius:8px" data-art="تلاوات الفجر"></div><div class="t1 ar" dir="rtl">تلاوات الفجر</div><div class="t2 ar" dir="rtl">قارئ تجريبي</div></div>
+        <div class="tile"><div class="art" style="width:174px;height:174px;border-radius:8px" data-art="Low Tide"></div><div class="t1">Low Tide</div><div class="t2">The Samples</div></div>
+        <div class="tile"><div class="art" style="width:174px;height:174px;border-radius:8px" data-art="Night Market"></div><div class="t1">Night Market</div><div class="t2">Jane Doe</div></div>
+      </div>
+      <!-- Artists page, coming in -->
+      <div style="width:393px;padding:0 0">
+        <div class="list" style="background:transparent;margin:0">
+          <div class="li" style="--inset:84px"><div class="art circle" style="width:56px;height:56px" data-art="Jane Doe"></div><div class="grow"><div class="t1">Jane Doe</div><div class="t2">4 albums · 52 songs</div></div><svg class="i s muted"><use href="#chev"/></svg></div>
+          <div class="li" style="--inset:84px"><div class="art circle" style="width:56px;height:56px" data-art="قارئ تجريبي"></div><div class="grow"><div class="t1 ar" dir="rtl">قارئ تجريبي</div><div class="t2">3 albums · 114 tracks</div></div><svg class="i s muted"><use href="#chev"/></svg></div>
+          <div class="li" style="--inset:84px"><div class="art circle" style="width:56px;height:56px" data-art="The Samples"></div><div class="grow"><div class="t1">The Samples</div><div class="t2">2 albums · 21 songs</div></div><svg class="i s muted"><use href="#chev"/></svg></div>
+          <div class="li" style="--inset:84px"><div class="art circle" style="width:56px;height:56px;background:var(--surface2);display:grid;place-items:center;color:var(--text3)" ><svg class="i"><use href="#person"/></svg></div><div class="grow"><div class="t1">Unknown Artist</div><div class="t2">1 album · 9 songs</div></div><svg class="i s muted"><use href="#chev"/></svg></div>
+          <div class="li" style="--inset:84px"><div class="art circle" style="width:56px;height:56px" data-art="Sam Lee Trio"></div><div class="grow"><div class="t1">Sam Lee Trio</div><div class="t2">1 album · 8 songs</div></div><svg class="i s muted"><use href="#chev"/></svg></div>
+          <div class="li" style="--inset:84px"><div class="art circle" style="width:56px;height:56px" data-art="Alex Kim"></div><div class="grow"><div class="t1">Alex Kim</div><div class="t2">3 albums · 30 songs</div></div><svg class="i s muted"><use href="#chev"/></svg></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mini"><div class="art" data-art="Golden Hour Drive"></div><div class="meta"><div class="t1">Golden Hour Drive</div><div class="t2">Jane Doe</div></div><div class="ctl"><svg class="i fill"><use href="#pause"/></svg></div><div class="ctl"><svg class="i fill"><use href="#next"/></svg></div><div class="mprog"><i></i></div></div>
+  <div class="tabbar"><div class="tab"><svg class="i"><use href="#house"/></svg>Home</div><div class="tab"><svg class="i"><use href="#stack"/></svg>Library</div><div class="tab on"><svg class="i"><use href="#note"/></svg>Music</div><div class="tab"><svg class="i"><use href="#down"/></svg>Downloads</div></div>
+  <div class="searchbtn"><svg class="i"><use href="#search"/></svg></div>
+  <div class="home-ind"></div>
+</div></div><figcaption><b>Music</b> · mid-swipe from Albums to Artists; the indicator tracks the finger</figcaption></figure>
+
+<!-- 5. ALBUM (light) -->
+<figure><div class="phone"><div class="screen light">
+  <div class="island"></div><div class="status"><span>9:41</span><span class="sys">●●●</span></div>
+  <div class="content">
+    <div class="navbar"><span class="acc" style="display:flex;align-items:center;font-size:17px"><svg class="i"><use href="#back"/></svg>Albums</span><div style="display:flex;gap:10px"><div class="hbtn"><svg class="i s"><use href="#downsm"/></svg></div><div class="hbtn"><svg class="i s"><use href="#more"/></svg></div></div></div>
+    <div style="display:flex;justify-content:center;margin-top:8px"><div class="art" style="width:236px;height:236px;border-radius:14px;box-shadow:0 12px 28px rgba(20,20,26,.22)" data-art="Golden Hour"></div></div>
+    <div style="text-align:center;margin:16px 20px 0"><div style="font-size:22px;line-height:28px;font-weight:700;letter-spacing:-.26px">Golden Hour</div><div class="acc" style="font-size:20px;line-height:25px;font-weight:500;letter-spacing:-.4px">Jane Doe</div><div class="t2" style="font-size:13px;margin-top:4px">Album · 2023 · 10 songs · 41 min</div></div>
+    <div style="display:flex;gap:12px;padding:16px 16px 18px"><div class="btn tonal" style="flex:1;color:var(--accent)"><svg class="i fill" style="width:18px;height:18px"><use href="#play"/></svg>Play</div><div class="btn tonal" style="flex:1;color:var(--accent)"><svg class="i s"><use href="#shuffle"/></svg>Shuffle</div></div>
+    <div style="margin:0 0 0 16px">
+      <div class="li" style="padding-left:0;min-height:48px;--inset:34px"><span class="num">1</span><div class="grow"><div class="t1" style="font-size:16px;font-weight:400">First Light</div></div><svg class="i s muted"><use href="#downsm"/></svg><svg class="i muted"><use href="#more"/></svg></div>
+      <div class="li" style="padding-left:0;min-height:48px;--inset:34px"><span class="num acc"><svg class="i s acc"><use href="#eq"/></svg></span><div class="grow"><div class="t1 acc" style="font-size:16px;font-weight:500">Golden Hour Drive</div></div><svg class="i s muted"><use href="#downsm"/></svg><svg class="i muted"><use href="#more"/></svg></div>
+      <div class="li" style="padding-left:0;min-height:48px;--inset:34px"><span class="num">3</span><div class="grow"><div class="t1" style="font-size:16px;font-weight:400">Paper Boats</div></div><svg class="i muted"><use href="#more"/></svg></div>
+      <div class="li" style="padding-left:0;min-height:48px;--inset:34px"><span class="num">4</span><div class="grow"><div class="t1" style="font-size:16px;font-weight:400">Slow Signal</div><div class="t2">Jane Doe, John Roe</div></div><svg class="i muted"><use href="#more"/></svg></div>
+      <div class="li" style="padding-left:0;min-height:48px;--inset:34px"><span class="num">5</span><div class="grow"><div class="t1 ar" dir="rtl" style="font-size:16px;font-weight:400">أغنية تجريبية</div></div><svg class="i muted"><use href="#more"/></svg></div>
+      <div class="li" style="padding-left:0;min-height:48px;--inset:34px"><span class="num">6</span><div class="grow"><div class="t1" style="font-size:16px;font-weight:400">Afterglow</div></div><svg class="i muted"><use href="#more"/></svg></div>
+    </div>
+  </div>
+  <div class="mini"><div class="art" data-art="Golden Hour"></div><div class="meta"><div class="t1">Golden Hour Drive</div><div class="t2">Jane Doe</div></div><div class="ctl"><svg class="i fill"><use href="#pause"/></svg></div><div class="ctl"><svg class="i fill"><use href="#next"/></svg></div><div class="mprog"><i></i></div></div>
+  <div class="tabbar"><div class="tab"><svg class="i"><use href="#house"/></svg>Home</div><div class="tab"><svg class="i"><use href="#stack"/></svg>Library</div><div class="tab on"><svg class="i"><use href="#note"/></svg>Music</div><div class="tab"><svg class="i"><use href="#down"/></svg>Downloads</div></div>
+  <div class="searchbtn"><svg class="i"><use href="#search"/></svg></div>
+  <div class="home-ind"></div>
+</div></div><figcaption><b>Album</b> · light theme · playing track in accent</figcaption></figure>
+
+<!-- 6. NOW PLAYING MUSIC -->
+<figure><div class="phone"><div class="screen dark">
+  <div class="art" id="npbg" style="position:absolute;inset:-60px;border-radius:0;filter:blur(60px) saturate(1.4)" data-art="Golden Hour"></div>
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,.42)"></div>
+  <div class="island"></div><div class="status" style="color:#fff"><span>9:41</span><span class="sys">●●●</span></div>
+  <div class="np">
+    <div class="grabber"></div>
+    <div class="art" style="width:345px;height:345px;border-radius:20px;box-shadow:0 24px 50px rgba(0,0,0,.45)" data-art="Golden Hour"></div>
+    <div style="display:flex;align-items:center;margin:30px 0 18px"><div style="flex:1;min-width:0"><div style="font-size:22px;line-height:28px;font-weight:700;letter-spacing:-.3px">Golden Hour Drive</div><div style="font-size:20px;line-height:25px;color:rgba(255,255,255,.7);letter-spacing:-.4px">Jane Doe</div></div><div class="glasspill" style="width:36px;height:36px;border-radius:50%;display:grid;place-items:center;margin-right:8px"><svg class="i s"><use href="#heart"/></svg></div><div class="glasspill" style="width:36px;height:36px;border-radius:50%;display:grid;place-items:center"><svg class="i s"><use href="#more"/></svg></div></div>
+    <div class="scrub"><i style="width:38%"></i></div>
+    <div class="times"><span>1:34</span><span style="font-size:11px;letter-spacing:.3px;opacity:.85">FLAC · 24/96</span><span>−2:31</span></div>
+    <div class="ctrls" style="margin:26px 0 30px"><svg class="i fill xl"><use href="#prev"/></svg><svg class="i fill" style="width:58px;height:58px"><use href="#pause"/></svg><svg class="i fill xl"><use href="#next"/></svg></div>
+    <div style="display:flex;align-items:center;gap:12px;color:rgba(255,255,255,.7)"><svg class="i s"><use href="#speaker"/></svg><div class="scrub" style="flex:1;height:6px"><i style="width:64%"></i></div><svg class="i s"><use href="#speakerh"/></svg></div>
+    <div style="display:flex;justify-content:space-around;margin-top:30px;color:rgba(255,255,255,.75)"><svg class="i"><use href="#quote"/></svg><svg class="i"><use href="#airplay"/></svg><svg class="i"><use href="#queue"/></svg></div>
+  </div>
+  <div class="home-ind" style="background:#fff"></div>
+</div></div><figcaption><b>Now Playing</b> · music · blurred-artwork background</figcaption></figure>
+
+<!-- 7. NOW PLAYING LONG-FORM (Arabic) -->
+<figure><div class="phone"><div class="screen dark">
+  <div class="art" style="position:absolute;inset:-60px;border-radius:0;filter:blur(60px) saturate(1.4)" data-art="تلاوات الفجر"></div>
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,.45)"></div>
+  <div class="island"></div><div class="status" style="color:#fff"><span>9:41</span><span class="sys">●●●</span></div>
+  <div class="np">
+    <div class="grabber"></div>
+    <div class="art" style="width:345px;height:345px;border-radius:20px;box-shadow:0 24px 50px rgba(0,0,0,.45)" data-art="تلاوات الفجر"></div>
+    <div style="display:flex;align-items:center;margin:28px 0 16px;gap:8px"><div class="glasspill" style="width:36px;height:36px;border-radius:50%;display:grid;place-items:center"><svg class="i s"><use href="#more"/></svg></div><div class="blk" style="flex:1;min-width:0" dir="rtl"><div class="ar" style="font-size:24px;font-weight:700">سورة الكهف</div><div class="ar" style="font-size:18px;color:rgba(255,255,255,.72)">قارئ تجريبي · تلاوات الفجر</div></div></div>
+    <div class="scrub"><i style="width:23%"></i></div>
+    <div class="times"><span>12:07</span><span style="font-size:11px">Resumes where you left off</span><span>−39:52</span></div>
+    <div class="ctrls" style="margin:24px 0 26px;padding:0 6px"><svg class="i l"><use href="#prev"/></svg><svg class="i xl"><use href="#back15"/></svg><svg class="i fill" style="width:58px;height:58px"><use href="#pause"/></svg><svg class="i xl"><use href="#fwd30"/></svg><svg class="i l"><use href="#next"/></svg></div>
+    <div style="display:flex;justify-content:space-between;gap:10px">
+      <div class="glasspill" style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:15px;font-weight:600"><span class="mono">1.25×</span></div>
+      <div class="glasspill" style="flex:1.4;height:44px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:15px;font-weight:600"><svg class="i s"><use href="#moon"/></svg><span class="mono">28:00</span></div>
+      <div class="glasspill" style="flex:1;height:44px;display:flex;align-items:center;justify-content:center"><svg class="i s"><use href="#airplay"/></svg></div>
+      <div class="glasspill" style="flex:1;height:44px;display:flex;align-items:center;justify-content:center"><svg class="i s"><use href="#list"/></svg></div>
+    </div>
+  </div>
+  <div class="home-ind" style="background:#fff"></div>
+</div></div><figcaption><b>Now Playing</b> · long-form · Arabic RTL title, speed, sleep timer, ±15/30 s</figcaption></figure>
+
+<!-- 8. DOWNLOADS (light) -->
+<figure><div class="phone"><div class="screen light" style="background:var(--bgGrouped)">
+  <div class="island"></div><div class="status"><span>9:41</span><span class="sys">●●●</span></div>
+  <div class="content">
+    <div class="navbar"><span></span><span class="acc" style="font-size:17px">Edit</span></div>
+    <div class="lt">Downloads</div>
+    <div style="margin:0 16px 22px">
+      <div style="height:8px;border-radius:4px;background:var(--surface3);display:flex;overflow:hidden"><i style="width:18%;background:var(--accent)"></i><i style="width:52%;background:var(--ctrl)"></i></div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:13px" class="mono"><span><span class="acc" style="font-weight:600">● Zoggyfin 23.4 GB</span> <span class="muted">· Other 66.6 GB</span></span><span class="muted">38.0 GB free</span></div>
+    </div>
+    <div style="font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;padding:0 32px 8px;display:flex;justify-content:space-between"><span>In progress · 3</span><span class="acc" style="text-transform:none;letter-spacing:0">Pause all</span></div>
+    <div class="list" style="margin-bottom:22px">
+      <div class="li" style="--inset:96px;min-height:76px"><div class="art" style="width:70px;height:40px;border-radius:6px" data-art="Sample Show S2E5"></div><div class="grow"><div class="t1">Sample Show · S2 E5</div><div class="t2 mono">812 MB of 1.4 GB · 8.6 MB/s · 1 min</div><div style="height:4px;border-radius:2px;background:var(--surface3);margin-top:6px;overflow:hidden"><i style="display:block;width:58%;height:100%;background:var(--accent)"></i></div></div><div class="hbtn" style="width:36px;height:36px;color:var(--accent)"><svg class="i s fill"><use href="#pause"/></svg></div></div>
+      <div class="li" style="--inset:96px;min-height:76px"><div class="art" style="width:70px;height:40px;border-radius:6px" data-art="Quiet Orbit"></div><div class="grow"><div class="t1">Quiet Orbit</div><div class="t2">Queued · 3.2 GB</div><div style="height:4px;border-radius:2px;background:var(--surface3);margin-top:6px"></div></div><div class="hbtn" style="width:36px;height:36px"><svg class="i s"><use href="#x"/></svg></div></div>
+      <div class="li" style="--inset:96px;min-height:76px"><div class="art" style="width:70px;height:40px;border-radius:6px" data-art="Night Market"></div><div class="grow"><div class="t1">Night Market</div><div class="t2" style="color:var(--danger);display:flex;align-items:center;gap:4px"><svg class="i xs"><use href="#warn"/></svg>Server not reachable</div></div><div class="hbtn" style="width:auto;padding:0 12px;height:32px;border-radius:16px;color:var(--accent);font-size:14px;font-weight:600;gap:4px;display:flex">Retry</div></div>
+    </div>
+    <div style="font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;padding:0 32px 8px">On this device</div>
+    <div class="list">
+      <div class="li" style="--inset:76px"><div class="art" style="width:48px;height:72px;border-radius:6px;margin:8px 0" data-art="Sample Show S2"></div><div class="grow"><div class="t1">Sample Show</div><div class="t2 mono">6 episodes · 8.1 GB</div></div><svg class="i s muted"><use href="#chev"/></svg></div>
+      <div class="li" style="--inset:76px"><div class="art" style="width:48px;height:48px;border-radius:6px" data-art="تلاوات الفجر"></div><div class="grow"><div class="t1 ar" dir="rtl">تلاوات الفجر</div><div class="t2 mono">Album · 18 tracks · 612 MB</div></div><svg class="i s muted"><use href="#chev"/></svg></div>
+      <div class="li" style="--inset:76px"><div class="art" style="width:48px;height:72px;border-radius:6px;margin:8px 0" data-art="Paper Kites"></div><div class="grow"><div class="t1">Paper Kites</div><div class="t2 mono">Movie · 4.6 GB</div></div><svg class="i s muted"><use href="#chev"/></svg></div>
+    </div>
+  </div>
+  <div class="tabbar"><div class="tab"><svg class="i"><use href="#house"/></svg>Home</div><div class="tab"><svg class="i"><use href="#stack"/></svg>Library</div><div class="tab"><svg class="i"><use href="#note"/></svg>Music</div><div class="tab on"><svg class="i"><use href="#down"/></svg>Downloads</div></div>
+  <div class="searchbtn"><svg class="i"><use href="#search"/></svg></div>
+  <div class="home-ind"></div>
+</div></div><figcaption><b>Downloads</b> · light theme · space bar, live progress, retry</figcaption></figure>
+
+<!-- 9. SEARCH -->
+<figure><div class="phone"><div class="screen dark">
+  <div class="island"></div><div class="status"><span>9:41</span><span class="sys">●●●</span></div>
+  <div class="content">
+    <div class="lt" style="padding-top:12px">Search</div>
+    <div style="display:flex;gap:10px;align-items:center;padding:0 16px 12px"><div style="flex:1;height:40px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;gap:8px;padding:0 10px;font-size:17px"><svg class="i s muted"><use href="#search"/></svg><span>sam<span style="display:inline-block;width:2px;height:20px;background:var(--accent);vertical-align:-4px;margin-left:1px"></span></span><span style="flex:1"></span><span style="width:18px;height:18px;border-radius:50%;background:var(--text3);display:grid;place-items:center;color:var(--bg)"><svg class="i" style="width:11px;height:11px;stroke-width:3"><use href="#x"/></svg></span></div><span class="acc" style="font-size:17px">Cancel</span></div>
+    <div class="chips"><div class="chip on">All</div><div class="chip">Movies</div><div class="chip">Shows</div><div class="chip">Episodes</div><div class="chip">Music</div><div class="chip">People</div></div>
+    <div class="section-h" style="font-size:17px">Top result</div>
+    <div style="margin:0 16px 22px;display:flex;gap:14px;align-items:center;padding:12px;border-radius:14px;background:var(--surface)"><div class="art" style="width:64px;height:96px;border-radius:8px" data-art="Sample Movie"></div><div style="flex:1;min-width:0"><div class="t1" style="font-size:17px">Sample Movie</div><div class="t2" style="font-size:13px">Movie · 2024 · 2 h 8 min</div><div style="display:flex;gap:8px;margin-top:10px"><div class="btn primary" style="height:32px;padding:0 14px;border-radius:16px;font-size:14px"><svg class="i fill s"><use href="#play"/></svg>Resume</div></div></div></div>
+    <div class="section-h" style="font-size:17px">Shows</div>
+    <div class="row" style="margin-bottom:22px">
+      <div class="tile" style="width:96px"><div class="art" style="width:96px;height:144px" data-art="Sample Show S2"></div><div class="t1">Sample Show</div></div>
+      <div class="tile" style="width:96px"><div class="art" style="width:96px;height:144px" data-art="Samara Coast"></div><div class="t1">Samara Coast</div></div>
+      <div class="tile" style="width:96px"><div class="art" style="width:96px;height:144px" data-fallback="Samples of Home" data-icon="tv"></div><div class="t1">Samples of Home</div></div>
+      <div class="tile" style="width:96px"><div class="art" style="width:96px;height:144px" data-art="Same Sky"></div><div class="t1">Same Sky</div></div>
+    </div>
+    <div class="section-h" style="font-size:17px">Songs</div>
+    <div style="margin-left:16px">
+      <div class="li" style="padding-left:0;min-height:56px;--inset:56px"><div class="art" style="width:44px;height:44px;border-radius:6px" data-art="Low Tide"></div><div class="grow"><div class="t1" style="font-size:16px">Samba for Sam</div><div class="t2">Song · The Samples</div></div><svg class="i muted"><use href="#more"/></svg></div>
+      <div class="li" style="padding-left:0;min-height:56px;--inset:56px"><div class="art" style="width:44px;height:44px;border-radius:6px" data-art="Night Market"></div><div class="grow"><div class="t1" style="font-size:16px">Same Old Song</div><div class="t2">Song · Jane Doe · <svg class="i xs" style="vertical-align:-2px;color:var(--success)"><use href="#downsm"/></svg> Downloaded</div></div><svg class="i muted"><use href="#more"/></svg></div>
+    </div>
+  </div>
+  <div class="tabbar"><div class="tab"><svg class="i"><use href="#house"/></svg>Home</div><div class="tab"><svg class="i"><use href="#stack"/></svg>Library</div><div class="tab"><svg class="i"><use href="#note"/></svg>Music</div><div class="tab"><svg class="i"><use href="#down"/></svg>Downloads</div></div>
+  <div class="searchbtn on" style="background:var(--accentSoft)"><svg class="i"><use href="#search"/></svg></div>
+  <div class="home-ind"></div>
+</div></div><figcaption><b>Search</b> · grouped results, type filter chips</figcaption></figure>
+
+<!-- 10. VIDEO PLAYER (landscape) -->
+<figure class="land" style="flex-basis:100%"><div class="phone"><div class="screen dark" style="background:#000">
+  <div class="art" style="position:absolute;inset:0;border-radius:0" data-art="Sample Movie backdrop"></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.55) 0%,rgba(0,0,0,0) 28%,rgba(0,0,0,0) 58%,rgba(0,0,0,.7) 100%)"></div>
+  <div style="position:absolute;top:20px;left:60px;right:60px;display:flex;align-items:center;gap:12px;color:#fff">
+    <div class="glasspill" style="width:44px;height:44px;border-radius:50%;display:grid;place-items:center"><svg class="i"><use href="#x"/></svg></div>
+    <div style="flex:1"><div style="font-size:17px;font-weight:600">Sample Movie</div><div style="font-size:13px;color:rgba(255,255,255,.72)">Chapter 6 · The Radio</div></div>
+    <div class="glasspill" style="height:44px;display:flex;align-items:center;gap:18px;padding:0 16px"><svg class="i"><use href="#airplay"/></svg><svg class="i"><use href="#pip"/></svg><svg class="i"><use href="#cc"/></svg><svg class="i"><use href="#sliders"/></svg></div>
+  </div>
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none;gap:56px;align-items:center;color:#fff">
+    <div class="glasspill" style="width:64px;height:64px;border-radius:50%;display:grid;place-items:center"><svg class="i xl"><use href="#back10"/></svg></div>
+    <div class="glasspill" style="width:84px;height:84px;border-radius:50%;display:grid;place-items:center"><svg class="i fill xxl"><use href="#pause"/></svg></div>
+    <div class="glasspill" style="width:64px;height:64px;border-radius:50%;display:grid;place-items:center"><svg class="i xl"><use href="#fwd10"/></svg></div>
+  </div>
+  <!-- trickplay preview -->
+  <div style="position:absolute;left:214px;bottom:62px;display:flex;flex-direction:column;align-items:center;gap:4px;color:#fff">
+    <div class="art" style="width:160px;height:90px;border-radius:10px;box-shadow:0 0 0 1.5px rgba(255,255,255,.9),0 8px 20px rgba(0,0,0,.5)" data-art="Trickplay frame"></div>
+    <span class="mono" style="font-size:13px;font-weight:600">0:41:08</span>
+  </div>
+  <div class="glasspill" style="position:absolute;right:60px;bottom:78px;height:40px;border-radius:20px;padding:0 16px;display:flex;align-items:center;gap:6px;color:#fff;font-size:15px;font-weight:600;background:rgba(255,255,255,.9);color:#111">Skip intro<svg class="i s"><use href="#chev"/></svg></div>
+  <div style="position:absolute;left:60px;right:60px;bottom:26px;color:#fff">
+    <div style="position:relative;height:6px;border-radius:3px;background:rgba(255,255,255,.28)"><i style="position:absolute;left:0;top:0;bottom:0;width:48%;border-radius:3px;background:rgba(255,255,255,.45)"></i><i style="position:absolute;left:0;top:0;bottom:0;width:32%;border-radius:3px;background:#fff"></i><i style="position:absolute;left:18%;top:0;width:2px;height:6px;background:rgba(0,0,0,.5)"></i><i style="position:absolute;left:55%;top:0;width:2px;height:6px;background:rgba(0,0,0,.5)"></i><i style="position:absolute;left:calc(32% - 8px);top:-5px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></i></div>
+    <div class="times" style="color:rgba(255,255,255,.8)"><span>0:41:08</span><span>−1:26:52</span></div>
+  </div>
+</div></div><figcaption><b>Video player</b> · scrubbing state: centre controls hide, the trickplay preview follows the thumb, chapter ticks, Skip Intro</figcaption></figure>
+
+<!-- 11. IPAD HOME -->
+<figure class="wide" style="flex-basis:100%"><div class="ipad"><div class="screen dark">
+  <div style="position:absolute;top:0;left:0;right:0;height:28px;display:flex;justify-content:space-between;align-items:center;padding:0 24px;font-size:13px;font-weight:600;z-index:40"><span>9:41 Mon 19 Oct</span><span>100%</span></div>
+  <!-- Sidebar -->
+  <div style="position:absolute;top:10px;left:10px;bottom:10px;width:270px;border-radius:24px;background:var(--glass);backdrop-filter:blur(30px);border:.5px solid var(--glassBorder);padding:40px 12px 12px;z-index:20">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 8px 18px"><span style="display:flex;align-items:center;gap:8px;font-size:22px;font-weight:700;letter-spacing:-.3px"><svg width="26" height="26" viewBox="0 0 128 128"><path d="M26 92 C 34 66, 52 38, 82 22 C 86 20, 90 23, 88 28 C 80 48, 82 70, 104 92 Z" fill="#FF7A59"/><rect x="14" y="100" width="70" height="7" rx="3.5" fill="#FF7A59"/><rect x="92" y="100" width="22" height="7" rx="3.5" fill="#FF7A59" opacity=".45"/></svg>zoggyfin</span><svg class="i muted"><use href="#sidebar"/></svg></div>
+    <div style="display:flex;flex-direction:column;gap:2px;font-size:17px">
+      <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border-radius:12px;background:var(--accentSoft);color:var(--accent);font-weight:600"><svg class="i"><use href="#house"/></svg>Home</div>
+      <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border-radius:12px;background:var(--surface2)"><svg class="i" style="color:var(--accent)"><use href="#stack"/></svg>Library<span style="flex:1"></span><span class="t2" style="font-size:12px">hover</span></div>
+      <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border-radius:12px"><svg class="i" style="color:var(--accent)"><use href="#note"/></svg>Music</div>
+      <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border-radius:12px"><svg class="i" style="color:var(--accent)"><use href="#search"/></svg>Search<span style="flex:1"></span><span class="muted mono" style="font-size:13px">⌘F</span></div>
+      <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border-radius:12px"><svg class="i" style="color:var(--accent)"><use href="#down"/></svg>Downloads<span style="flex:1"></span><span class="mono" style="font-size:13px;color:var(--text2)">3</span></div>
+    </div>
+    <div style="font-size:13px;font-weight:600;color:var(--text3);padding:22px 12px 6px">Libraries</div>
+    <div style="display:flex;flex-direction:column;gap:2px;font-size:16px;color:var(--text)">
+      <div style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px"><svg class="i s muted"><use href="#film"/></svg>Movies</div>
+      <div style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px"><svg class="i s muted"><use href="#tv"/></svg>Shows</div>
+      <div style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px"><svg class="i s muted"><use href="#note"/></svg>Music</div>
+      <div style="display:flex;align-items:center;gap:12px;height:40px;padding:0 12px"><svg class="i s muted"><use href="#wave"/></svg>Recitations</div>
+    </div>
+  </div>
+  <!-- Content -->
+  <div style="position:absolute;top:0;left:280px;right:0;bottom:0;padding-top:44px;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0 32px"><div class="lt" style="padding:0">Home</div><div class="avatar">S</div></div>
+    <div class="section-h" style="padding:18px 32px 12px">Continue watching<svg class="i"><use href="#chev"/></svg></div>
+    <div class="row" style="padding:0 32px;gap:16px">
+      <div class="tile"><div class="art" style="width:320px;height:180px;transform:scale(1.03);box-shadow:0 12px 28px rgba(0,0,0,.5)" data-art="Sample Movie"><div style="position:absolute;inset:0;background:rgba(255,255,255,.08)"></div><div class="scrimb"></div><div class="onart"><div class="t1">Sample Movie</div><div class="t2">58 min left · pointer hover</div></div><div class="prog"><i style="width:52%"></i></div></div></div>
+      <div class="tile"><div class="art" style="width:320px;height:180px" data-art="Sample Show S2"><div class="scrimb"></div><div class="onart"><div class="t1">Sample Show</div><div class="t2">S2 · E4 · 12 min left</div></div><div class="prog"><i style="width:78%"></i></div></div></div>
+      <div class="tile"><div class="art" style="width:320px;height:180px;box-shadow:0 0 0 2px #0B0B0E,0 0 0 4px #FF7A59" data-art="Harbour Lights E5"><div class="scrimb"></div><div class="onart"><div class="t1">Harbour Lights</div><div class="t2">S1 · E5 · keyboard focus</div></div><div class="prog"><i style="width:20%"></i></div></div></div>
+    </div>
+    <div class="section-h" style="padding:0 32px 12px">Recently added in Movies<svg class="i"><use href="#chev"/></svg></div>
+    <div class="row" style="padding:0 32px;gap:16px">
+      <div class="tile" style="width:152px"><div class="art" style="width:152px;height:228px" data-art="Quiet Orbit"></div><div class="t1">Quiet Orbit</div><div class="t2">2025</div></div>
+      <div class="tile" style="width:152px"><div class="art" style="width:152px;height:228px" data-art="رحلة إلى البحر"></div><div class="t1 ar" dir="rtl">رحلة إلى البحر</div><div class="t2">2024</div></div>
+      <div class="tile" style="width:152px"><div class="art" style="width:152px;height:228px" data-art="Paper Kites"></div><div class="t1">Paper Kites</div><div class="t2">2023</div></div>
+      <div class="tile" style="width:152px"><div class="art" style="width:152px;height:228px" data-fallback="The Untitled Home Video" data-icon="film"></div><div class="t1">The Untitled Home Video</div><div class="t2">2019</div></div>
+      <div class="tile" style="width:152px"><div class="art" style="width:152px;height:228px" data-art="Lantern Street"></div><div class="t1">Lantern Street</div><div class="t2">2021</div></div>
+      <div class="tile" style="width:152px"><div class="art" style="width:152px;height:228px" data-art="Second Wind"></div><div class="t1">Second Wind</div><div class="t2">2019</div></div>
+    </div>
+    <div class="section-h" style="padding:0 32px 12px">Recently added in Music<svg class="i"><use href="#chev"/></svg></div>
+    <div class="row" style="padding:0 32px;gap:16px">
+      <div class="tile" style="width:180px"><div class="art" style="width:180px;height:180px;border-radius:8px" data-art="Golden Hour"></div><div class="t1">Golden Hour</div><div class="t2">Jane Doe</div></div>
+      <div class="tile" style="width:180px"><div class="art" style="width:180px;height:180px;border-radius:8px" data-art="تلاوات الفجر"></div><div class="t1 ar" dir="rtl">تلاوات الفجر</div><div class="t2 ar" dir="rtl">قارئ تجريبي</div></div>
+      <div class="tile" style="width:180px"><div class="art" style="width:180px;height:180px;border-radius:8px" data-art="Low Tide"></div><div class="t1">Low Tide</div><div class="t2">The Samples</div></div>
+      <div class="tile" style="width:180px"><div class="art" style="width:180px;height:180px;border-radius:8px" data-art="Night Market"></div><div class="t1">Night Market</div><div class="t2">Jane Doe</div></div>
+      <div class="tile" style="width:180px"><div class="art" style="width:180px;height:180px;border-radius:8px" data-art="Afterglow"></div><div class="t1">Afterglow</div><div class="t2">Sam Lee Trio</div></div>
+    </div>
+  </div>
+  <div class="ipadfade" style="position:absolute;left:280px;right:0;bottom:0;height:110px;background:linear-gradient(to top,#0B0B0E 35%,rgba(11,11,14,0));z-index:25"></div>
+  <div class="mini" style="left:530px;right:auto;width:400px;bottom:20px"><div class="art" data-art="Golden Hour Drive"></div><div class="meta"><div class="t1">Golden Hour Drive</div><div class="t2">Jane Doe</div></div><div class="ctl"><svg class="i fill"><use href="#pause"/></svg></div><div class="ctl"><svg class="i fill"><use href="#next"/></svg></div><div class="mprog"><i></i></div></div>
+</div></div><figcaption><b>iPad Home</b> · landscape 1180 pt · native tab bar shown as sidebar · hover and focus states</figcaption></figure>
+
+</div>
+
+<script>
+// Same algorithm as fallbackArt() in theme.ts.
+function fnv1a(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0}return h>>>0}
+function hsl(h,s,l){const a=s*Math.min(l,1-l);const f=n=>{const k=(n+h/30)%12;const c=l-a*Math.max(-1,Math.min(k-3,9-k,1));return Math.round(c*255).toString(16).padStart(2,'0')};return '#'+f(0)+f(8)+f(4)}
+function fallbackCSS(title){const key=title.normalize('NFKC').trim().toLowerCase();const h=fnv1a(key);const hue=h%360;const shift=24+((h>>>9)%33);const sign=((h>>>17)&1)?1:-1;const hue2=(hue+sign*shift+360)%360;const angle=[135,160,200,225][(h>>>20)&3];const from=hsl(hue,.42,.31),to=hsl(hue2,.38,.16),glow=hsl(hue,.6,.55);const gx=20+((h>>>24)%61);return `radial-gradient(circle at ${gx}% 18%, ${glow}59 0%, ${glow}00 70%), linear-gradient(${angle}deg, ${from} 0%, ${to} 100%)`}
+// Stand-in for real artwork (mockup only): richer layered gradients.
+function artCSS(seed){const h=fnv1a(seed);const a=h%360,b=(a+30+((h>>>8)%60))%360;const x=15+((h>>>4)%70),y=10+((h>>>12)%50),x2=100-x;const band=40+((h>>>16)%35);
+ return `radial-gradient(ellipse at ${x}% ${y}%, ${hsl((a+20)%360,.55,.66)}e6 0%, ${hsl(a,.5,.5)}00 42%), radial-gradient(ellipse 80% 40% at ${x2}% ${band+25}%, ${hsl(b,.4,.42)}b3 0%, ${hsl(b,.4,.35)}00 60%), linear-gradient(180deg, ${hsl(a,.32,.34)} 0%, ${hsl(b,.30,.20)} ${band}%, ${hsl(b,.25,.08)} 100%)`}
+const sys=document.querySelector('.status .sys').innerHTML;document.querySelectorAll('.status .sys').forEach(e=>e.innerHTML=sys);
+document.querySelectorAll('.screen').forEach(sc=>{const tb=sc.querySelector('.tabbar');if(!tb)return;const c=getComputedStyle(sc).backgroundColor;const f=document.createElement('div');f.className='edgefade';const m=c.match(/\d+/g);f.style.background=`linear-gradient(to top, rgba(${m[0]},${m[1]},${m[2]},1) 38%, rgba(${m[0]},${m[1]},${m[2]},0))`;sc.insertBefore(f,sc.querySelector('.mini')||tb)});
+document.querySelectorAll('[data-art]').forEach(el=>{el.style.backgroundImage=artCSS(el.dataset.art);el.style.backgroundColor='#222'});
+document.querySelectorAll('[data-fallback]').forEach(el=>{const t=el.dataset.fallback;el.style.backgroundImage=fallbackCSS(t);
+ const rtl=/[֐-ࣿיִ-﷿ﹰ-﻿]/.test(t);
+ el.insertAdjacentHTML('beforeend',`<svg class="i fb-icon" style="width:34%;height:34%;stroke-width:1.4"><use href="#${el.dataset.icon||'film'}"/></svg><div class="fb-title${rtl?' ar':''}" dir="${rtl?'rtl':'ltr'}">${t}</div>`)});
+</script>
+</body>
+</html>

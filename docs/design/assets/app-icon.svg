@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="t">
+  <title id="t">Zoggyfin app icon</title>
+  <defs>
+    <radialGradient id="bg" cx="0.5" cy="0.28" r="0.85">
+      <stop offset="0" stop-color="#2A2A33"/>
+      <stop offset="0.55" stop-color="#15151A"/>
+      <stop offset="1" stop-color="#09090B"/>
+    </radialGradient>
+    <linearGradient id="fin" x1="0.15" y1="1" x2="0.85" y2="0">
+      <stop offset="0" stop-color="#FF6A4D"/>
+      <stop offset="1" stop-color="#FFA270"/>
+    </linearGradient>
+    <linearGradient id="refl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF7A59" stop-opacity="0"/>
+      <stop offset="1" stop-color="#FF7A59" stop-opacity="0.30"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FF7A59" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FF7A59" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Full-bleed square: iOS applies the corner mask -->
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <ellipse cx="520" cy="560" rx="380" ry="300" fill="url(#glow)"/>
+  <g transform="translate(512 512) scale(5.2) translate(-64 -72)">
+    <path d="M26 92 C 34 66, 52 38, 82 22 C 86 20, 90 23, 88 28 C 80 48, 82 70, 104 92 Z" fill="url(#fin)"/>
+    <!-- Soft reflection below the horizon -->
+    <path transform="matrix(1 0 0 -0.4 0 147)" d="M26 92 C 34 66, 52 38, 82 22 C 86 20, 90 23, 88 28 C 80 48, 82 70, 104 92 Z" fill="url(#refl)"/>
+    <rect x="14" y="100" width="70" height="7" rx="3.5" fill="#FF7A59"/>
+    <rect x="92" y="100" width="22" height="7" rx="3.5" fill="#FF7A59" opacity="0.45"/>
+  </g>
+</svg>
