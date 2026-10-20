@@ -245,6 +245,19 @@ export class HostRoom {
     this.updateWaiting();
   }
 
+  /**
+   * The host removes a member: it is told why, it leaves the list at once
+   * and keeps no place. Returns the peer id of its socket (to close), or null.
+   */
+  expel(memberId: string, reason: string): string | null {
+    const m = this.members.get(memberId);
+    if (!m) return null;
+    const peer = m.peerId;
+    if (peer) this.deps.send({ t: 'removed', reason }, [peer]);
+    this.forget(memberId);
+    return peer;
+  }
+
   private forget(id: string): void {
     const m = this.members.get(id);
     if (!m) return;

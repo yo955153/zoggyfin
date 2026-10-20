@@ -39,6 +39,13 @@ export interface LinkOptions {
   isCodeKey?: (key: string) => boolean;
   /** Guest: how long to wait for the host's answer, ms. */
   joinTimeout?: number;
+  /**
+   * Host: the join gate (join-gate.ts). Runs on every join before the host
+   * sees it. `withKey`: the guest sent the correct session key. Returns
+   * `ok` (a key holder gets in), `ask` (the host decides) or a refusal text
+   * (the guest gets it at once and the socket closes).
+   */
+  admit?: (e: { peerId: string; ctx: JoinContext; withKey: boolean }) => 'ok' | 'ask' | { refuse: string };
 }
 
 type PeerState = { kind: 'pending-in'; ctx: JoinContext | null } | { kind: 'pending-out'; ctx: JoinContext; timer: unknown } | { kind: 'up'; ctx: JoinContext | null };
@@ -89,8 +96,8 @@ export class NearbyLink {
 
   // ---- Host ---------------------------------------------------------------------
 
-  /** Host: accepts or declines a join request. */
-  respond(peerId: string, accept: boolean): void {
+  /** Host: accepts or declines a join request. `reason`: the text the guest sees on a decline. */
+  respond(peerId: string, accept: boolean, reason?: string): void {
     const p = this.peers.get(peerId);
     if (!p || p.kind !== 'pending-in') return;
     if (accept) {
@@ -98,11 +105,16 @@ export class NearbyLink {
       this.native.send(peerId, encodeLink({ t: 'accept' }));
       this.handlers.onPeerUp?.(peerId, p.ctx);
     } else {
-      this.native.send(peerId, encodeLink({ t: 'decline', reason: 'The host did not let you join.' }));
-      this.peers.delete(peerId);
-      // Let the answer leave before the socket closes.
-      this.timers.setTimeout(() => this.native.close(peerId), 300);
+      this.refuse(peerId, reason ?? 'The host did not let you join.');
     }
+  }
+
+  /** Host: sends a decline and closes the socket a moment later. */
+  private refuse(peerId: string, reason: string): void {
+    this.native.send(peerId, encodeLink({ t: 'decline', reason }));
+    this.peers.delete(peerId);
+    // Let the answer leave before the socket closes.
+    this.timers.setTimeout(() => this.native.close(peerId), 300);
   }
 
   // ---- Guest --------------------------------------------------------------------
@@ -163,7 +175,13 @@ export class NearbyLink {
     if (p.kind === 'pending-in' && l.t === 'join' && p.ctx === null) {
       const key = l.ctx.key;
       const sessionKey = this.opts.sessionKey?.() ?? null;
-      if (key && sessionKey && key === sessionKey) {
+      const withKey = !!key && !!sessionKey && key === sessionKey;
+      const verdict = this.opts.admit?.({ peerId: socketId, ctx: l.ctx, withKey }) ?? (withKey ? 'ok' : 'ask');
+      if (typeof verdict === 'object') {
+        this.refuse(socketId, verdict.refuse);
+        return;
+      }
+      if (withKey && verdict === 'ok') {
         // A member that comes back, or one that follows this new host.
         this.peers.set(socketId, { kind: 'up', ctx: l.ctx });
         this.native.send(socketId, encodeLink({ t: 'accept' }));

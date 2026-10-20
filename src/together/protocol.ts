@@ -153,6 +153,8 @@ export type Message =
   | { t: 'members'; members: Member[]; onlyHostControls: boolean }
   /** Host to a guest: you may not control playback. */
   | { t: 'denied'; reason: string }
+  /** Host to a guest: the host removed you (or removed and blocked you). Do not reconnect. */
+  | { t: 'removed'; reason: string }
   /** Host to all: the session is over. Guest to host: I leave. */
   | { t: 'end' }
   | { t: 'leave' };
@@ -248,6 +250,7 @@ function valid(x: Record<string, unknown>): boolean {
     case 'members':
       return Array.isArray(x.members) && x.members.every(isMember) && bool(x.onlyHostControls);
     case 'denied':
+    case 'removed':
       return str(x.reason);
     case 'end':
     case 'leave':
