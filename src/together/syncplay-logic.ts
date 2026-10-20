@@ -122,6 +122,30 @@ export function groupView(g: GroupInfoLike): SyncPlayGroupView | null {
   return { id: g.GroupId, name: g.GroupName || 'Group', state: g.State ?? 'Idle', participants: g.Participants ?? [] };
 }
 
+/**
+ * The group after a `UserJoined` update, before the server's list comes.
+ * The server lists each user once, so a name that is in the list already
+ * changes nothing. The count is right at once, with no wait for a request.
+ */
+export function withUserJoined(g: SyncPlayGroupView, name: string | null): SyncPlayGroupView {
+  if (!name) return { ...g, stale: true };
+  if (g.participants.includes(name)) return g;
+  return { ...g, participants: [...g.participants, name] };
+}
+
+/**
+ * The group after a `UserLeft` update. The user can still be in the group
+ * on another device, so the count is not known until the server's list comes.
+ */
+export function withUserLeft(g: SyncPlayGroupView): SyncPlayGroupView {
+  return { ...g, stale: true };
+}
+
+/** The number of people for the room bar, or null when it is not known (show no count). */
+export function groupCount(g: SyncPlayGroupView): number | null {
+  return g.stale || g.participants.length === 0 ? null : g.participants.length;
+}
+
 /** The label of a group state for the session sheet. */
 export function groupStateLabel(state: string): string {
   switch (state) {

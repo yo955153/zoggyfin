@@ -38,7 +38,7 @@ import { bindVideoPort, type BoundPort, whenPlayerReady } from './player-binding
 import { realTimers } from './player-port';
 import { setSyncPlayView, setTogether, togetherState } from './store';
 import { syncLog } from './sync-log';
-import { commandEffect, groupView, type QueueTarget, queueTarget, sameQueue, secondsToTicks, syncPlayRepeat } from './syncplay-logic';
+import { commandEffect, groupView, type QueueTarget, queueTarget, sameQueue, secondsToTicks, syncPlayRepeat, withUserJoined, withUserLeft } from './syncplay-logic';
 
 export const syncPlaySupported: boolean = features.watchTogether;
 
@@ -81,6 +81,8 @@ class SyncPlayController {
   private timers: ReturnType<typeof setInterval>[] = [];
   private loading: string | null = null;
   private groupId: string | null = null;
+  /** The newest group request: an older answer does not replace a newer one. */
+  private groupSeq = 0;
   /** The group plays audio: the audio player follows the group queue (entry keys are SyncPlay's playlist item ids). */
   private audio = false;
   private unsubTrack: (() => void) | null = null;
@@ -306,8 +308,11 @@ class SyncPlayController {
       }
       case 'UserJoined':
       case 'UserLeft': {
-        const name = typeof u.Data === 'string' ? u.Data : 'Someone';
-        toast(u.Type === 'UserJoined' ? `${name} joined the group` : `${name} left the group`, { icon: 'person.2.fill' });
+        const name = typeof u.Data === 'string' && u.Data ? u.Data : null;
+        toast(u.Type === 'UserJoined' ? `${name ?? 'Someone'} joined the group` : `${name ?? 'Someone'} left the group`, { icon: 'person.2.fill' });
+        // The count changes at once (or shows no number); the server's list then confirms it.
+        const g = togetherState().syncplay.group;
+        if (g) setSyncPlayView({ group: u.Type === 'UserJoined' ? withUserJoined(g, name) : withUserLeft(g) });
         void this.refreshGroup();
         return;
       }
@@ -340,10 +345,13 @@ class SyncPlayController {
   private async refreshGroup(): Promise<void> {
     const api = this.api();
     if (!api || !this.groupId) return;
+    // Only the newest answer counts: two quick changes can answer out of order.
+    const seq = ++this.groupSeq;
+    const id = this.groupId;
     try {
-      const { data } = await getSyncPlayApi(api).syncPlayGetGroup({ id: this.groupId });
+      const { data } = await getSyncPlayApi(api).syncPlayGetGroup({ id });
       const g = groupView(data);
-      if (g) setSyncPlayView({ group: g });
+      if (g && seq === this.groupSeq && this.groupId === id) setSyncPlayView({ group: g });
     } catch {
       // Keep the old list.
     }

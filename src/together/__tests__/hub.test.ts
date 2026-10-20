@@ -116,6 +116,16 @@ describe('rooms in the hub', () => {
     expect(roomLabel({ ...base, role: 'host', phase: { name: 'hosting', sessionId: 's' }, item: { id: 't', name: 'Song', type: 'Audio', album: 'Blue' } })).toBe('Together · Blue · 1 person');
   });
 
+  it('a SyncPlay room bar shows no count while the count is not known', () => {
+    const group = { id: 'g', name: 'G', state: 'Idle', participants: ['Sam', 'Kim'] };
+    const sp = (g: typeof group & { stale?: boolean }, item: { id: string; name: string; type: string } | null = null) =>
+      roomLabel({ ...initialTogether, mode: 'syncplay', item, syncplay: { ...initialTogether.syncplay, group: g } });
+    expect(sp(group)).toBe('Together · 2 people · Pick something to play');
+    expect(sp({ ...group, stale: true })).toBe('Together · Pick something to play');
+    expect(sp({ ...group, participants: [] }, { id: 'f', name: 'Dune', type: 'Movie' })).toBe('Together · Dune');
+    expect(sp(group, { id: 'f', name: 'Dune', type: 'Movie' })).toBe('Together · Dune · 2 people');
+  });
+
   it('item pages: Play for everyone, or only the host picks', () => {
     expect(playForEveryone(initialTogether)).toBeNull();
     expect(playForEveryone({ ...base, role: 'host', phase: { name: 'hosting', sessionId: 's' } })).toEqual({ label: 'Play for everyone', locked: false });

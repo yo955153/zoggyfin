@@ -12,12 +12,14 @@ import { openFullPlayer } from '@/player';
 import { playerState } from '@/player/store';
 import { createStyles, type AppTheme, font, useStyles, useTheme } from '@/theme';
 import { openTogetherSheet, type TogetherState, useTogetherStore } from '@/together/store';
+import { groupCount } from '@/together/syncplay-logic';
 
 /** The pill text for a state, or null when no session runs. */
 export function togetherLabel(s: TogetherState): string | null {
   if (s.syncplay.group) {
-    const n = s.syncplay.group.participants.length;
-    return s.waiting ? 'Together · Waiting for everyone' : `Together · ${n} ${n === 1 ? 'person' : 'people'}`;
+    const n = groupCount(s.syncplay.group);
+    if (s.waiting) return 'Together · Waiting for everyone';
+    return n === null ? 'Together' : `Together · ${n} ${n === 1 ? 'person' : 'people'}`;
   }
   if (s.mode !== 'nearby') return null;
   switch (s.phase.name) {

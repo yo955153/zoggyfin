@@ -6,6 +6,7 @@
  * transport. Pure: no React, no native modules.
  */
 import type { NearbyHost, SyncPlayGroupView, TogetherState } from './store';
+import { groupCount } from './syncplay-logic';
 
 export type Transport = 'nearby' | 'server';
 
@@ -170,9 +171,11 @@ function people(n: number): string {
 export function roomLabel(st: Pick<TogetherState, 'mode' | 'role' | 'phase' | 'members' | 'requests' | 'item' | 'hostName' | 'waiting' | 'syncplay'>): string | null {
   const title = st.item ? st.item.album || st.item.name : null;
   if (st.syncplay.group) {
-    const n = st.syncplay.group.participants.length || 1;
+    // No count while it is not known: a wrong number for a moment is worse than none.
+    const n = groupCount(st.syncplay.group);
     if (st.waiting && title) return `Together · ${title} · Waiting for everyone`;
-    return title ? `Together · ${title} · ${people(n)}` : `Together · ${people(n)} · Pick something to play`;
+    if (title) return n === null ? `Together · ${title}` : `Together · ${title} · ${people(n)}`;
+    return n === null ? 'Together · Pick something to play' : `Together · ${people(n)} · Pick something to play`;
   }
   if (st.mode !== 'nearby') return null;
   switch (st.phase.name) {

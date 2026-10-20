@@ -77,7 +77,10 @@ export interface SyncPlayGroupView {
   id: string;
   name: string;
   state: string;
+  /** The server's list: one name per user (two devices of one user are one name). */
   participants: string[];
+  /** The list is out of date (a member left, the server's list did not come yet): show no count. */
+  stale?: boolean;
 }
 
 export interface TogetherState {

@@ -1,5 +1,5 @@
 import { positionAt } from '../drift';
-import { commandEffect, groupStateLabel, groupView, queueTarget, sameQueue, secondsToTicks, syncPlayRepeat, ticksToSeconds } from '../syncplay-logic';
+import { commandEffect, groupCount, groupStateLabel, groupView, queueTarget, sameQueue, secondsToTicks, syncPlayRepeat, ticksToSeconds, withUserJoined, withUserLeft } from '../syncplay-logic';
 
 const when = '2026-10-19T12:00:00.000Z';
 const whenMs = Date.UTC(2026, 9, 19, 12);
@@ -95,5 +95,23 @@ describe('groups', () => {
     expect(ticksToSeconds(null)).toBe(0);
     expect(secondsToTicks(2.5)).toBe(25_000_000);
     expect(secondsToTicks(-1)).toBe(0);
+  });
+});
+
+describe('the group count', () => {
+  const g = { id: 'g', name: "Sam's group", state: 'Idle', participants: ['Sam'] };
+
+  it('counts a joined user at once, and a user that is in the list already once', () => {
+    expect(groupCount(withUserJoined(g, 'Kim'))).toBe(2);
+    // The server lists each user once: a second device of Sam is no new person.
+    expect(groupCount(withUserJoined(g, 'Sam'))).toBe(1);
+  });
+
+  it('shows no count when the number is not known', () => {
+    expect(groupCount(withUserLeft(withUserJoined(g, 'Kim')))).toBeNull();
+    expect(groupCount(withUserJoined(g, null))).toBeNull();
+    expect(groupCount({ ...g, participants: [] })).toBeNull();
+    // The server's list makes the count known again.
+    expect(groupCount(groupView({ GroupId: 'g', Participants: ['Sam'] })!)).toBe(1);
   });
 });
