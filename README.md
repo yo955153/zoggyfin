@@ -289,6 +289,34 @@ server for the host's file and a loopback relay for Apple guests). The Mac app u
 same Swift code through `desktop/src-tauri/swift/`.
 It builds with the app.
 
+## Server setup notes
+
+### Remote access through a reverse proxy or a tunnel
+
+Zoggyfin works with Jellyfin behind a reverse proxy or a tunnel (for example Cloudflare Tunnel,
+Traefik, Caddy or nginx). Put the public address in the server's external address, and keep
+the home address as the internal address. The app selects the correct one.
+
+You do not have to change any Jellyfin setting for this. But without a change, Jellyfin sees
+every request from the proxy as a request from the local network. Then:
+
+- a user who is limited to the local network can sign in from the internet;
+- the internet bitrate limit does not apply;
+- the logs and the admin panel show the address of the proxy, not of the person.
+
+To correct this, open **Dashboard > Networking** in Jellyfin:
+
+1. Set **Known proxies** to the address that the proxy uses to connect to Jellyfin. For a proxy
+   in Docker, this is the proxy container's address, or the Docker network gateway when Docker
+   forwards the port.
+2. Turn on **Allow remote connections to this server**. If it stays off, Jellyfin now blocks
+   the internet users, because it sees their real addresses.
+3. Restart Jellyfin.
+
+Note: the Cloudflare terms limit large video traffic through its network. For a small
+household this is usually not a problem. For heavy streaming, Tailscale or WireGuard is a
+better choice, and Zoggyfin supports both.
+
 ## Build from source
 
 You need Node 22 or later and pnpm 10. For iOS you also need Xcode.
