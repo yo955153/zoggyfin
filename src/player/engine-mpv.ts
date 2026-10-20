@@ -33,6 +33,9 @@ export function trackFor(tracks: readonly MpvTrack[], type: 'audio' | 'sub', ind
   return ofType.find((t) => t.ffIndex === index) ?? ofType[ordinal] ?? null;
 }
 
+/** After a seek, old positions are left out for this long at most, ms (a lost `playback-restart` does not freeze the position). */
+const SEEK_GUARD = 1500;
+
 export class MpvEngine implements VideoEngine {
   readonly pipSupported = false;
   private listeners = new Set<EngineListener>();
@@ -47,6 +50,12 @@ export class MpvEngine implements VideoEngine {
   private line = new PositionLine();
   /** True while the video waits: a seek, or the cache. */
   private seeking = false;
+  /** Seeks that libmpv has not finished yet (queued, or sent and with no `playback-restart`). */
+  private seeksOpen = 0;
+  /** When the last seek reached libmpv (performance.now), for the guard below. */
+  private seekSentAt = 0;
+  /** The last position left out while a seek was open (libmpv sends one just before `playback-restart`). */
+  private heldPos: number | null = null;
   private stalled = false;
   private cacheEnd = 0;
   /** A file is loading or loaded (libmpv also reports properties while idle). */
@@ -120,11 +129,17 @@ export class MpvEngine implements VideoEngine {
       case 'tracks':
         this.tracksNow = e.tracks;
         break;
-      case 'playback-restart':
+      case 'playback-restart': {
         this.seeking = false;
+        this.seeksOpen = Math.max(0, this.seeksOpen - 1);
+        // The position libmpv sent with the restart (it came while the seek was still open).
+        const held = this.heldPos;
+        this.heldPos = null;
+        if (this.seeksOpen === 0 && held !== null) this.onProp('time-pos', held);
         // After a seek: Now Playing moves its time from the new position.
         if (this.active) this.publish();
         break;
+      }
       case 'file-loaded':
         this.loaded = true;
         this.applyPendingTracks();
@@ -155,6 +170,13 @@ export class MpvEngine implements VideoEngine {
     if (!this.active) return;
     switch (name) {
       case 'time-pos':
+        // A position from before a seek that libmpv has not finished: the
+        // seek target stays. (A report that left libmpv before the seek can
+        // come after it, and it once moved a seek back.)
+        if (this.seeksOpen > 0 && performance.now() - this.seekSentAt < SEEK_GUARD) {
+          if (typeof value === 'number') this.heldPos = value;
+          break;
+        }
         if (typeof value === 'number') {
           this.pos = value;
           if (this.paused || this.seeking || this.stalled) this.line.reset();
@@ -228,6 +250,8 @@ export class MpvEngine implements VideoEngine {
     this.pos = start;
     this.line.reset();
     this.seeking = false;
+    this.seeksOpen = 0;
+    this.heldPos = null;
     this.stalled = false;
     this.cacheEnd = 0;
     this.tracksNow = [];
@@ -270,10 +294,22 @@ export class MpvEngine implements VideoEngine {
   }
 
   seekTo(seconds: number): void {
-    this.pos = Math.max(0, seconds);
+    // The target now: the call waits in the chain, and `pos` can change before it goes.
+    const target = Math.max(0, seconds);
+    this.pos = target;
     this.seeking = true;
     this.line.reset();
-    this.run(() => mpv.command('seek', this.pos.toFixed(3), 'absolute'));
+    this.seeksOpen += 1;
+    this.seekSentAt = performance.now();
+    this.run(async () => {
+      this.seekSentAt = performance.now();
+      try {
+        await mpv.command('seek', target.toFixed(3), 'absolute');
+      } catch (e) {
+        this.seeksOpen = Math.max(0, this.seeksOpen - 1);
+        throw e;
+      }
+    });
   }
 
   setRate(rate: number): void {
