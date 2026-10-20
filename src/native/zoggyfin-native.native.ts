@@ -35,6 +35,7 @@ export const hasNativeKeyInput = mod !== null;
 interface ZoggyfinAndroidModule {
   decoders(): Record<string, unknown>;
   setAutoPictureInPicture(enabled: boolean): void;
+  makeSeekableMp4?(path: string): Promise<string>;
 }
 
 /** The Android part of the module (decoders, Picture in Picture on Home). Null on iOS and in older builds. */
@@ -72,5 +73,21 @@ export function setAutoPictureInPicture(enabled: boolean): void {
     android?.setAutoPictureInPicture(enabled);
   } catch {
     // An older build: no Picture in Picture on Home.
+  }
+}
+
+/**
+ * Android: rewrites a fragmented MP4 with no index (a transcoded download)
+ * as a plain MP4, because ExoPlayer cannot seek in the fragmented one.
+ * "skipped" when the file is not fragmented or the build has no function.
+ */
+export async function makeSeekableMp4(path: string): Promise<'done' | 'skipped' | 'failed'> {
+  const fn = android?.makeSeekableMp4;
+  if (typeof fn !== 'function') return 'skipped';
+  try {
+    const r = await fn.call(android, path);
+    return r === 'done' || r === 'failed' ? r : 'skipped';
+  } catch {
+    return 'failed';
   }
 }

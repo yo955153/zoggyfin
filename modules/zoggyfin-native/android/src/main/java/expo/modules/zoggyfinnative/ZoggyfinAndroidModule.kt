@@ -11,17 +11,28 @@ import android.hardware.display.DisplayManager
 import android.media.MediaCodecInfo
 import android.media.MediaCodecInfo.CodecProfileLevel
 import android.media.MediaCodecList
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.io.File
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
 
 /**
  * Android helpers for Zoggyfin:
  * - the decoders of the device (MediaCodecList) for the device profile;
  * - Picture in Picture on Home for Android 8 to 11. Android 12 and later
  *   enter it automatically through expo-video (`setAutoEnterEnabled`).
+ * - `makeSeekableMp4`: a transcoded download from Jellyfin is a fragmented
+ *   MP4 with no index (no `sidx`). ExoPlayer cannot seek in it: every seek
+ *   goes to 0. The function copies the samples into a plain MP4 (MediaMuxer,
+ *   no new encoding), which ExoPlayer seeks in.
  */
 class ZoggyfinAndroidModule : Module() {
   /** Set by JavaScript while a video plays in the full player. */
@@ -42,7 +53,14 @@ class ZoggyfinAndroidModule : Module() {
       autoPictureInPicture = enabled
     }
 
+    /** "done" (rewritten), "skipped" (not fragmented) or "failed" (the file stays as it was). */
+    AsyncFunction("makeSeekableMp4") { path: String ->
+      makeSeekable(File(path.removePrefix("file://")))
+    }
+
     OnUserLeavesActivity {
+      // A permission dialog or the app settings started by the app also counts as "leaving".
+      if (SystemClock.elapsedRealtime() < pipHoldUntil) return@OnUserLeavesActivity
       if (autoPictureInPicture && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
         enterPictureInPicture()
       }
@@ -132,8 +150,123 @@ class ZoggyfinAndroidModule : Module() {
     else -> 0
   }
 
+  /** True when the file has a top-level `moof` box (a fragmented MP4). */
+  private fun isFragmented(f: File): Boolean {
+    RandomAccessFile(f, "r").use { raf ->
+      val len = raf.length()
+      var pos = 0L
+      val head = ByteArray(16)
+      var boxes = 0
+      while (pos + 8 <= len && boxes < 64) {
+        raf.seek(pos)
+        raf.readFully(head, 0, 8)
+        var size = ByteBuffer.wrap(head, 0, 4).int.toLong() and 0xffffffffL
+        val type = String(head, 4, 4, Charsets.US_ASCII)
+        if (type == "moof") return true
+        if (size == 1L) {
+          raf.readFully(head, 8, 8)
+          size = ByteBuffer.wrap(head, 8, 8).long
+        } else if (size == 0L) {
+          return false
+        }
+        if (size < 8) return false
+        pos += size
+        boxes++
+      }
+      return false
+    }
+  }
+
+  private fun makeSeekable(input: File): String {
+    if (!input.isFile) return "failed"
+    try {
+      if (!isFragmented(input)) return "skipped"
+    } catch (e: Exception) {
+      return "failed"
+    }
+    val tmp = File(input.path + ".remux")
+    val ok = try {
+      remux(input, tmp)
+    } catch (e: Exception) {
+      Log.w(TAG, "Remux failed", e)
+      false
+    }
+    if (!ok || tmp.length() == 0L || !tmp.renameTo(input)) {
+      tmp.delete()
+      return "failed"
+    }
+    return "done"
+  }
+
+  /** Copies the audio and video samples into a plain MP4 with MediaMuxer. */
+  private fun remux(input: File, output: File): Boolean {
+    val extractor = MediaExtractor()
+    var muxer: MediaMuxer? = null
+    try {
+      extractor.setDataSource(input.path)
+      val m = MediaMuxer(output.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+      muxer = m
+      val tracks = HashMap<Int, Int>()
+      var bufferSize = 1 shl 20
+      for (i in 0 until extractor.trackCount) {
+        val format = extractor.getTrackFormat(i)
+        val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+        if (!mime.startsWith("video/") && !mime.startsWith("audio/")) continue
+        extractor.selectTrack(i)
+        tracks[i] = m.addTrack(format)
+        if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+          bufferSize = maxOf(bufferSize, format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE))
+        }
+        if (mime.startsWith("video/") && format.containsKey(MediaFormat.KEY_ROTATION)) {
+          m.setOrientationHint(format.getInteger(MediaFormat.KEY_ROTATION))
+        }
+      }
+      if (tracks.isEmpty()) return false
+      m.start()
+      var buffer = ByteBuffer.allocateDirect(bufferSize)
+      val info = android.media.MediaCodec.BufferInfo()
+      while (true) {
+        val track = extractor.sampleTrackIndex
+        if (track < 0) break
+        val size = try {
+          extractor.readSampleData(buffer, 0)
+        } catch (e: IllegalArgumentException) {
+          // The sample is larger than the buffer: grow it and read again.
+          buffer = ByteBuffer.allocateDirect(buffer.capacity() * 2)
+          continue
+        }
+        if (size < 0) break
+        val out = tracks[track]
+        val time = extractor.sampleTime
+        // MediaMuxer refuses negative times (the audio priming of some encoders).
+        if (out != null && time >= 0) {
+          info.set(0, size, time, if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+          m.writeSampleData(out, buffer, info)
+        }
+        extractor.advance()
+      }
+      m.stop()
+      return true
+    } finally {
+      try {
+        muxer?.release()
+      } catch (e: Exception) {
+        // Released already.
+      }
+      extractor.release()
+    }
+  }
+
   companion object {
     private const val TAG = "ZoggyfinAndroid"
+
+    /** No Picture in Picture on "leave" before this time (elapsedRealtime ms). */
+    @Volatile var pipHoldUntil = 0L
+
+    /** The app starts its own activity (a permission dialog, the settings) now: that is not the user leaving. */
+    fun holdPictureInPicture(ms: Long = 2000) {
+      pipHoldUntil = SystemClock.elapsedRealtime() + ms
+    }
 
     private val MIMES = listOf(
       "h264" to "video/avc",

@@ -404,6 +404,7 @@ class ZoggyfinTogetherModule : Module() {
       return
     }
     try {
+      ZoggyfinAndroidModule.holdPictureInPicture()
       manager.askForPermissions(
         PermissionsResponseListener { result ->
           done(result.filter { it.value.status == PermissionsStatus.GRANTED }.keys.toSet())
@@ -422,6 +423,7 @@ class ZoggyfinTogetherModule : Module() {
     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null))
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     try {
+      ZoggyfinAndroidModule.holdPictureInPicture()
       val activity = appContext.currentActivity
       if (activity != null) activity.startActivity(intent) else ctx.startActivity(intent)
     } catch (e: Exception) {
@@ -1199,8 +1201,21 @@ class ZoggyfinTogetherModule : Module() {
       promise.reject("ERR_HOTSPOT", "Wi-Fi is not available.", null)
       return
     }
+    val airplane = airplaneModeOn()
+    if (airplane && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+      // Android 8 to 10 drop every hotspot request in airplane mode with no callback (seen on Android 9).
+      promise.reject("ERR_HOTSPOT_AIRPLANE", AIRPLANE_MESSAGE, null)
+      return
+    }
     val cb = HotspotCallback(promise)
     hotspotCallback = cb
+    // Some devices drop the request with no callback: give up after a time.
+    main.postDelayed({
+      if (hotspotCallback === cb) {
+        hotspotCallback = null
+        cb.giveUp(if (airplaneModeOn()) AIRPLANE_MESSAGE else "The hotspot did not start. Try again, or turn Wi-Fi off and on.")
+      }
+    }, HOTSPOT_TIMEOUT_MS)
     try {
       wm.startLocalOnlyHotspot(cb, main)
     } catch (e: IllegalStateException) {
@@ -1243,9 +1258,24 @@ class ZoggyfinTogetherModule : Module() {
     return if (s.length >= 2 && s.startsWith("\"") && s.endsWith("\"")) s.substring(1, s.length - 1) else s
   }
 
+  private fun airplaneModeOn(): Boolean {
+    val ctx = context() ?: return false
+    return try {
+      Settings.Global.getInt(ctx.contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0) != 0
+    } catch (e: Exception) {
+      false
+    }
+  }
+
   @TargetApi(Build.VERSION_CODES.O)
   private inner class HotspotCallback(private val promise: Promise) : WifiManager.LocalOnlyHotspotCallback() {
     private val done = AtomicBoolean(false)
+
+    /** No answer from Android in time. */
+    fun giveUp(message: String) {
+      if (done.compareAndSet(false, true)) promise.reject("ERR_HOTSPOT", message, null)
+      emit("onHotspot", mapOf("state" to "failed", "message" to message))
+    }
 
     override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation?) {
       if (hotspotCallback !== this || reservation == null) {
@@ -1284,5 +1314,8 @@ class ZoggyfinTogetherModule : Module() {
 
   companion object {
     private const val TAG = "ZoggyfinTogether"
+    private const val HOTSPOT_TIMEOUT_MS = 15_000L
+    private const val AIRPLANE_MESSAGE =
+      "Android cannot make a hotspot in airplane mode on this phone. Turn off airplane mode for the session, or let the other device make the Wi-Fi."
   }
 }

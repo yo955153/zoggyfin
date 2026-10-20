@@ -14,3 +14,7 @@ export function androidDecoders(): null {
 }
 
 export function setAutoPictureInPicture(_enabled: boolean): void {}
+
+export async function makeSeekableMp4(_path: string): Promise<'done' | 'skipped' | 'failed'> {
+  return 'skipped';
+}

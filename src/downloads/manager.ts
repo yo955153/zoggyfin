@@ -9,6 +9,7 @@
  * Collections (albums, playlists, seasons): <documents>/downloads/collections/<id>/.
  */
 import type { Api } from '@jellyfin/sdk';
+import { Platform } from 'react-native';
 
 import { buildAuthHeader } from '@/api/auth-header';
 import { getApi } from '@/api/client';
@@ -21,6 +22,7 @@ import { tokenFor, useSessionStore } from '@/auth/session-store';
 import { type ImageVariant, resolveImage } from '@/images/resolve-image';
 import { randomId } from '@/lib/id';
 import { toast } from '@/lib/toast';
+import { makeSeekableMp4 } from '@/native/zoggyfin-native';
 import { mediaCapabilities } from '@/player/capabilities';
 import { buildDeviceProfile } from '@/player/device-profile';
 import { mayHaveLyrics } from '@/player/audio/lyrics';
@@ -155,6 +157,7 @@ class DownloadManager {
     }
     await this.reattach();
     this.cleanOrphans();
+    void this.fixFragmentedVideos();
     this.tick();
     this.timer ??= setInterval(() => this.tick(), 5000);
   }
@@ -204,6 +207,24 @@ class DownloadManager {
       } else if (r.state === 'paused' && r.bytesDone > 0) {
         // The paused task is gone: a resume starts over.
         patchRecord(r.itemId, (x) => ({ ...x, bytesDone: 0 }));
+      }
+    }
+  }
+
+  /**
+   * Android: video downloads from builds before the fix are fragmented MP4
+   * files that ExoPlayer cannot seek in. Rewrites them one at a time. A file
+   * that is already plain is skipped after a short header read.
+   */
+  private async fixFragmentedVideos(): Promise<void> {
+    if (Platform.OS !== 'android') return;
+    for (const r of Object.values(downloadsState().records)) {
+      if (r.state !== 'completed' || r.kind !== 'video' || !r.mediaFile || !/\.mp4$/i.test(r.mediaFile)) continue;
+      const before = files.size(`${r.dir}/${r.mediaFile}`);
+      const fixed = await makeSeekableMp4(files.absolutePath(`${r.dir}/${r.mediaFile}`));
+      if (fixed === 'done') {
+        const after = files.size(`${r.dir}/${r.mediaFile}`) || before;
+        patchRecord(r.itemId, (x) => ({ ...x, bytesDone: after, bytesTotal: after }));
       }
     }
   }
@@ -313,6 +334,11 @@ class DownloadManager {
       if (!r || r.state === 'cancelled') {
         engine.finish(itemId);
         return;
+      }
+      if (Platform.OS === 'android' && r.kind === 'video' && r.mediaFile && /\.mp4$/i.test(r.mediaFile)) {
+        // ExoPlayer cannot seek in the fragmented MP4 of a transcode: make it a plain MP4.
+        const fixed = await makeSeekableMp4(files.absolutePath(`${r.dir}/${r.mediaFile}`));
+        if (fixed === 'failed') console.warn('[downloads] could not make the file seekable', itemId);
       }
       const size = files.size(`${r.dir}/${r.mediaFile}`) || bytes;
       if (!size) {
