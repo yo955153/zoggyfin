@@ -1,0 +1,6 @@
+First Android release.
+• Movies, shows and music from your Jellyfin server
+• Video player with Picture in Picture, audio and subtitle tracks
+• Background music with notification and lock-screen controls
+• Downloads for offline play
+• Watch together with SyncPlay and nearby sessions
