@@ -529,6 +529,14 @@ export class HostRoom {
     }
     switch (c.action) {
       case 'play':
+        // The group plays already: a second play (a double tap, a late
+        // report) only repeats the state. A new start would pause every
+        // player for the start lead, then play on.
+        if (c.position === undefined && this.wantPlaying && !this.waiting && (this.startTimer !== null || (this.anchor.playing && p.isPlaying()))) {
+          if (this.startTimer === null) this.anchor = this.currentAnchor();
+          this.broadcastState();
+          return;
+        }
         this.wantPlaying = true;
         if (c.position !== undefined) p.seek(c.position);
         if (this.blocked()) {

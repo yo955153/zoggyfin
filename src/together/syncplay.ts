@@ -33,6 +33,7 @@ import { playerState } from '@/player/store';
 import { AnchorFollower } from './anchor-follower';
 import { ClockSync, isoToMs } from './clock';
 import { IDLE } from './machine';
+import { PENDING_LIMIT, PlayIntent } from './play-intent';
 import { bindAudioPort } from './audio-binding';
 import { bindVideoPort, type BoundPort, whenPlayerReady } from './player-binding';
 import { realTimers } from './player-port';
@@ -75,8 +76,11 @@ class SyncPlayController {
     remoteNow: () => this.serverNow(),
     timers: realTimers,
     onSample: (s) => syncLog.sample(s),
+    held: () => this.intent.holdsPause,
   });
   private port: BoundPort | null = null;
+  /** What the play button shows: the group state, or this device's play or pause until the server agrees. */
+  private intent = new PlayIntent(() => Date.now());
   private target: QueueTarget | null = null;
   private timers: ReturnType<typeof setInterval>[] = [];
   private loading: string | null = null;
@@ -365,6 +369,8 @@ class SyncPlayController {
     }
     if (effect.kind !== 'anchor') return;
     this.follower.setAnchor(effect.anchor, this.audio ? (effect.track ?? this.target?.playlistItemId ?? null) : null);
+    this.intent.group(effect.anchor.playing);
+    this.showPlaying();
     if (effect.reportReady) void this.reportReadyWhenLoaded();
   }
 
@@ -522,6 +528,19 @@ class SyncPlayController {
       void this.control(c);
       return true;
     });
+    this.showPlaying();
+  }
+
+  /** The play button follows the group (and this device's last play or pause), not the engine. */
+  private showPlaying(): void {
+    controlGate.setPlaying(this.intent.value(this.follower.current?.playing ?? null));
+  }
+
+  /** A play or pause goes to the server; with no answer, the button shows the group again after `PENDING_LIMIT`. */
+  private sent(playing: boolean): void {
+    this.intent.sent(playing);
+    this.showPlaying();
+    setTimeout(() => this.showPlaying(), PENDING_LIMIT + 50);
   }
 
   private async reportReadyWhenLoaded(): Promise<void> {
@@ -555,9 +574,13 @@ class SyncPlayController {
     try {
       switch (c.action) {
         case 'play':
+          this.sent(true);
           await sp.syncPlayUnpause();
           return;
         case 'pause':
+          this.sent(false);
+          // The player holds at once; the server's Pause brings the group position.
+          this.follower.follow(false);
           await sp.syncPlayPause();
           return;
         case 'seek':
@@ -596,6 +619,7 @@ class SyncPlayController {
     syncLog.stop();
     this.stopTimers();
     this.follower.detach();
+    this.intent.clear();
     this.port?.dispose();
     this.port = null;
     this.target = null;

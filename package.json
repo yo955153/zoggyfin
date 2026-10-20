@@ -86,7 +86,8 @@
     "desktop:version": "bash desktop/scripts/version.sh",
     "site:deploy": "bash site/scripts/deploy.sh",
     "test:crypto-swift": "bash scripts/rendezvous-vectors/run.sh",
-    "bench:together": "bash scripts/together-bench/run.sh"
+    "bench:together": "bash scripts/together-bench/run.sh",
+    "stress:controls": "pnpm dlx tsx@4.20.5 --tsconfig scripts/together-bench/tsconfig.json scripts/together-bench/controls-stress.ts"
   },
   "private": true,
   "license": "MPL-2.0",

@@ -31,6 +31,12 @@ export interface AnchorFollowerDeps {
    * follower does not correct.
    */
   onTrackMismatch?(track: string, anchor: Anchor): void;
+  /**
+   * True while this device sent a pause that the group has not confirmed:
+   * the player stays paused where it is, even for an anchor that plays (a
+   * state that left the host before the pause reached it).
+   */
+  held?(): boolean;
 }
 
 export class AnchorFollower {
@@ -107,6 +113,11 @@ export class AnchorFollower {
       return;
     }
     const now = this.deps.now();
+    if (a.playing && this.deps.held?.()) {
+      this.cancelStart();
+      if (p.isPlaying()) p.pause();
+      return;
+    }
     if (!a.playing) {
       this.cancelStart();
       if (p.isPlaying()) p.pause();

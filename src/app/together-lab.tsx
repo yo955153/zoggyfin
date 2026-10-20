@@ -12,6 +12,8 @@
  * with no nearby session), spfirst (join a SyncPlay group: group=id, else the last one), spgroups.
  * Rooms: room (open an empty room), playitem (item=id: the normal Play button, so in a room it plays
  * for everyone; a guest asks the host).
+ * Controls stress (scripts/together-bench/controls-stress.ts): toggle (the play button: returns
+ * what it sent), watch (the desktop app logs each engine play state change to out.log).
  * The desktop development build runs it too (see `__togetherLab`).
  * Release builds show nothing.
  */
@@ -22,16 +24,20 @@ import { Platform, Text, View } from 'react-native';
 
 import { downloadedChildren, downloadedItem } from '@/downloads';
 import { downloadsState } from '@/downloads/store';
-import { isDesktop } from '@/platform/desktop';
+import { invoke, isDesktop } from '@/platform/desktop';
 import { getApi } from '@/api/client';
 import { getItem } from '@/api/jellyfin';
 import { useSessionStore } from '@/auth/session-store';
-import { playHere, playRouter } from '@/player';
+import { activePlayback, playHere, playRouter } from '@/player';
+import { togglePauses } from '@/player/control-gate';
+import { playerState, usePlayerStore } from '@/player/store';
 import { audioSession } from '@/player/audio/session';
 import { videoSession } from '@/player/session';
 import { nearby } from '@/together/nearby';
 import { syncPlay } from '@/together/syncplay';
 import { togetherState, useTogetherStore } from '@/together/store';
+
+let watchUnsub: (() => void) | null = null;
 
 async function run(action: string, params: Record<string, string | undefined>): Promise<string> {
   const n = nearby();
@@ -118,6 +124,21 @@ async function run(action: string, params: Record<string, string | undefined>): 
       for (let i = 0; i < 40 && !togetherState().requests.length; i++) await new Promise((r) => setTimeout(r, 250));
       for (const r of togetherState().requests) n.respond(r.inviteId, true);
       return 'accepted';
+    case 'toggle': {
+      const sent = togglePauses(playerState().playing) ? 'pause' : 'play';
+      activePlayback.togglePlay();
+      return sent;
+    }
+    case 'watch': {
+      if (!isDesktop) return 'desktop only';
+      watchUnsub?.();
+      const line = (playing: boolean) => void invoke('debug_log', { line: `ctl ${JSON.stringify({ k: 'eng', t: Date.now(), playing, pos: playerState().position })}` }).catch(() => undefined);
+      line(playerState().playing);
+      watchUnsub = usePlayerStore.subscribe((st, prev) => {
+        if (st.playing !== prev.playing) line(st.playing);
+      });
+      return 'watching';
+    }
     case 'play':
       videoSession().play_();
       return 'play';

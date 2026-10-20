@@ -27,6 +27,7 @@ import { VideoSurface } from '@/player/engine';
 import type { KeyPress } from '@/native/key-input-types';
 import { nextUpPhase, nextUpStartsAt, skipPromptAt } from '@/player/segments';
 import { videoSession } from '@/player/session';
+import { useShowsPause } from '@/player/control-gate';
 import { playerState, setPlayerState, usePlayerStore } from '@/player/store';
 import { chapterAt, formatTime } from '@/player/timeline';
 import { MAX_BITRATE, QUALITY_OPTIONS, qualityLabel, usePlaybackSettings } from '@/settings/playback';
@@ -95,6 +96,7 @@ export function PlayerScreen() {
   const status = usePlayerStore((s) => s.status);
   const error = usePlayerStore((s) => s.error);
   const playing = usePlayerStore((s) => s.playing);
+  const showsPause = useShowsPause();
   const position = usePlayerStore((s) => s.position);
   const duration = usePlayerStore((s) => s.duration);
   const buffered = usePlayerStore((s) => s.buffered);
@@ -443,8 +445,8 @@ export function PlayerScreen() {
                 <SkipNumber seconds={settings.skipBackSeconds} />
               </RoundButton>
               <RoundButton
-                icon={loading ? undefined : playing ? 'pause.fill' : 'play.fill'}
-                label={playing ? 'Pause' : 'Play'}
+                icon={loading ? undefined : showsPause ? 'pause.fill' : 'play.fill'}
+                label={showsPause ? 'Pause' : 'Play'}
                 size={player.playSize}
                 glyph={iconSize.xxl}
                 haptic

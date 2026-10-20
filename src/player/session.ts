@@ -22,7 +22,7 @@ import { isOffline } from '@/lib/online';
 import { bitrateFor, usePlaybackSettings } from '@/settings/playback';
 
 import { mediaCapabilities } from './capabilities';
-import { controlGate } from './control-gate';
+import { controlGate, togglePauses } from './control-gate';
 import { playRouter } from './play-router';
 import { buildDeviceProfile } from './device-profile';
 import { getEngine } from './engine';
@@ -541,7 +541,7 @@ class VideoSession {
   }
 
   togglePlay(): void {
-    if (playerState().playing) this.pause();
+    if (togglePauses(playerState().playing)) this.pause();
     else this.play_();
   }
 

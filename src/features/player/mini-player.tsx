@@ -11,6 +11,7 @@ import { episodeLabel } from '@/lib/format';
 import { activePlayback, openFullPlayer } from '@/player';
 import { artistLine } from '@/player/audio/item';
 import { useAudioStore } from '@/player/audio/store';
+import { useShowsPause } from '@/player/control-gate';
 import { usePlayerStore } from '@/player/store';
 
 import { createStyles, type AppTheme, font, useStyles, useTheme } from '@/theme';
@@ -30,7 +31,7 @@ export function useMiniPlayerVisible(): boolean {
  */
 export function MiniPlayer({ inline = false, floating = false }: { inline?: boolean; floating?: boolean }) {
   const now = usePlayerStore((s) => s.now);
-  const playing = usePlayerStore((s) => s.playing);
+  const showsPause = useShowsPause();
   const fraction = usePlayerStore((s) => (s.duration > 0 ? Math.min(1, s.position / s.duration) : 0));
   const styles = useStyles(makeStyles);
   const { c } = useTheme();
@@ -107,8 +108,8 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
         </Animated.View>
       </Pressable>
       <TogetherChip iconOnly={inline} />
-      <Pressable onPress={toggle} hitSlop={6} style={styles.button} accessibilityRole="button" accessibilityLabel={playing ? 'Pause' : 'Play'}>
-        <Icon name={playing ? 'pause.fill' : 'play.fill'} size={iconSize.md} color={c.text} weight="semibold" />
+      <Pressable onPress={toggle} hitSlop={6} style={styles.button} accessibilityRole="button" accessibilityLabel={showsPause ? 'Pause' : 'Play'}>
+        <Icon name={showsPause ? 'pause.fill' : 'play.fill'} size={iconSize.md} color={c.text} weight="semibold" />
       </Pressable>
       {isAudio ? (
         <Pressable onPress={() => activePlayback.next()} hitSlop={inline ? 4 : 6} style={inline ? styles.buttonSmall : styles.button} accessibilityRole="button" accessibilityLabel="Next track">

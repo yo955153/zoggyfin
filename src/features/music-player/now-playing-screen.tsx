@@ -30,6 +30,7 @@ import { currentEntry, queueSections } from '@/player/audio/queue';
 import { audioSession } from '@/player/audio/session';
 import { formatRemaining, SLEEP_MINUTES, sleepAtEnd, sleepFor, sleepOff, sleepRemaining } from '@/player/audio/sleep-timer';
 import { useAudioStore } from '@/player/audio/store';
+import { useShowsPause } from '@/player/control-gate';
 import { playerState, setPlayerState, usePlayerStore } from '@/player/store';
 import { chapterAt, formatTime } from '@/player/timeline';
 import { features } from '@/platform/tv';
@@ -96,6 +97,7 @@ function useNow(on: boolean): number {
 export function NowPlayingScreen() {
   const now = usePlayerStore((s) => s.now);
   const playing = usePlayerStore((s) => s.playing);
+  const showsPause = useShowsPause();
   const position = usePlayerStore((s) => s.position);
   const duration = usePlayerStore((s) => s.duration);
   const status = usePlayerStore((s) => s.status);
@@ -359,8 +361,8 @@ export function NowPlayingScreen() {
 
   const playButton = (
     <RoundButton
-      icon={playing ? 'pause.fill' : 'play.fill'}
-      label={playing ? 'Pause' : 'Play'}
+      icon={showsPause ? 'pause.fill' : 'play.fill'}
+      label={showsPause ? 'Pause' : 'Play'}
       size={80}
       glyph={52}
       glass={false}

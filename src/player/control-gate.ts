@@ -5,7 +5,17 @@
  * first. The session decides for the group and then changes the player
  * through `videoSession().direct` or `audioSession().direct`, which skip
  * the gate.
+ *
+ * While a session runs, the play button and Space follow what the group
+ * wants (`groupPlaying`), not the engine. The engine is paused for a moment
+ * before a planned start, while it waits for data, and (iOS) for a few
+ * frames after each rate change of the drift correction. A tap in such a
+ * moment used to send "play" to a group that played: the host then started
+ * the group again, so the video paused for half a second and played on.
  */
+import { create } from 'zustand';
+
+import { usePlayerStore } from './store';
 
 export type UserControl =
   | { action: 'play' }
@@ -38,6 +48,9 @@ export type ControlHandler = (control: UserControl) => boolean;
 
 let handler: ControlHandler | null = null;
 
+/** Play (true) or pause (false), as the group wants it; null when no session runs. */
+export const useGroupPlaying = create<{ playing: boolean | null }>(() => ({ playing: null }));
+
 export const controlGate = {
   get active(): boolean {
     return handler !== null;
@@ -47,5 +60,23 @@ export const controlGate = {
   },
   set(next: ControlHandler | null): void {
     handler = next;
+    if (!next) useGroupPlaying.setState({ playing: null });
+  },
+  /** The session tells the gate what the group wants (after each change). */
+  setPlaying(playing: boolean | null): void {
+    const value = handler ? playing : null;
+    if (useGroupPlaying.getState().playing !== value) useGroupPlaying.setState({ playing: value });
   },
 };
+
+/** True when the play button pauses (the group plays, or with no session, the engine plays). */
+export function togglePauses(enginePlaying: boolean): boolean {
+  return useGroupPlaying.getState().playing ?? enginePlaying;
+}
+
+/** For the play button: true shows "Pause". It follows the group while a session runs. */
+export function useShowsPause(): boolean {
+  const engine = usePlayerStore((s) => s.playing);
+  const group = useGroupPlaying((s) => s.playing);
+  return group ?? engine;
+}

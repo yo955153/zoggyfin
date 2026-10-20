@@ -27,7 +27,7 @@ import { readJson, writeJson } from '@/storage/json';
 import { storage } from '@/storage/kv';
 
 import { mediaCapabilities } from '../capabilities';
-import { controlGate, queueGate, type UserControl } from '../control-gate';
+import { controlGate, queueGate, togglePauses, type UserControl } from '../control-gate';
 import { buildDeviceProfile } from '../device-profile';
 import { isForeignDownload, outboxOnly, withOutbox } from '../outbox-transport';
 import { ProgressReporter, secondsToTicks, ticksToSecondsExact, toServerReport } from '../progress-reporter';
@@ -765,7 +765,7 @@ class AudioSession {
   }
 
   togglePlay(): void {
-    if (playerState().playing) this.pause();
+    if (togglePauses(playerState().playing)) this.pause();
     else this.resume();
   }
 

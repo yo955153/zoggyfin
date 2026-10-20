@@ -7,6 +7,7 @@ import { AnchorFollower, type SyncSample } from './anchor-follower';
 import { ClockSync, type ClockEstimate } from './clock';
 import { DEFAULT_DRIFT, type DriftOptions } from './drift';
 import type { Anchor, ControlAction, MediaKind, Member, Message, PickRequest, SharedQueue } from './protocol';
+import { PlayIntent } from './play-intent';
 import type { PlayerPort, Timers } from './player-port';
 import { ONLY_HOST_PICKS_TEXT } from './room-route';
 
@@ -83,6 +84,8 @@ export class Follower {
   media: number | null = null;
   /** This device cannot play the current item (or closed its player). */
   private noMedia = false;
+  /** What the play button shows: the group state, or this guest's play or pause until the host agrees. */
+  private intent: PlayIntent;
   private hello: { name: string; have: string[]; extra: { memberId?: string; canHost?: boolean; maker?: boolean } } | null = null;
 
   constructor(
@@ -90,9 +93,37 @@ export class Follower {
     drift: DriftOptions = DEFAULT_DRIFT,
   ) {
     this.anchors = new AnchorFollower(
-      { now: deps.now, remoteNow: () => this.hostNow(), timers: deps.timers, onSample: deps.onSample, onTrackMismatch: deps.onTrackMismatch },
+      {
+        now: deps.now,
+        remoteNow: () => this.hostNow(),
+        timers: deps.timers,
+        onSample: deps.onSample,
+        onTrackMismatch: deps.onTrackMismatch,
+        held: () => this.intent.holdsPause,
+      },
       drift,
     );
+    this.intent = new PlayIntent(deps.now);
+  }
+
+  /**
+   * True: the group plays (or waits for a member to play); false: it is
+   * paused; null before the first state. A play or pause that this guest
+   * sent counts until the host's state agrees (`play-intent.ts`).
+   */
+  get wantsPlay(): boolean | null {
+    return this.intent.value(this.groupPlays());
+  }
+
+  private groupPlays(): boolean | null {
+    const a = this.anchors.current;
+    return a ? a.playing || this.waiting : null;
+  }
+
+  /** A new group state: a sent control that it agrees with is done. */
+  private noteGroup(): void {
+    const g = this.groupPlays();
+    if (g !== null) this.intent.group(g);
   }
 
   /** Sends hello and starts the clock sync. */
@@ -238,6 +269,7 @@ export class Follower {
         }
         if (message.members) this.setMembers(message.members);
         this.anchors.setAnchor(message.anchor, message.track ?? null);
+        this.noteGroup();
         this.deps.onChange?.();
         return;
       case 'state':
@@ -245,6 +277,7 @@ export class Follower {
         this.seq = message.seq;
         this.waiting = message.waiting;
         this.anchors.setAnchor(message.anchor, message.track ?? (this.queue ? this.anchors.currentTrack : null));
+        this.noteGroup();
         this.deps.onChange?.();
         return;
       case 'media':
@@ -257,6 +290,7 @@ export class Follower {
         this.queue = message.queue ?? null;
         this.detachPlayer();
         this.anchors.setAnchor(message.anchor, message.track ?? null);
+        this.intent.clear();
         this.deps.onMedia?.(message);
         this.deps.onChange?.();
         return;
@@ -300,7 +334,11 @@ export class Follower {
       this.deps.onDenied?.('Only the host controls playback.');
       return false;
     }
+    if (c.action === 'play' || c.action === 'pause') this.intent.sent(c.action === 'play');
     this.deps.send({ t: 'control', ...c });
+    // A pause holds the player at once; the host's state confirms it a round trip later.
+    if (c.action === 'pause') this.anchors.follow(false);
+    this.deps.onChange?.();
     return true;
   }
 

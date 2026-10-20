@@ -489,6 +489,7 @@ class NearbyController {
       this.room?.apply(c);
       return true;
     });
+    this.publishHost();
     playRouter.set(this.router);
     this.watchHostPlayer();
     syncLog.start('host', () => ({ pos: this.port?.position() ?? 0, playing: this.port?.isPlaying() ?? false, track: this.port?.track?.() ?? null }), this.now, !t);
@@ -717,6 +718,7 @@ class NearbyController {
     const room = this.room;
     if (!room) return;
     setTogether({ members: room.memberList, waiting: room.state.waiting, onlyHostControls: room.onlyHostControls });
+    controlGate.setPlaying(room.hasMedia ? room.state.wantPlaying : null);
     this.checkBudget(room.memberList);
     // A host with every member away looks for a newer host of the same session (it took over while this device was gone).
     const anyUp = room.memberList.some((m) => !m.away);
@@ -1210,6 +1212,7 @@ class NearbyController {
     const f = this.follower;
     if (!f) return;
     const st = f.stats;
+    controlGate.setPlaying(f.wantsPlay);
     setTogether({
       members: f.members,
       onlyHostControls: f.onlyHostControls,
@@ -1305,6 +1308,7 @@ class NearbyController {
       return true;
     });
     f.attach(this.port!, local, fromServer);
+    this.publishGuest();
     const fresh = !this.loaded;
     this.loaded = true;
     syncLog.start('guest', () => ({ pos: this.port?.position() ?? 0, playing: this.port?.isPlaying() ?? false, track: this.port?.track?.() ?? null }), this.now, fresh);
