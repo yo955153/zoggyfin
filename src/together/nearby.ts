@@ -60,6 +60,8 @@ import { syncLog } from './sync-log';
 export const nearbySupported: boolean = features.watchTogether && linkNative !== null;
 
 const VIDEO_TYPES = new Set(['Movie', 'Episode', 'Video', 'MusicVideo']);
+/** A guest that streams from the host reads at most this far ahead, s (the players read 50 s or more by default). */
+const HOST_READ_AHEAD = 15;
 const SAVED_KEY = 'together.session.v1';
 
 function helpPlatform(): HelpPlatform {
@@ -879,7 +881,7 @@ class NearbyController {
   /** Plays the guest's own download, or the host's file (a short player read-ahead: the host's upload is shared). */
   private playGuestFile(item: SharedItem, uri: string, local: boolean): void {
     const record = local ? localRecord(item.id, item.serverId) : null;
-    void videoSession().playSource({ item: toBaseItem(item), uri, startSeconds: this.startPosition(), autoplay: false, record });
+    void videoSession().playSource({ item: toBaseItem(item), uri, startSeconds: this.startPosition(), autoplay: false, record, readAhead: local ? undefined : HOST_READ_AHEAD });
   }
 
   private attachGuest(f: Follower, local: boolean, fromServer = false): void {
@@ -902,7 +904,7 @@ class NearbyController {
       if (!src) return;
       const position = this.port?.position() ?? this.startPosition();
       // Play at once when the group plays: the port still reports the old player's play state.
-      void videoSession().playSource({ item: toBaseItem(item), uri: src.uri, startSeconds: position, autoplay: this.groupPlaying(), record: null });
+      void videoSession().playSource({ item: toBaseItem(item), uri: src.uri, startSeconds: position, autoplay: this.groupPlaying(), record: null, readAhead: src.local ? undefined : HOST_READ_AHEAD });
       return;
     }
     const q = this.follower?.queue;

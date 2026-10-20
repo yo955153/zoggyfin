@@ -5,7 +5,7 @@
  */
 import { createVideoPlayer, isPictureInPictureSupported, type VideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { type StyleProp, View, type ViewStyle } from 'react-native';
+import { Platform, type StyleProp, View, type ViewStyle } from 'react-native';
 
 import { setAutoPictureInPicture } from '@/native/zoggyfin-native';
 
@@ -108,6 +108,10 @@ class NativeEngine implements VideoEngine {
     this.pendingStart = source.startSeconds;
     this.pendingPlay = source.autoplay !== false;
     this.sourceReady = false;
+    // Android's default is 20 s; iOS's 0 lets AVPlayer decide (it can read minutes ahead).
+    p.bufferOptions = source.readAhead
+      ? { preferredForwardBufferDuration: source.readAhead, minBufferForPlayback: 2, waitsToMinimizeStalling: true }
+      : { preferredForwardBufferDuration: Platform.OS === 'ios' ? 0 : 20, minBufferForPlayback: 2, waitsToMinimizeStalling: true };
     p.replace({
       uri: source.uri,
       contentType: source.isHls ? 'hls' : 'progressive',

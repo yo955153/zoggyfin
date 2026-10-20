@@ -63,6 +63,9 @@ private const val BODY_CHUNK = 256 * 1024
 private const val CONNECT_TIMEOUT_MS = 10_000
 private const val FIRST_BYTES_TIMEOUT_MS = 15_000
 private const val HTTP_IDLE_TIMEOUT_MS = 300_000
+/** A paced response sends this many seconds of media at once (the player's start buffer), then `PACE_FACTOR` x the bitrate. */
+private const val PACE_BURST_SECONDS = 10.0
+private const val PACE_FACTOR = 1.5
 private const val NEARBY_WIFI_DEVICES = "android.permission.NEARBY_WIFI_DEVICES"
 private val MAGIC = byteArrayOf('Z'.code.toByte(), 'G'.code.toByte(), 'F'.code.toByte(), '1'.code.toByte())
 
@@ -130,7 +133,8 @@ class ZoggyfinTogetherModule : Module() {
   @Volatile private var bleHelper: NearbyBle? = null
   @Volatile private var wifiHelper: NearbyWifi? = null
 
-  private data class Share(val path: String, val mime: String)
+  /** `rate`: the file's bitrate in bytes per second for the pace of its responses, or 0 for no pace. */
+  private data class Share(val path: String, val mime: String, val rate: Double = 0.0)
 
   private data class PendingResolve(val info: NsdServiceInfo, val tries: Int)
 
@@ -184,6 +188,11 @@ class ZoggyfinTogetherModule : Module() {
 
     Function("shareFile") { urlPath: String, filePath: String, mimeType: String ->
       shares[urlPath] = Share(localPath(filePath), mimeType)
+    }
+
+    /** Paces the responses of a shared file to its bitrate (bytes per second; 0 removes the pace). */
+    Function("setPace") { urlPath: String, bytesPerSecond: Double ->
+      shares.computeIfPresent(urlPath) { _, s -> s.copy(rate = if (bytesPerSecond > 0) bytesPerSecond else 0.0) }
     }
 
     Function("unshareAll") {
@@ -815,12 +824,29 @@ class ZoggyfinTogetherModule : Module() {
       out.flush()
       return true
     }
+    val rate = share.rate
+    val paceStart = SystemClock.elapsedRealtime()
+    var sent = 0L
     RandomAccessFile(file, "r").use { raf ->
       raf.seek(start)
       val chunk = ByteArray(BODY_CHUNK)
       var remaining = length
       while (remaining > 0) {
         val want = if (remaining < BODY_CHUNK) remaining.toInt() else BODY_CHUNK
+        if (rate > 0) {
+          // A token bucket: the first seconds of media at once, then PACE_FACTOR x the bitrate.
+          val elapsed = (SystemClock.elapsedRealtime() - paceStart) / 1000.0
+          val over = sent + want - (rate * PACE_BURST_SECONDS + rate * PACE_FACTOR * elapsed)
+          if (over > 0) {
+            out.flush()
+            try {
+              Thread.sleep(minOf(5_000L, (over / (rate * PACE_FACTOR) * 1000).toLong() + 1))
+            } catch (e: InterruptedException) {
+              Thread.currentThread().interrupt()
+              return false
+            }
+          }
+        }
         val n = raf.read(chunk, 0, want)
         if (n <= 0) {
           out.flush()
@@ -828,6 +854,7 @@ class ZoggyfinTogetherModule : Module() {
         }
         out.write(chunk, 0, n)
         served.addAndGet(n.toLong())
+        sent += n
         remaining -= n
       }
     }

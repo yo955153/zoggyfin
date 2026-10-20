@@ -245,7 +245,9 @@ export class MpvEngine implements VideoEngine {
       await mpv.set('force-media-title', source.title);
       // Subtitles stay off until the session picks one; audio follows the plan.
       // A download plays from its file on the disk.
-      await mpv.command('loadfile', localPath(source.uri), 'replace', '-1', `start=${start.toFixed(3)},sid=no`);
+      // A stream from a nearby host reads less ahead: every guest shares the host's upload.
+      const ahead = source.readAhead ? `,cache-secs=${source.readAhead},demuxer-readahead-secs=${source.readAhead}` : '';
+      await mpv.command('loadfile', localPath(source.uri), 'replace', '-1', `start=${start.toFixed(3)},sid=no${ahead}`);
     });
   }
 

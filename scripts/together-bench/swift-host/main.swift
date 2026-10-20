@@ -1,6 +1,7 @@
 // A headless host for the media path of the benchmark: the real NearbyCore
 // and MediaServer of the app (modules/zoggyfin-native/ios), with no UI.
-// Usage: swift-host <file> <url path>
+// Usage: swift-host <file> <url path> [bytes per second]
+// With a rate, the file's responses are paced (NearbyCore.setPace).
 // Prints {"port": N} on stdout. Each "stats" line on stdin prints the CPU
 // time, the peak memory and the bytes served. "quit" (or end of stdin) stops it.
 // The advert has an empty TXT record, so the app does not show it as a session.
@@ -30,6 +31,7 @@ core.startServer(name: "zgf-bench-\(getpid())", txt: [:]) { result in
   switch result {
   case .success(let s):
     core.share(urlPath: args[2], filePath: args[1], mimeType: "video/mp4")
+    if args.count >= 4, let rate = Double(args[3]) { core.setPace(urlPath: args[2], bytesPerSecond: rate) }
     printLine(["port": s.port])
   case .failure(let e):
     FileHandle.standardError.write("server failed: \(e)\n".data(using: .utf8)!)

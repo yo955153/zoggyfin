@@ -136,6 +136,7 @@ function makeLink(): NearbyLinkNative {
     startServer: (serviceName, txt) => afterQueue<{ port: number; service: string }>('startServer', [serviceName, txt]),
     stopAdvertising: () => void queued('stopAdvertising'),
     shareFile: (urlPath, filePath, mimeType) => void queued('shareFile', [urlPath, filePath, mimeType]),
+    setPace: (urlPath, bytesPerSecond) => void queued('setPace', [urlPath, bytesPerSecond]),
     unshareAll: () => void queued('unshareAll'),
     stopServer: () => void queued('stopServer'),
 

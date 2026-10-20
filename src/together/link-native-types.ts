@@ -124,6 +124,13 @@ export interface NearbyLinkNative {
   stopAdvertising(): void;
   /** Adds a file at a URL path ("/<token>/track-3.m4a"). The path is the secret. */
   shareFile(urlPath: string, filePath: string, mimeType: string): void;
+  /**
+   * Paces each response of a shared file: the first 10 s of media (at
+   * `bytesPerSecond`, the file's bitrate) go at once, then at most 1.5 x the
+   * bitrate. One new guest or one seek then does not take the upload from
+   * the others. Optional: an older build sends at link speed.
+   */
+  setPace?(urlPath: string, bytesPerSecond: number): void;
   unshareAll(): void;
   /** Closes the port, every socket and the advert. */
   stopServer(): void;

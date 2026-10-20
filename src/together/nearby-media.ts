@@ -63,8 +63,16 @@ function ext(file: string, fallback: string): string {
   return e && e.length <= 5 && e !== file ? e : fallback;
 }
 
+/** The mean bytes per second of a file (its size over its run time), or null. */
+export function mediaBytesPerSecond(bytes: number | null | undefined, runTimeTicks: number | null | undefined): number | null {
+  if (!bytes || !runTimeTicks || bytes <= 0 || runTimeTicks <= 0) return null;
+  return bytes / (runTimeTicks / 10_000_000);
+}
+
 export interface ShareSink {
   shareFile(urlPath: string, filePath: string, mimeType: string): void;
+  /** Paces the streams of a shared file to its bitrate (link-native-types.ts). Optional: older builds have none. */
+  setPace?(urlPath: string, bytesPerSecond: number): void;
 }
 
 /**
@@ -93,6 +101,8 @@ export class HostShares {
       const e = ext(r.mediaFile, 'mp4');
       path = `/${this.token}/${this.n}.${e}`;
       this.sink.shareFile(path, pathOf(uri), mimeFor(e));
+      const rate = mediaBytesPerSecond(r.bytesTotal ?? r.bytesDone, r.item.RunTimeTicks);
+      if (rate) this.sink.setPace?.(path, rate);
     }
     this.media.set(itemId, path);
     return path;

@@ -9,6 +9,8 @@ import Network
 /// random token, so only guests that got the path from the host can read a file.
 final class SharedFiles {
   private var files: [String: (path: String, mime: String)] = [:]
+  /// The bitrate of a shared file (bytes per second), for the pace of its responses.
+  private var rates: [String: Double] = [:]
   private(set) var bytesServed: Int = 0
   private(set) var requests: Int = 0
 
@@ -17,12 +19,18 @@ final class SharedFiles {
     files[urlPath] = (filePath, mimeType)
   }
 
-  func removeAll() {
-    files.removeAll()
+  func setPace(urlPath: String, bytesPerSecond: Double) {
+    if bytesPerSecond > 0 { rates[urlPath] = bytesPerSecond } else { rates.removeValue(forKey: urlPath) }
   }
 
-  func file(for path: String) -> (path: String, mime: String)? {
-    files[path]
+  func removeAll() {
+    files.removeAll()
+    rates.removeAll()
+  }
+
+  func file(for path: String) -> (path: String, mime: String, rate: Double?)? {
+    guard let f = files[path] else { return nil }
+    return (f.path, f.mime, rates[path])
   }
 
   func count(bytes: Int) {
@@ -41,16 +49,24 @@ final class SharedFiles {
 final class HTTPConnection {
   private let connection: NWConnection
   private let files: SharedFiles
+  private let queue: DispatchQueue
   private let onClose: (HTTPConnection) -> Void
   private var buffer: Data
   private var handle: FileHandle?
   private var closed = false
   private static let chunk = 256 * 1024
+  /// A paced response sends this many seconds of media at once (the player's start buffer).
+  static let paceBurstSeconds = 10.0
+  /// Then at most this many times the bitrate.
+  static let paceFactor = 1.5
+  /// The pace of the response in progress: bytes per second of the media, start (ms), bytes sent.
+  private var pace: (rate: Double, start: Double, sent: Int64)?
 
-  init(connection: NWConnection, initial: Data, files: SharedFiles, onClose: @escaping (HTTPConnection) -> Void) {
+  init(connection: NWConnection, initial: Data, files: SharedFiles, queue: DispatchQueue, onClose: @escaping (HTTPConnection) -> Void) {
     self.connection = connection
     self.buffer = initial
     self.files = files
+    self.queue = queue
     self.onClose = onClose
   }
 
@@ -155,6 +171,7 @@ final class HTTPConnection {
         self.connection.cancel()
         return
       }
+      self.pace = file.rate.map { ($0, nearbyMonotonicMs(), 0) }
       self.pump(remaining: length)
     }
   }
@@ -169,6 +186,13 @@ final class HTTPConnection {
     }
     guard let h = handle else { return }
     let n = Int(min(Int64(Self.chunk), remaining))
+    if let wait = paceWait(next: n), wait > 0 {
+      queue.asyncAfter(deadline: .now() + wait) { [weak self] in
+        guard let self, !self.closed else { return }
+        self.pump(remaining: remaining)
+      }
+      return
+    }
     let data: Data
     do {
       data = try h.read(upToCount: n) ?? Data()
@@ -187,8 +211,19 @@ final class HTTPConnection {
         return
       }
       self.files.count(bytes: data.count)
+      self.pace?.sent += Int64(data.count)
       self.pump(remaining: remaining - Int64(data.count))
     })
+  }
+
+  /// Seconds to wait before the next `next` bytes, or nil for no pace. A token bucket: the
+  /// first `paceBurstSeconds` of media go at once, then `paceFactor` x the bitrate.
+  private func paceWait(next: Int) -> Double? {
+    guard let p = pace, p.rate > 0 else { return nil }
+    let elapsed = max(0, nearbyMonotonicMs() - p.start) / 1000
+    let allowed = p.rate * Self.paceBurstSeconds + p.rate * Self.paceFactor * elapsed
+    let over = Double(p.sent + Int64(next)) - allowed
+    return over > 0 ? over / (p.rate * Self.paceFactor) : nil
   }
 
   private func send(header status: String, headers: [String: String], then: @escaping () -> Void) {

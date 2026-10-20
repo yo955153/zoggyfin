@@ -18,6 +18,12 @@ export interface EngineSource {
   audioIndex?: number | null;
   /** Engines with `tracks`: Jellyfin indexes of the streams inside the file, in file order. */
   streams?: { audio: number[]; subtitles: number[] };
+  /**
+   * The most media the player reads ahead, seconds. Watch together sets it for
+   * a stream from a nearby host, whose upload all the guests share. Unset:
+   * the player's default.
+   */
+  readAhead?: number;
 }
 
 /** A subtitle for an engine that draws subtitles itself. */

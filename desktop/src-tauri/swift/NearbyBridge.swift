@@ -169,6 +169,8 @@ private final class NearbyBridge: NearbyEventSink {
       core.stopAdvertising()
     case "shareFile":
       core.share(urlPath: try a.string(0), filePath: try a.string(1), mimeType: try a.string(2))
+    case "setPace":
+      core.setPace(urlPath: try a.string(0), bytesPerSecond: try a.double(1))
     case "unshareAll":
       core.unshareAll()
     case "stopServer":
@@ -279,6 +281,11 @@ private struct Args {
 
   func optString(_ i: Int) -> String? {
     at(i) as? String
+  }
+
+  func double(_ i: Int) throws -> Double {
+    guard let n = at(i) as? NSNumber else { throw BridgeError("Argument \(i + 1) must be a number.") }
+    return n.doubleValue
   }
 
   func int(_ i: Int) throws -> Int {

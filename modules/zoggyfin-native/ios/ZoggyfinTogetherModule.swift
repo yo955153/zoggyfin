@@ -75,6 +75,10 @@ public class ZoggyfinTogetherModule: Module {
       self.core.share(urlPath: urlPath, filePath: filePath, mimeType: mimeType)
     }
 
+    Function("setPace") { (urlPath: String, bytesPerSecond: Double) in
+      self.core.setPace(urlPath: urlPath, bytesPerSecond: bytesPerSecond)
+    }
+
     Function("unshareAll") { self.core.unshareAll() }
 
     Function("stopServer") { self.core.stopServer() }

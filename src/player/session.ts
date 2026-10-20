@@ -336,7 +336,7 @@ class VideoSession {
    * nearby host's file (watch together). Needs no server. Progress of a
    * download goes to its own server (see `localReporter`).
    */
-  async playSource(src: { item: BaseItemDto; uri: string; startSeconds: number; autoplay: boolean; record: DownloadRecord | null }): Promise<void> {
+  async playSource(src: { item: BaseItemDto; uri: string; startSeconds: number; autoplay: boolean; record: DownloadRecord | null; readAhead?: number }): Promise<void> {
     const id = ++this.loadId;
     await this.finishCurrent();
     if (id !== this.loadId) return;
@@ -378,7 +378,7 @@ class VideoSession {
       position: src.startSeconds,
       duration: ticksToSecondsExact(item.RunTimeTicks),
     });
-    this.engine.load({ uri: src.uri, isHls: false, startSeconds: src.startSeconds, title: item.Name ?? 'Video', subtitle: subtitleLine(item), autoplay: src.autoplay });
+    this.engine.load({ uri: src.uri, isHls: false, startSeconds: src.startSeconds, title: item.Name ?? 'Video', subtitle: subtitleLine(item), autoplay: src.autoplay, readAhead: src.readAhead });
     if (r) {
       this.reporter = this.localReporter(r, item);
       this.reporter.start({ itemId: r.itemId, mediaSourceId: plan.mediaSourceId, playSessionId: null, playMethod: 'DirectPlay', canSeek: true });

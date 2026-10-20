@@ -112,6 +112,11 @@ public final class NearbyCore {
     queue.async { self.files.share(urlPath: urlPath, filePath: filePath, mimeType: mimeType) }
   }
 
+  /// Paces the responses of a shared file to its bitrate (bytes per second; 0 removes the pace).
+  public func setPace(urlPath: String, bytesPerSecond: Double) {
+    queue.async { self.files.setPace(urlPath: urlPath, bytesPerSecond: bytesPerSecond) }
+  }
+
   public func unshareAll() {
     queue.async { self.files.removeAll() }
   }
@@ -145,7 +150,7 @@ public final class NearbyCore {
         self.emit("onSocketOpen", ["socketId": id, "inbound": true])
         s.startReading(initial: data.dropFirst(4))
       } else {
-        let h = HTTPConnection(connection: conn, initial: data, files: self.files) { [weak self] c in
+        let h = HTTPConnection(connection: conn, initial: data, files: self.files, queue: self.queue) { [weak self] c in
           self?.http.removeValue(forKey: ObjectIdentifier(c))
         }
         self.http[ObjectIdentifier(h)] = h
