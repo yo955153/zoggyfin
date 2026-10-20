@@ -98,7 +98,8 @@ export interface TogetherState {
   /** A short message for the session sheet ("Only the host controls playback."). */
   notice: string | null;
   /** The session sheet: open or closed, the screen that shows it and the item it starts with. */
-  sheet: { open: boolean; where: SheetPlace; item: BaseItemDto | null };
+  /** `seq` grows on each open, so an open always shows a fresh sheet. */
+  sheet: { open: boolean; where: SheetPlace; item: BaseItemDto | null; seq: number };
   syncplay: {
     groups: SyncPlayGroupView[];
     group: SyncPlayGroupView | null;
@@ -136,7 +137,7 @@ export const initialTogether: TogetherState = {
   waiting: false,
   source: null,
   notice: null,
-  sheet: { open: false, where: 'item', item: null },
+  sheet: { open: false, where: 'item', item: null, seq: 0 },
   syncplay: { groups: [], group: null, loading: false, error: null },
   joinCode: null,
   visibleTo: [],
@@ -156,11 +157,20 @@ export const setSyncPlayView = (patch: Partial<TogetherState['syncplay']>) =>
   useTogetherStore.setState((s) => ({ syncplay: { ...s.syncplay, ...patch } }));
 
 export function openTogetherSheet(where: SheetPlace, item: BaseItemDto | null): void {
-  setTogether({ sheet: { open: true, where, item } });
+  useTogetherStore.setState((s) => ({ sheet: { open: true, where, item, seq: s.sheet.seq + 1 } }));
 }
 
 export function closeTogetherSheet(): void {
   useTogetherStore.setState((s) => ({ sheet: { ...s.sheet, open: false } }));
+}
+
+/**
+ * The screen that shows the sheet went away (the player closed or
+ * minimized under it). Mark the sheet closed, so that the next tap opens it
+ * again instead of setting an open state that is already set.
+ */
+export function releaseTogetherSheet(where: SheetPlace): void {
+  if (togetherState().sheet.open && togetherState().sheet.where === where) closeTogetherSheet();
 }
 
 /** True while a session runs (nearby or SyncPlay group). */

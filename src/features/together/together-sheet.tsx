@@ -27,7 +27,7 @@ import { wifiQr } from '@/together/join-code';
 import { canHostAudio, canHostNearby, nearby, nearbySupported } from '@/together/nearby';
 import { guestHelp, HELP_DELAY_MS, helpCopy, type HelpItem, type HelpPlatform, type NetworkInfo } from '@/together/nearby-help';
 import { linkNative } from '@/together/nearby-native';
-import { closeTogetherSheet, openTogetherSheet, type SheetPlace, type TogetherState, useTogetherStore } from '@/together/store';
+import { closeTogetherSheet, openTogetherSheet, releaseTogetherSheet, type SheetPlace, type TogetherState, useTogetherStore } from '@/together/store';
 import { canSyncPlay, syncPlay, syncPlaySupported } from '@/together/syncplay';
 import { groupStateLabel } from '@/together/syncplay-logic';
 
@@ -60,7 +60,9 @@ export function useTogetherEntry(item: BaseItemDto): TogetherEntry | null {
 /** Mount once per screen that can open the sheet; it shows only for its own screen. */
 export function TogetherSheetHost({ where }: { where: SheetPlace }) {
   const open = useTogetherStore((s) => s.sheet.open && s.sheet.where === where);
-  return open ? <TogetherSheet /> : null;
+  const seq = useTogetherStore((s) => s.sheet.seq);
+  useEffect(() => () => releaseTogetherSheet(where), [where]);
+  return open ? <TogetherSheet key={seq} /> : null;
 }
 
 /** What the sheet needs to know about this device. The preview screen gives fake values. */

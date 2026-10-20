@@ -21,7 +21,7 @@ const LINK = 'zoggyfin://join?v=1&a=172.20.1.20,10.0.0.4&p=51234&s=3f9a2c1e7b&k=
 
 const movie = { id: 'm1', name: 'Sample Movie', type: 'Movie' };
 
-const base: TogetherState = { ...initialTogether, mode: 'nearby', sheet: { open: true, where: 'item', item: null } };
+const base: TogetherState = { ...initialTogether, mode: 'nearby', sheet: { open: true, where: 'item', item: null, seq: 0 } };
 
 const hostCommon: Partial<TogetherState> = {
   role: 'host',
@@ -114,7 +114,7 @@ const STATES: Record<string, { st: Partial<TogetherState>; env: Partial<SheetEnv
     env: { platform: 'android' },
   },
   music: {
-    st: { mode: 'none', phase: IDLE, sheet: { open: true, where: 'music', item: { Id: 'a1', Name: 'Sample Song', Type: 'Audio' } }, hosts: [], browsingSince: NOW },
+    st: { mode: 'none', phase: IDLE, sheet: { open: true, where: 'music', item: { Id: 'a1', Name: 'Sample Song', Type: 'Audio' }, seq: 0 }, hosts: [], browsingSince: NOW },
     env: { platform: 'ios' },
   },
 };

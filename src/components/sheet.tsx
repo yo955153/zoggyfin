@@ -1,11 +1,14 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { isTV } from '@/platform/tv';
 import { createStyles, type AppTheme, font, motion, radius, scaled, sizes, spacing, type, useStyles } from '@/theme';
 
+import { shouldDismiss } from './sheet-dismiss';
 import { Touchable } from './touchable';
 
 const ENTER = Easing.bezier(...motion.easing.enter);
@@ -13,6 +16,9 @@ const ENTER = Easing.bezier(...motion.easing.enter);
 /**
  * A bottom sheet (web and phone; a centred panel on TV). The scrim fades,
  * the panel moves up from the bottom edge and leaves the same way, faster.
+ * A drag down on the grabber or the header closes it through `onClose`,
+ * the same path as Done, the scrim and the back button, so the caller's
+ * open state always follows.
  */
 export function Sheet({
   visible,
@@ -38,33 +44,57 @@ export function Sheet({
 }) {
   const s = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
+  const drag = useSharedValue(0);
+  const dragStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: drag.get() }],
+  }));
+  // A sheet that stays mounted starts at rest each time it shows.
+  useEffect(() => {
+    if (visible) drag.set(0);
+  }, [visible, drag]);
+  const swipe = Gesture.Pan()
+    .enabled(!isTV)
+    .activeOffsetY(8)
+    .failOffsetX([-24, 24])
+    .onUpdate((e) => drag.set(Math.max(0, e.translationY)))
+    .onEnd((e) => {
+      if (shouldDismiss(e.translationY, e.velocityY)) scheduleOnRN(onClose);
+      else drag.set(withSpring(0, { damping: 24, stiffness: 260 }));
+    });
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <Animated.View entering={FadeIn.duration(motion.duration.base)} exiting={FadeOut.duration(motion.duration.fast)} style={s.scrim}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" focusable={false} />
-      </Animated.View>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[s.host, isTV && s.hostTV]} pointerEvents="box-none">
-        <Animated.View
-          entering={SlideInDown.duration(motion.duration.base).easing(ENTER)}
-          exiting={SlideOutDown.duration(motion.duration.fast)}
-          style={[s.panel, isTV ? s.panelTV : { paddingBottom: insets.bottom + spacing.md }, fixedHeight && !isTV && s.panelFixed]}
-          accessibilityViewIsModal>
-          {isTV ? null : <View style={s.grabber} />}
-          {title || doneLabel ? (
-            <View style={s.header}>
-              <Text style={s.title} numberOfLines={1} accessibilityRole="header">
-                {title}
-              </Text>
-              {doneLabel ? (
-                <Touchable onPress={onClose} hitSlop={10} radius={8} accessibilityRole="button" accessibilityLabel={doneLabel}>
-                  <Text style={s.done}>{doneLabel}</Text>
-                </Touchable>
-              ) : null}
-            </View>
-          ) : null}
-          {children}
+      {/* Android: a Modal is its own window and needs its own gesture root. */}
+      <GestureHandlerRootView style={StyleSheet.absoluteFill}>
+        <Animated.View entering={FadeIn.duration(motion.duration.base)} exiting={FadeOut.duration(motion.duration.fast)} style={s.scrim}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" focusable={false} />
         </Animated.View>
-      </KeyboardAvoidingView>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[s.host, isTV && s.hostTV]} pointerEvents="box-none">
+          <Animated.View
+            entering={SlideInDown.duration(motion.duration.base).easing(ENTER)}
+            exiting={SlideOutDown.duration(motion.duration.fast)}
+            style={[s.panel, isTV ? s.panelTV : { paddingBottom: insets.bottom + spacing.md }, fixedHeight && !isTV && s.panelFixed, dragStyle]}
+            accessibilityViewIsModal>
+            <GestureDetector gesture={swipe}>
+              <View>
+                {isTV ? null : <View style={s.grabber} />}
+                {title || doneLabel ? (
+                  <View style={s.header}>
+                    <Text style={s.title} numberOfLines={1} accessibilityRole="header">
+                      {title}
+                    </Text>
+                    {doneLabel ? (
+                      <Touchable onPress={onClose} hitSlop={10} radius={8} accessibilityRole="button" accessibilityLabel={doneLabel}>
+                        <Text style={s.done}>{doneLabel}</Text>
+                      </Touchable>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+            </GestureDetector>
+            {children}
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -146,5 +176,8 @@ const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
     minHeight: scaled(sizes.settingsRow + 6),
     paddingRight: spacing.lg,
   },
-  rowLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.separator },
+  rowLine: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: c.separator,
+  },
 }));
