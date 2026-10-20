@@ -63,10 +63,14 @@ function leave() {
   else router.replace(useSessionStore.getState().session ? '/' : '/sign-in');
 }
 
-/** Close: stop playback and leave the player. A nearby guest also leaves the session. */
+/**
+ * Close: stop playback and leave the player. A nearby guest with an account
+ * stays in the room (the next item opens here again); a guest with no
+ * account has nothing else to do, so it leaves the session.
+ */
 function closePlayer() {
   const t = togetherState();
-  if (t.mode === 'nearby' && t.role === 'guest') void nearby().stopAll();
+  if (t.mode === 'nearby' && t.role === 'guest' && !useSessionStore.getState().session) void nearby().stopAll();
   void videoSession().stop();
   leave();
 }

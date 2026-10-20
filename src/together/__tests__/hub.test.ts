@@ -1,4 +1,4 @@
-import { joinTransport, mergeSessions, sessionHeadline, whoCanJoin } from '../hub';
+import { joinTransport, mergeSessions, playForEveryone, roomLabel, sessionHeadline, whoCanJoin } from '../hub';
 import { decode, encode, type Message } from '../protocol';
 import { HostRoom } from '../room';
 import { initialTogether, type NearbyHost } from '../store';
@@ -92,5 +92,41 @@ describe('HostRoom.expel', () => {
     expect(room.expel('m1', 'The host removed you from the session.')).toBe('peer1');
     expect(room.memberList).toEqual([]);
     expect(sent.some((x) => x.m.t === 'removed' && x.to?.[0] === 'peer1')).toBe(true);
+  });
+});
+
+describe('rooms in the hub', () => {
+  const base = { ...initialTogether, mode: 'nearby' as const };
+
+  it('the room bar says what plays, or who picks', () => {
+    expect(roomLabel(initialTogether)).toBeNull();
+    expect(roomLabel({ ...base, role: 'host', phase: { name: 'hosting', sessionId: 's' }, members: [] })).toBe('Together · 1 person · Pick something to play');
+    const two = [
+      { id: 'a', name: 'Sam · iPad', local: false },
+      { id: 'b', name: 'Kim · Pixel', local: false },
+    ];
+    expect(roomLabel({ ...base, role: 'host', phase: { name: 'hosting', sessionId: 's' }, members: two, item: { id: 'f', name: 'Dune', type: 'Movie' } })).toBe('Together · Dune · 3 people');
+    expect(roomLabel({ ...base, role: 'guest', phase: { name: 'joined', hostPeerId: 'p', hostName: 'Sam · iPhone', sessionId: 's' }, hostName: 'Sam · iPhone' })).toBe(
+      'Together · Waiting for Sam to pick something',
+    );
+    expect(roomLabel({ ...base, role: 'host', phase: { name: 'hosting', sessionId: 's' }, requests: [{ inviteId: 'i', peerId: 'p', name: 'Kim · Pixel', have: false }] })).toBe(
+      'Together · Kim wants to join',
+    );
+    // Audio: the album, not the track.
+    expect(roomLabel({ ...base, role: 'host', phase: { name: 'hosting', sessionId: 's' }, item: { id: 't', name: 'Song', type: 'Audio', album: 'Blue' } })).toBe('Together · Blue · 1 person');
+  });
+
+  it('item pages: Play for everyone, or only the host picks', () => {
+    expect(playForEveryone(initialTogether)).toBeNull();
+    expect(playForEveryone({ ...base, role: 'host', phase: { name: 'hosting', sessionId: 's' } })).toEqual({ label: 'Play for everyone', locked: false });
+    const joined = { name: 'joined' as const, hostPeerId: 'p', hostName: 'Sam', sessionId: 's' };
+    expect(playForEveryone({ ...base, role: 'guest', phase: joined, onlyHostControls: false })).toEqual({ label: 'Play for everyone', locked: false });
+    expect(playForEveryone({ ...base, role: 'guest', phase: joined, onlyHostControls: true })).toEqual({ label: 'Only the host picks', locked: true });
+  });
+
+  it('an empty room offers both transports and starts nearby', () => {
+    const w = whoCanJoin({ nearbyOn: true, signedIn: true, offline: false, serverName: 'Home', onServer: true, downloaded: false, room: true });
+    expect(w.options.map((o) => o.id)).toEqual(['nearby', 'server']);
+    expect(w.initial).toBe('nearby');
   });
 });

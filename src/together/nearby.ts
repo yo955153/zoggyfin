@@ -19,16 +19,18 @@ import { Platform } from 'react-native';
 import type { BaseItemDto } from '@/api/types';
 import { clientIdentity } from '@/auth/identity';
 import { useSessionStore } from '@/auth/session-store';
-import { localFileFor } from '@/downloads';
 import { randomId } from '@/lib/id';
 import { checkServer, useOnlineStore } from '@/lib/online';
 import { toast } from '@/lib/toast';
 import { features } from '@/platform/tv';
+import { isAudioItem, playHere, type PlayRequest } from '@/player';
+import type { AudioItem } from '@/player/audio/item';
 import { audioSession } from '@/player/audio/session';
 import { audioState } from '@/player/audio/store';
 import { controlGate, queueGate, type UserControl } from '@/player/control-gate';
 import { videoSession } from '@/player/session';
-import { playerState } from '@/player/store';
+import { type PlayRoute, playRouter } from '@/player/play-router';
+import { type NowPlaying, playerState, usePlayerStore } from '@/player/store';
 import { networkSource } from '@/servers/network-source';
 import { readJson, writeJson } from '@/storage/json';
 import { storage } from '@/storage/kv';
@@ -48,13 +50,28 @@ import { linkNative } from './nearby-native';
 import { visibleTo, type HelpPlatform } from './nearby-help';
 import { bindVideoPort, type BoundPort, whenPlayerReady } from './player-binding';
 import { realTimers } from './player-port';
-import { type Advert, type Anchor, decodeAdvert, encodeAdvert, type JoinContext, type MediaKind, type Member, type Message, type SharedItem, type SharedQueue } from './protocol';
+import {
+  type Advert,
+  type Anchor,
+  decodeAdvert,
+  encodeAdvert,
+  type JoinContext,
+  type MediaKind,
+  type Member,
+  type Message,
+  type PickRequest,
+  type SharedItem,
+  type SharedQueue,
+  type StreamRef,
+} from './protocol';
 import { afterHostLoss, handoverAnchor, handoverJump, REJOIN_WINDOW, retryDelay, shouldRetry } from './recovery';
 import { createRendezvous, decodeInfo, encodeInfo, type Rendezvous, type RendezvousEffect } from './rendezvous';
 import { generateKeyPair } from './rendezvous-crypto';
 import { deviceKey, type Findable, isFinalRefusal, JoinGate, MAX_GUESTS, REFUSAL_TEXT } from './join-gate';
-import { HostRoom } from './room';
-import { closeTogetherSheet, initialTogether, openTogetherSheet, type SavedSession, setTogether, togetherState } from './store';
+import { HostRoom, IDLE_PORT, type RoomMedia } from './room';
+import { guestKeyOf, mediaKey, requestOfPick, type RoomRole, routeInRoom } from './room-route';
+import { shortName } from './hub';
+import { closeTogetherSheet, initialTogether, openTogetherSheet, type SavedSession, setTogether, type SheetPlace, togetherState } from './store';
 import { syncLog } from './sync-log';
 
 /** True where nearby mode can run: an app with the nearby module (iOS, iPadOS, Android, the Mac app), not TV. */
@@ -64,6 +81,8 @@ const VIDEO_TYPES = new Set(['Movie', 'Episode', 'Video', 'MusicVideo']);
 /** A guest that streams from the host reads at most this far ahead, s (the players read 50 s or more by default). */
 const HOST_READ_AHEAD = 15;
 const SAVED_KEY = 'together.session.v1';
+/** Nothing plays this long on the host: the room has no item, ms. */
+const EMPTY_AFTER = 4000;
 
 function helpPlatform(): HelpPlatform {
   if (Platform.OS === 'android') return 'android';
@@ -156,6 +175,10 @@ class NearbyController {
   private joinAdvert: Advert | null = null;
   private loadToken = 0;
   private loaded = false;
+  /** The guest got its first welcome (a later one is a relink). */
+  private welcomed = false;
+  /** The guest's key of the room's item that it plays or loads (see `guestKeyOf`). */
+  private guestKey: string | null = null;
   private reconnect: { since: number; attempt: number; timer: ReturnType<typeof setTimeout> | null; trying: boolean; oldHostId: string | null } | null = null;
   private gaplessTimer: ReturnType<typeof setTimeout> | null = null;
   private moving: string | null = null;
@@ -267,49 +290,101 @@ class NearbyController {
   // ---- Host ----------------------------------------------------------------------
 
   /**
-   * Starts a session for a video: a download, or a stream from the host's
-   * server. Starts the player (paused) when it plays something else.
+   * Opens a room: a session with no item yet. The host then plays anything
+   * with the normal app, and the room shares it (see `watchHostPlayer`).
+   * `adopt`: the room starts with what plays now (the pill in a player).
+   * Returns true when the room is open.
    */
-  async host(item: BaseItemDto, resume?: SavedSession): Promise<void> {
-    const r = localRecord(item.Id);
-    if (!this.native || (!r && !streamsFromServer(item))) {
-      toast('Download this item first, or sign in to its server.');
-      return;
+  async openRoom(opts: { adopt?: boolean; resume?: SavedSession } = {}): Promise<boolean> {
+    if (!this.native) {
+      toast('Nearby sessions do not work here.');
+      return false;
     }
     if (togetherState().mode !== 'none') await this.stopAll();
-    if (playerState().now?.item.Id !== item.Id) {
-      if (r) {
-        const uri = localFileFor(r.itemId)!;
-        const start = (r.item.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
-        void videoSession().playSource({ item: r.item, uri, startSeconds: start, autoplay: false, record: r });
-      } else {
-        void videoSession().play({ item, autoplay: false });
-      }
-      router.navigate('/player');
-      await whenPlayerReady();
-    }
-    const port = bindVideoPort((c) => this.room?.apply(c), { endPauses: true });
-    await this.startHosting({ kind: 'video', item, port, resume });
+    await this.startHosting({ adopt: !!opts.adopt, resume: opts.resume });
+    return !!this.room;
   }
 
-  /** Starts a session for the audio queue that plays now. */
+  /** Opens a room with this video (the together lab). */
+  async host(item: BaseItemDto, resume?: SavedSession): Promise<void> {
+    if (!(await this.openRoom({ resume }))) return;
+    playHere({ item, autoplay: false });
+  }
+
+  /** Opens a room with the audio queue that plays now. */
   async hostAudio(resume?: SavedSession): Promise<void> {
-    if (!this.native || !canHostAudio()) {
+    if (!canHostAudio()) {
       toast('Play some music or an audiobook first.');
       return;
     }
-    if (togetherState().mode !== 'none') await this.stopAll();
-    const cur = audioState().queue.entries[audioState().queue.index];
-    const port = bindAudioPort((c) => this.room?.apply(c));
-    await this.startHosting({ kind: 'audio', item: cur?.item ?? null, port, resume });
+    await this.openRoom({ adopt: true, resume });
+  }
+
+  /** The room media for what the player plays now, with a port bound to that player; null when nothing plays. */
+  private buildMedia(): (RoomMedia & { port: BoundPort; binding: { dispose(): void } | null; mbps: number | null }) | null {
+    const now = playerState().now;
+    const shares = this.shares;
+    if (!now || !shares) return null;
+    const audioShare = (e: { item: AudioItem }) => sharedAudioItem(e.item, { path: shares.mediaPath(e.item.Id, e.item.ServerId), art: shares.artPath(e.item.AlbumId ?? e.item.Id) });
+    if (now.kind === 'audio') {
+      const cur = audioState().queue.entries[audioState().queue.index];
+      if (!cur) return null;
+      const queue = hostQueue(audioShare);
+      const port = bindAudioPort((c) => this.room?.apply(c));
+      return { kind: 'audio', item: audioShare(cur), stream: null, queue, player: port, port, binding: queue, mbps: null };
+    }
+    const it = now.item;
+    const r = localRecord(it.Id);
+    const activeServerId = useSessionStore.getState().session?.serverId ?? null;
+    let item: SharedItem;
+    let stream: StreamRef | null = null;
+    let mbps: number | null = null;
+    if (r) {
+      const path = shares.mediaPath(r.itemId);
+      item = {
+        id: r.itemId,
+        serverId: r.serverId || null,
+        name: it.Name ?? r.item.Name ?? 'Video',
+        type: it.Type ?? r.item.Type ?? 'Video',
+        seriesName: it.SeriesName ?? r.item.SeriesName ?? null,
+        runTimeTicks: it.RunTimeTicks ?? r.item.RunTimeTicks ?? null,
+        mediaSourceId: r.mediaSourceId,
+        container: r.mediaFile.split('.').pop() ?? 'mp4',
+        path,
+        art: shares.artPath(r.itemId),
+      };
+      if (path && this.serviceName) stream = { service: this.serviceName, path };
+      mbps = fileBitrateMbps(r.bytesTotal ?? r.bytesDone, it.RunTimeTicks ?? r.item.RunTimeTicks);
+    } else {
+      // The host streams it from its server: guests that are signed in there do the same.
+      item = {
+        id: it.Id ?? 'video',
+        serverId: it.ServerId ?? activeServerId,
+        name: it.Name ?? 'Video',
+        type: it.Type ?? 'Video',
+        seriesName: it.SeriesName ?? null,
+        runTimeTicks: it.RunTimeTicks ?? null,
+        mediaSourceId: now.plan.mediaSourceId || (it.MediaSources?.[0]?.Id ?? null),
+        container: null,
+        path: null,
+        art: null,
+      };
+    }
+    const port = bindVideoPort((c) => this.room?.apply(c), { endPauses: true });
+    return { kind: 'video', item, stream, player: port, port, binding: null, mbps };
+  }
+
+  /** The title of a room for the advert, the saved session and the sheet. */
+  private titleOf(kind: MediaKind, item: SharedItem | null): string {
+    if (!item) return '';
+    if (kind === 'audio') return audioState().queue.source?.name ?? item.album ?? item.name;
+    return item.name;
   }
 
   private async startHosting(opts: {
-    kind: MediaKind;
-    item: BaseItemDto | null;
-    port: BoundPort;
+    adopt?: boolean;
     resume?: SavedSession;
-    takeover?: { anchor: Anchor; members: Member[]; epoch: number; sessionId: string; key: string; title: string; itemId: string | null };
+    takeover?: { anchor: Anchor; members: Member[]; epoch: number; sessionId: string; key: string; media: number | null };
   }): Promise<void> {
     const n = this.native!;
     this.ensureLink();
@@ -318,21 +393,20 @@ class NearbyController {
     const key = t?.key ?? opts.resume?.key ?? newSessionKey(this.random);
     const epoch = t?.epoch ?? opts.resume?.epoch ?? 0;
     if (opts.resume) this.memberId = opts.resume.memberId;
-    const title = t?.title ?? (opts.kind === 'audio' ? (audioState().queue.source?.name ?? opts.item?.Album ?? opts.item?.Name ?? 'Music') : (opts.item?.Name ?? 'Video'));
-    const itemId = t?.itemId ?? (opts.kind === 'video' ? (opts.item?.Id ?? null) : null);
-    this.session = { id: sessionId, key, epoch, kind: opts.kind, title, itemId };
     this.codeKey = hex(this.random(10));
+    this.serviceName = `zgf-${hex(this.random(4))}`;
 
     // The port first: starting it clears the shared files.
-    const videoRecord = opts.kind === 'video' ? localRecord(itemId) : null;
-    // A video with no download: the host streams it from its server, and so do guests that are signed in there.
-    const streamedVideo = opts.kind === 'video' && !videoRecord && opts.item ? opts.item : null;
+    const now = playerState().now;
+    const startWith = (opts.adopt || t) && now ? now : null;
     const activeServerId = useSessionStore.getState().session?.serverId ?? null;
-    const curEntry = opts.kind === 'audio' ? audioState().queue.entries[audioState().queue.index] : undefined;
-    const advertItemId = videoRecord?.itemId ?? streamedVideo?.Id ?? curEntry?.item.Id ?? 'queue';
-    const advertServerId = videoRecord ? videoRecord.serverId || null : streamedVideo ? (streamedVideo.ServerId ?? activeServerId) : (curEntry?.item.ServerId ?? null);
-    this.serviceName = `zgf-${hex(this.random(4))}`;
-    const advert = encodeAdvert({ sessionId, hostName: displayName(), itemId: advertItemId, itemName: title, serverId: advertServerId, kind: opts.kind, epoch });
+    const curEntry = startWith?.kind === 'audio' ? audioState().queue.entries[audioState().queue.index] : undefined;
+    const kind: MediaKind = startWith?.kind ?? 'video';
+    const r = startWith?.kind === 'video' ? localRecord(startWith.item.Id) : null;
+    const advertItemId = startWith ? (startWith.kind === 'audio' ? (curEntry?.item.Id ?? 'queue') : (startWith.item.Id ?? 'video')) : 'room';
+    const advertServerId = startWith ? (r ? r.serverId || null : (startWith.item.ServerId ?? activeServerId)) : activeServerId;
+    const advertTitle = startWith ? (startWith.kind === 'audio' ? (audioState().queue.source?.name ?? startWith.item.Album ?? startWith.item.Name ?? 'Music') : (startWith.item.Name ?? 'Video')) : '';
+    const advert = encodeAdvert({ sessionId, hostName: displayName(), itemId: advertItemId, itemName: advertTitle, serverId: advertServerId, kind, epoch });
     try {
       // "Only with my code": the port opens with no advert, so nobody nearby sees the session, not even for a moment.
       const unlisted = this.nextFindable === 'code';
@@ -343,63 +417,21 @@ class NearbyController {
       // An older build has no unlisted start: stop its advert at once.
       if (unlisted && !n.startServerUnlisted) n.stopAdvertising();
     } catch (e) {
-      opts.port.dispose();
       this.session = null;
       toast(`Could not start the nearby session: ${e instanceof Error ? e.message : String(e)}`, { icon: 'exclamationmark.triangle' });
       return;
     }
 
     this.shares = new HostShares(n, hex(this.random(12)));
-    const shares = this.shares;
-    // The shared item of a video session, and the queue of an audio session.
-    let shared: SharedItem;
-    let stream: { service: string; path: string } | null = null;
-    if (videoRecord) {
-      const r = videoRecord;
-      const path = shares.mediaPath(r.itemId);
-      const it = opts.item ?? r.item;
-      shared = {
-        id: r.itemId,
-        serverId: r.serverId || null,
-        name: it.Name ?? 'Video',
-        type: it.Type ?? 'Video',
-        seriesName: it.SeriesName ?? null,
-        runTimeTicks: it.RunTimeTicks ?? null,
-        mediaSourceId: r.mediaSourceId,
-        container: r.mediaFile.split('.').pop() ?? 'mp4',
-        path,
-        art: shares.artPath(r.itemId),
-      };
-      if (path) stream = { service: this.serviceName, path };
-      this.fileMbps = fileBitrateMbps(r.bytesTotal ?? r.bytesDone, it.RunTimeTicks ?? r.item.RunTimeTicks);
-    } else if (streamedVideo) {
-      const it = streamedVideo;
-      shared = {
-        id: it.Id ?? itemId ?? 'video',
-        serverId: it.ServerId ?? activeServerId,
-        name: it.Name ?? 'Video',
-        type: it.Type ?? 'Video',
-        seriesName: it.SeriesName ?? null,
-        runTimeTicks: it.RunTimeTicks ?? null,
-        mediaSourceId: it.MediaSources?.[0]?.Id ?? null,
-        container: null,
-        path: null,
-        art: null,
-      };
-    } else {
-      shared = curEntry
-        ? sharedAudioItem(curEntry.item, { path: shares.mediaPath(curEntry.item.Id, curEntry.item.ServerId), art: shares.artPath(curEntry.item.AlbumId ?? curEntry.item.Id) })
-        : { id: 'queue', name: title, type: 'Audio' };
-    }
-    const queue =
-      opts.kind === 'audio'
-        ? hostQueue((e) => sharedAudioItem(e.item, { path: shares.mediaPath(e.item.Id, e.item.ServerId), art: shares.artPath(e.item.AlbumId ?? e.item.Id) }))
-        : undefined;
-    this.hostQueueBinding = queue ?? null;
-    this.streamable = opts.kind === 'video' && stream !== null;
+    const media = startWith ? this.buildMedia() : null;
+    this.port = media?.port ?? null;
+    this.hostQueueBinding = media?.binding ?? null;
+    this.fileMbps = media?.mbps ?? null;
+    this.streamable = media?.kind === 'video' && media.stream !== null;
     this.lastWarning = null;
+    const title = this.titleOf(kind, media?.item ?? null);
+    this.session = { id: sessionId, key, epoch, kind, title, itemId: media?.kind === 'video' ? media.item.id : null };
 
-    this.port = opts.port;
     this.gate = new JoinGate(this.now);
     this.gate.locked = false;
     if (this.expiryTimer) clearInterval(this.expiryTimer);
@@ -408,27 +440,32 @@ class NearbyController {
       {
         send: this.send,
         now: this.now,
-        player: opts.port,
+        player: media?.player ?? IDLE_PORT,
         timers: realTimers,
         onChange: () => this.publishHost(),
         onDenied: () => undefined,
         pong: (peer, id, t0, t1) => this.link?.sendPong(peer, id, t0, t1),
+        onPick: (memberId, name, pick) => this.onPick(memberId, name, pick),
+        drop: (peer) => setTimeout(() => this.link?.drop(peer), 300),
       },
       {
         sessionId,
-        item: shared,
-        stream,
+        item: media?.item ?? null,
+        stream: media?.stream ?? null,
         onlyHostControls: togetherState().onlyHostControls,
-        kind: opts.kind,
-        queue,
+        kind,
+        queue: media?.queue,
         key,
         epoch,
         hostId: this.memberId,
         anchor: t?.anchor,
         members: t?.members,
+        media: t?.media ?? undefined,
       },
     );
-    setTogether({ mode: 'nearby', role: 'host', kind: opts.kind, item: shared, hostName: displayName(), requests: [], notice: null, rejoin: null });
+    if (media) this.room.setGroupRate(playerState().rate || 1);
+    this.hostKey = media ? mediaKey(playerState().now) : null;
+    setTogether({ mode: 'nearby', role: 'host', kind, item: media?.item ?? null, hostName: displayName(), requests: [], notice: null, rejoin: null });
     if (t) this.dispatch({ type: 'PROMOTED' });
     else {
       setTogether({ phase: IDLE });
@@ -438,12 +475,169 @@ class NearbyController {
       this.room?.apply(c);
       return true;
     });
+    playRouter.set(this.router);
+    this.watchHostPlayer();
     syncLog.start('host', () => ({ pos: this.port?.position() ?? 0, playing: this.port?.isPlaying() ?? false, track: this.port?.track?.() ?? null }), this.now, !t);
     this.save('host', displayName());
     this.publishHost();
     void this.refreshHostFacts();
     if (togetherState().findable !== 'code') void this.startBleHost();
   }
+
+  // ---- Host: the room follows the player ------------------------------------------
+
+  /** The media key of the room now: what the host's player plays when the room took it. */
+  private hostKey: string | null = null;
+  private emptyTimer: ReturnType<typeof setTimeout> | null = null;
+  private unwatchHost: (() => void) | null = null;
+  /** A guest's pick that plays now: the room names the guest in the `media` message. */
+  private pendingPick: { memberId: string; name: string } | null = null;
+
+  /**
+   * The host's player is the source of the room. Whatever it plays (a Play
+   * button, the next episode, autoplay, a guest's pick) becomes the room's
+   * item once it has loaded. While it loads, the group pauses. When nothing
+   * plays for a moment (the player closed), the room has no item.
+   */
+  private watchHostPlayer(): void {
+    this.unwatchHost?.();
+    this.unwatchHost = usePlayerStore.subscribe((st) => this.onHostPlayer(st.now, st.status));
+  }
+
+  private onHostPlayer(now: NowPlaying | null, status: string): void {
+    if (!this.room) return;
+    const key = mediaKey(now);
+    if (key !== null && key === this.hostKey) {
+      this.clearEmptyTimer();
+      return;
+    }
+    if (key === null) {
+      this.suspendHost();
+      // A change from video to audio passes through "nothing plays": wait a moment first.
+      this.emptyTimer ??= setTimeout(() => {
+        this.emptyTimer = null;
+        if (!mediaKey(playerState().now) && this.room?.hasMedia) this.toEmptyRoom();
+      }, EMPTY_AFTER);
+      return;
+    }
+    this.clearEmptyTimer();
+    if (status === 'ready' || status === 'buffering') this.adoptHostMedia();
+    else this.suspendHost();
+  }
+
+  private clearEmptyTimer(): void {
+    if (this.emptyTimer) clearTimeout(this.emptyTimer);
+    this.emptyTimer = null;
+  }
+
+  /** Lets the room's port and queue go (the player loads something else). */
+  private releaseHostMedia(): void {
+    this.port?.dispose();
+    this.port = null;
+    this.hostQueueBinding?.dispose();
+    this.hostQueueBinding = null;
+  }
+
+  /** The host's player loads something new: the group pauses until it is ready. */
+  private suspendHost(): void {
+    if (!this.port && this.hostKey === null) return;
+    this.releaseHostMedia();
+    this.hostKey = null;
+    this.room?.suspend();
+  }
+
+  /** The room takes what the host's player plays now. `keep`: it plays already, the group takes its state. */
+  private adoptHostMedia(opts: { keep?: boolean } = {}): void {
+    const room = this.room;
+    if (!room) return;
+    this.releaseHostMedia();
+    const media = this.buildMedia();
+    if (!media) {
+      this.toEmptyRoom();
+      return;
+    }
+    this.port = media.port;
+    this.hostQueueBinding = media.binding;
+    this.fileMbps = media.mbps;
+    this.streamable = media.kind === 'video' && media.stream !== null;
+    this.hostKey = mediaKey(playerState().now);
+    const pick = this.pendingPick;
+    this.pendingPick = null;
+    room.setGroupRate(playerState().rate || 1);
+    room.setMedia(media, { keep: opts.keep, by: pick?.memberId });
+    this.roomChanged(media.kind, media.item);
+    this.ev('room media', { kind: media.kind, item: media.item.id, by: pick?.name });
+  }
+
+  /** The room has no item now. */
+  private toEmptyRoom(): void {
+    const room = this.room;
+    if (!room) return;
+    this.releaseHostMedia();
+    this.hostKey = null;
+    this.streamable = false;
+    room.setMedia(null);
+    this.roomChanged(room.kind, null);
+  }
+
+  /** The session facts after the room's item changed. */
+  private roomChanged(kind: MediaKind, item: SharedItem | null): void {
+    const s = this.session;
+    if (s) this.session = { ...s, kind, title: this.titleOf(kind, item), itemId: kind === 'video' ? (item?.id ?? null) : null };
+    setTogether({ kind, item });
+    this.save('host', displayName());
+    this.publishHost();
+  }
+
+  /** Where the session sheet opens now: on the player that shows, else over the app. */
+  private sheetPlace(): SheetPlace {
+    if (playerState().presentation === 'full') return playerState().now?.kind === 'audio' ? 'music' : 'player';
+    return 'room';
+  }
+
+  /** A guest picked something for everyone. The host plays it here, and the room shares it. */
+  private onPick(memberId: string, name: string, pick: PickRequest): void {
+    const request = requestOfPick(pick);
+    const why = this.cannotPlayHere(request);
+    const peer = this.room?.peerOf(memberId) ?? null;
+    if (why) {
+      if (peer) this.send({ t: 'denied', reason: why }, [peer]);
+      return;
+    }
+    const audio = isAudioItem(request.item);
+    // A new queue for the music that plays: the next queue message names the guest. Else the `media` message does.
+    if (audio && this.room?.kind === 'audio' && this.room.hasMedia) this.room.markQueuePick(memberId);
+    else this.pendingPick = { memberId, name };
+    // From video to music: the video player closes first.
+    if (audio && playerState().presentation === 'full' && playerState().now?.kind === 'video') leavePlayer();
+    toast(`${shortName(name)} picked ${pick.item.name || 'something'}`, { icon: 'person.2.fill' });
+    playHere(audio ? request : { ...request, autoplay: false });
+  }
+
+  /** Why the host cannot play a guest's pick, or null when it can. */
+  private cannotPlayHere(request: PlayRequest): string | null {
+    const item = request.list?.[request.index ?? 0] ?? request.item;
+    if (localRecord(item.Id) || localRecord(request.item.Id)) return null;
+    const session = useSessionStore.getState().session;
+    if (session && (!item.ServerId || item.ServerId === session.serverId)) return null;
+    return `${displayName()} cannot play this: it is not on their server or in their downloads.`;
+  }
+
+  /** The play router of a nearby session (see play-router.ts). */
+  private readonly router: PlayRoute = {
+    route: (request) => {
+      const f = this.follower;
+      const who: RoomRole = this.room ? { role: 'host' } : f ? { role: 'guest', onlyHostControls: f.onlyHostControls } : { role: 'none' };
+      const r = routeInRoom(who, request, isAudioItem(request.item));
+      if (r.kind === 'here') return r.request;
+      // A guest asks the host; the host may still say no (`denied` comes back as a toast).
+      if (r.kind === 'pick') f?.pick(r.pick);
+      else toast(r.reason, { icon: 'lock.fill' });
+      return null;
+    },
+    autoplay: () => !!this.room,
+    queueLock: () => (this.follower && !this.room ? 'The host picks what plays in this session.' : null),
+  };
 
   /** The join code and the "Visible to" lines. */
   private async refreshHostFacts(): Promise<void> {
@@ -502,7 +696,7 @@ class NearbyController {
     }
     const req = { inviteId: peerId, peerId, name: ctx.name, have: ctx.have, code, device: deviceKey(peerId, ctx.memberId, ctx.device), at: this.now() };
     setTogether({ requests: [...togetherState().requests.filter((r) => r.peerId !== peerId), req] });
-    toast(`${req.name} wants to join you`, { icon: 'person.2.fill', action: { label: 'View', onPress: () => openTogetherSheet(this.session?.kind === 'audio' ? 'music' : 'player', null) } });
+    toast(`${req.name} wants to join you`, { icon: 'person.2.fill', action: { label: 'View', onPress: () => openTogetherSheet(this.sheetPlace(), null) } });
   }
 
   respond(inviteId: string, accept: boolean, reason?: string): void {
@@ -776,20 +970,13 @@ class NearbyController {
       return;
     }
     if (!this.follower || peerId !== this.hostPeer) return;
+    // A welcome after a relink can bring another item (the room moved on while the link was down).
+    const plan = m.t === 'welcome' ? this.planWelcome(m) : null;
     this.follower.receive(m, receivedAt);
-    if (m.t === 'welcome') {
-      const relink = this.loaded;
-      const newHost = !!this.session && (m.epoch ?? 0) !== this.session.epoch;
-      this.session = { id: m.sessionId, key: m.key ?? this.session?.key ?? '', epoch: m.epoch ?? 0, kind: m.kind ?? 'video', title: m.kind === 'audio' ? (this.joinAdvert?.itemName ?? m.item.name) : m.item.name, itemId: m.kind === 'audio' ? null : m.item.id };
-      if (!relink) this.dispatch({ type: 'WELCOME', sessionId: m.sessionId });
-      setTogether({ item: m.item, kind: m.kind ?? 'video', onlyHostControls: m.onlyHostControls });
-      this.save('guest', togetherState().hostName ?? 'Host');
-      if (!relink) {
-        if ((m.kind ?? 'video') === 'video') void this.loadGuestVideo(m.item);
-        // Audio loads on the queue (follower → onQueue).
-      } else if (newHost && togetherState().source === 'stream') {
-        void this.reloadStream(m.item);
-      }
+    if (m.t === 'welcome' && plan) {
+      this.afterWelcome(m, plan);
+    } else if (m.t === 'queue' && m.by) {
+      this.pickNote(m.by, m.queue.entries[m.queue.index]?.item.album ?? m.queue.entries[m.queue.index]?.item.name ?? 'music');
     } else if (m.t === 'removed') {
       // The host removed this device: no reconnect, and say so plainly.
       this.dispatch({ type: 'HOST_ENDED' });
@@ -799,6 +986,126 @@ class NearbyController {
       const p = togetherState().phase;
       this.closeGuest(p.name === 'ended' ? p.message : 'The session ended.');
     }
+  }
+
+  /** Before the follower reads a welcome: is it the first one, the same item again, or another item? */
+  private planWelcome(m: Extract<Message, { t: 'welcome' }>): 'first' | 'same' | 'switch' {
+    if (!this.welcomed) return 'first';
+    const key = guestKeyOf(m.kind ?? 'video', m.item);
+    if (key === this.guestKey) return 'same';
+    // The audio queue of the welcome must load as a new item, not update the old one.
+    this.loaded = false;
+    this.loadToken++;
+    return 'switch';
+  }
+
+  private afterWelcome(m: Extract<Message, { t: 'welcome' }>, plan: 'first' | 'same' | 'switch'): void {
+    const newHost = !!this.session && (m.epoch ?? 0) !== this.session.epoch;
+    const kind = m.kind ?? 'video';
+    const title = m.item ? (kind === 'audio' ? (this.joinAdvert?.itemName || m.item.album || m.item.name) : m.item.name) : '';
+    this.session = { id: m.sessionId, key: m.key ?? this.session?.key ?? '', epoch: m.epoch ?? 0, kind, title, itemId: kind === 'audio' ? null : (m.item?.id ?? null) };
+    if (plan === 'first') {
+      this.welcomed = true;
+      this.dispatch({ type: 'WELCOME', sessionId: m.sessionId });
+    }
+    setTogether({ item: m.item, kind, onlyHostControls: m.onlyHostControls });
+    this.save('guest', togetherState().hostName ?? 'Host');
+    if (plan === 'first') {
+      this.guestKey = guestKeyOf(kind, m.item);
+      if (m.item && kind === 'video') void this.loadGuestVideo(m.item);
+      // Audio loads on the queue (follower → onQueue). No item: the guest waits for the host to pick one.
+    } else if (plan === 'switch') {
+      this.switchGuestMedia(kind, m.item, m.queue ?? null);
+    } else if (newHost && togetherState().source === 'stream' && m.item) {
+      void this.reloadStream(m.item);
+    }
+  }
+
+  /** "Sam picked Dune" on the other guests. `by` is the picker's member id. */
+  private pickNote(by: string, title: string): void {
+    const f = this.follower;
+    if (!f || by === f.facts?.selfId) return;
+    const name = f.allMembers.find((x) => x.id === by)?.name ?? 'Someone';
+    toast(`${name.split(' · ')[0]} picked ${title}`, { icon: 'person.2.fill' });
+  }
+
+  /** Rooms: the host plays another item, or none. */
+  private switchGuestMedia(kind: MediaKind, item: SharedItem | null, queue: SharedQueue | null, by?: string): void {
+    const f = this.follower;
+    if (!f) return;
+    this.ev('room media', { kind, item: item?.id ?? null });
+    this.loadToken++;
+    this.port?.dispose();
+    this.port = null;
+    if (this.gaplessTimer) clearTimeout(this.gaplessTimer);
+    this.gaplessTimer = null;
+    this.moving = null;
+    this.loaded = false;
+    this.guestKey = guestKeyOf(kind, item);
+    const title = item ? (kind === 'audio' ? (item.album ?? item.name) : item.name) : '';
+    if (this.session) this.session = { ...this.session, kind, title, itemId: kind === 'video' ? (item?.id ?? null) : null };
+    setTogether({ item, kind, source: null, notice: null });
+    this.save('guest', togetherState().hostName ?? 'Host');
+    if (by && item) this.pickNote(by, title);
+    if (!item) {
+      void this.stopGuestPlayer();
+      return;
+    }
+    if (kind === 'video') {
+      void this.loadGuestVideo(item);
+      return;
+    }
+    if (playerState().presentation === 'full' && playerState().now?.kind === 'video') leavePlayer();
+    if (queue) void this.loadGuestAudio(queue, false);
+  }
+
+  /** The room has no item: the guest's player stops (the room bar says who picks). */
+  private async stopGuestPlayer(): Promise<void> {
+    queueGate.set(null);
+    audioSession().leaveShared();
+    const now = playerState().now;
+    if (now?.kind === 'video') {
+      leavePlayer();
+      await videoSession().stop();
+    } else if (now?.kind === 'audio') {
+      await audioSession().stop();
+    }
+  }
+
+  /** The guest cannot play the room's item: it says why and stays in the room for the next item. */
+  private guestCannot(message: string): void {
+    this.ev('guest cannot play', { message });
+    setTogether({ notice: message, source: null });
+    toast(message, { icon: 'exclamationmark.triangle' });
+    this.follower?.cannotPlay();
+    this.port?.dispose();
+    this.port = null;
+    if (playerState().now?.kind === 'video') {
+      leavePlayer();
+      void videoSession().stop();
+    }
+  }
+
+  /** The guest closed its player (or stopped the music): it stays in the room, and the group does not wait for it. */
+  private onGuestPlayer(now: NowPlaying | null, status: string): void {
+    if (!this.follower || this.room || !this.loaded || now || status !== 'idle') return;
+    this.ev('guest closed the player');
+    this.loaded = false;
+    this.port?.dispose();
+    this.port = null;
+    queueGate.set(null);
+    audioSession().leaveShared();
+    this.follower.cannotPlay();
+    setTogether({ source: null });
+    toast('You are still in the session. The next item opens here.', { icon: 'person.2.fill' });
+  }
+
+  private unwatchGuest: (() => void) | null = null;
+
+  private watchGuestPlayer(): void {
+    this.unwatchGuest?.();
+    this.unwatchGuest = usePlayerStore.subscribe((st) => this.onGuestPlayer(st.now, st.status));
+    playRouter.set(this.router);
   }
 
   private startFollower(hostPeer: string): void {
@@ -817,8 +1124,10 @@ class NearbyController {
       onSample: (s) => syncLog.sample(s),
       onQueue: (q) => void this.onGuestQueue(q),
       onTrackMismatch: (track, anchor) => this.onTrackMismatch(track, anchor),
+      onMedia: (m) => this.switchGuestMedia(m.kind, m.item, m.queue ?? null, m.by),
     });
     this.follower = f;
+    this.watchGuestPlayer();
     const a = this.joinAdvert;
     const own = a && a.kind !== 'audio' && localRecord(a.itemId, a.serverId) ? [a.itemId] : [];
     f.start(displayName(), own, { memberId: this.memberId, canHost: own.length > 0, maker: this.canMakeHotspot() });
@@ -883,14 +1192,19 @@ class NearbyController {
     });
     if (token !== this.loadToken || this.follower !== f) return;
     if (src.kind === 'none') {
-      this.failGuest(src.reason === 'no-access' ? noAccessText(togetherState().hostName ?? 'The host') : item.path ? 'Could not open the stream from the host.' : 'The host cannot share this item.');
+      this.guestCannot(src.reason === 'no-access' ? noAccessText(togetherState().hostName ?? 'The host') : item.path ? 'Could not open the stream from the host.' : 'The host cannot share this item.');
       return;
     }
     let local = src.kind === 'local';
     let fromServer = src.kind === 'server';
     setTogether({ source: local ? 'local' : 'stream' });
     if (!(await this.closeOtherSheet(token))) return;
-    if (playerState().now?.kind === 'audio') await audioSession().stopForVideo();
+    if (playerState().now?.kind === 'audio') {
+      queueGate.set(null);
+      audioSession().leaveShared();
+      await audioSession().stopForVideo();
+    }
+    if (token !== this.loadToken || this.follower !== f) return;
     if (src.kind === 'server') {
       // Signed in to the same server: stream straight from it, at the group position.
       void videoSession().play({ item: toBaseItem(item), startPositionTicks: Math.round(this.startPosition() * 10_000_000), autoplay: false });
@@ -910,7 +1224,7 @@ class NearbyController {
       if (token !== this.loadToken || this.follower !== f) return;
     }
     if (!ok) {
-      this.failGuest('The video could not be played.');
+      this.guestCannot('The video could not be played here.');
       return;
     }
     this.port = bindVideoPort((c) => {
@@ -959,6 +1273,8 @@ class NearbyController {
       await this.loadGuestAudio(q, false);
       return;
     }
+    // The guest plays video now: a `media` message brings the audio, not a queue update.
+    if (playerState().now?.kind !== 'audio') return;
     audioSession().updateShared(fromSharedQueue(q), q.longForm, this.groupPlaying());
     this.sendCanHost(q);
   }
@@ -990,7 +1306,11 @@ class NearbyController {
       else if (s && server.reachable && s.serverId === activeServerId) anyServer = true;
       return src?.uri ?? null;
     };
-    if (playerState().now?.kind === 'video') await videoSession().stop();
+    if (playerState().now?.kind === 'video') {
+      if (playerState().presentation === 'full') leavePlayer();
+      await videoSession().stop();
+    }
+    if (token !== this.loadToken || this.follower !== f) return;
     queueGate.set('The host plays the queue in this session.');
     await audioSession().loadShared(fromSharedQueue(q), q.longForm, source, this.startPosition(), { autoplay: reload && this.groupPlaying() });
     if (token !== this.loadToken || this.follower !== f) return;
@@ -1045,12 +1365,6 @@ class NearbyController {
   private revertOutside(c: UserControl): void {
     if (c.action === 'play') this.port?.pause();
     else if (c.action === 'pause') this.port?.play();
-  }
-
-  private failGuest(message: string): void {
-    this.ev('fail guest', { message });
-    this.dispatch({ type: 'FAIL', message });
-    this.closeGuest(message);
   }
 
   // ---- Drops and reconnects ------------------------------------------------------------
@@ -1166,21 +1480,21 @@ class NearbyController {
     if (last) console.log(`[together] handover: position change ${jump} ms`);
     const selfId = f.facts?.selfId ?? this.memberId;
     const members = f.allMembers.filter((m) => m.id !== selfId && m.id !== r.oldHostId);
+    const media = f.media;
     f.release();
     this.follower = null;
     this.hostPeer = null;
+    this.unwatchGuest?.();
+    this.unwatchGuest = null;
     this.native?.stopBrowsing();
     this.memberId = selfId;
-    // The new host: no gate from the follower; the room takes the controls.
-    const rebound = s.kind === 'audio' ? bindAudioPort((c) => this.room?.apply(c)) : bindVideoPort((c) => this.room?.apply(c), { endPauses: true });
+    // The new host: the room binds its own port to the player that plays; the room takes the controls.
     port.dispose();
+    this.port = null;
     queueGate.set(null);
     audioSession().leaveShared();
     await this.startHosting({
-      kind: s.kind,
-      item: s.kind === 'video' ? (localRecord(s.itemId)?.item ?? null) : (audioState().queue.entries[audioState().queue.index]?.item ?? null),
-      port: rebound,
-      takeover: { anchor, members, epoch: s.epoch + 1, sessionId: s.id, key: s.key, title: s.title, itemId: s.itemId },
+      takeover: { anchor, members, epoch: s.epoch + 1, sessionId: s.id, key: s.key, media },
     });
     setTogether({ source: null });
     toast('You are the host now.', { icon: 'person.2.fill' });
@@ -1207,6 +1521,10 @@ class NearbyController {
     const port = this.port;
     this.room.dispose();
     this.room = null;
+    this.unwatchHost?.();
+    this.unwatchHost = null;
+    this.clearEmptyTimer();
+    this.hostKey = null;
     this.hostQueueBinding?.dispose();
     this.hostQueueBinding = null;
     controlGate.set(null);
@@ -1217,6 +1535,8 @@ class NearbyController {
     this.joinAdvert = advert;
     setTogether({ role: 'guest', phase: { name: 'browsing' }, requests: [], joinCode: null, members: [] });
     this.loaded = true;
+    this.welcomed = true;
+    this.guestKey = guestKeyOf(s.kind, s.kind === 'video' ? (s.itemId ? ({ id: s.itemId } as SharedItem) : null) : ({ id: 'audio' } as SharedItem));
     this.session = { ...s, epoch: advert.epoch ?? s.epoch };
     // The player keeps what it plays: the new welcome brings the anchor, and the follower moves it.
     const f = new Follower({
@@ -1227,8 +1547,10 @@ class NearbyController {
       onSample: (x) => syncLog.sample(x),
       onQueue: (q) => void this.onGuestQueue(q),
       onTrackMismatch: (track, anchor) => this.onTrackMismatch(track, anchor),
+      onMedia: (m) => this.switchGuestMedia(m.kind, m.item, m.queue ?? null, m.by),
     });
     this.follower = f;
+    this.watchGuestPlayer();
     const peer = this.startJoin({ serviceId }, advert.hostName, { key: s.key });
     this.hostPeer = peer;
     const rebound = s.kind === 'audio' ? bindAudioPort((c) => f.request(c)) : bindVideoPort((c) => f.request(c));
@@ -1260,12 +1582,10 @@ class NearbyController {
       clearInterval(tick);
       if (saved.role === 'host') {
         this.forget();
-        if (saved.kind === 'video' && saved.itemId) {
-          const r = localRecord(saved.itemId);
-          if (r) void this.host(r.item, saved);
-        } else if (canHostAudio()) {
-          void this.hostAudio(saved);
-        }
+        // The room opens again; a video that the host has downloaded plays in it again.
+        const r = saved.kind === 'video' && saved.itemId ? localRecord(saved.itemId) : null;
+        if (r) void this.host(r.item, saved);
+        else void this.openRoom({ adopt: saved.kind === 'audio' && canHostAudio(), resume: saved });
       } else {
         setTogether({ notice: `“${saved.title}” is not nearby.` });
       }
@@ -1539,6 +1859,11 @@ class NearbyController {
   private teardownGuest(): void {
     this.loadToken++;
     this.loaded = false;
+    this.welcomed = false;
+    this.guestKey = null;
+    this.unwatchGuest?.();
+    this.unwatchGuest = null;
+    playRouter.set(null);
     if (this.reconnect?.timer) clearTimeout(this.reconnect.timer);
     this.reconnect = null;
     if (this.gaplessTimer) clearTimeout(this.gaplessTimer);
@@ -1578,6 +1903,12 @@ class NearbyController {
     if (this.room) {
       this.room.end();
       this.room = null;
+      this.unwatchHost?.();
+      this.unwatchHost = null;
+      this.clearEmptyTimer();
+      this.hostKey = null;
+      this.pendingPick = null;
+      playRouter.set(null);
       this.stopDemoteWatch();
       // Let the end message leave before the link closes.
       await new Promise((r) => setTimeout(r, 300));

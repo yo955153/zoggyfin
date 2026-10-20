@@ -21,7 +21,7 @@ import { ProgressRing } from '@/components/progress-ring';
 import { useDownloadStatus } from '@/downloads';
 import { Touchable } from '@/components/touchable';
 import { useItemActions } from '@/features/actions/use-item-actions';
-import { TogetherSheetHost, useTogetherEntry } from '@/features/together/together-sheet';
+import { TogetherSheetHost, usePlayForEveryone, useTogetherEntry } from '@/features/together/together-sheet';
 import { buildImageUrl, imageSource } from '@/images/image-url';
 import { formatClock, playedFraction } from '@/lib/format';
 import { isTV } from '@/platform/tv';
@@ -118,6 +118,8 @@ export function DetailScaffold<Row>({
   const player = usePlayer();
   const { actions, run } = useItemActions(item);
   const together = useTogetherEntry(item);
+  // In a together session the Play button plays for everyone (or, for a guest, only the host picks).
+  const room = usePlayForEveryone();
   const download = useDownloadStatus(item.Id);
   const [sheet, setSheet] = useState(false);
   const [rowWidth, setRowWidth] = useState(0);
@@ -141,7 +143,7 @@ export function DetailScaffold<Row>({
   const position = audioResume ?? item.UserData?.PlaybackPositionTicks ?? 0;
   const resumable = position > 0 && (VIDEO_TYPES.has(item.Type ?? '') || audioResume !== null);
   const progress = resumable ? (audioResume !== null && item.RunTimeTicks ? audioResume / item.RunTimeTicks : playedFraction(item)) : null;
-  const primaryLabel = playLabel ?? (resumable ? `Resume ${formatClock(position) ?? ''}`.trim() : 'Play');
+  const primaryLabel = room?.label ?? playLabel ?? (resumable ? `Resume ${formatClock(position) ?? ''}`.trim() : 'Play');
 
   const facts = meta.filter((m): m is string => !!m);
 
@@ -212,12 +214,26 @@ export function DetailScaffold<Row>({
   const primary = playable ? (
     onShuffle ? (
       <View style={[s.pairRow, l.fontScale >= 1.5 && s.stack]}>
-        <Button title="Play" icon="play.fill" variant="tonalAccent" onPress={onPlay ?? (() => player.play({ item }))} containerStyle={s.flex} preferredFocus={isTV} />
-        <Button title="Shuffle" icon="shuffle" variant="tonalAccent" onPress={onShuffle} containerStyle={s.flex} />
+        <Button
+          title={room?.label ?? 'Play'}
+          icon={room?.locked ? 'lock.fill' : 'play.fill'}
+          variant="tonalAccent"
+          disabled={room?.locked}
+          onPress={onPlay ?? (() => player.play({ item }))}
+          containerStyle={s.flex}
+          preferredFocus={isTV}
+        />
+        <Button title="Shuffle" icon="shuffle" variant="tonalAccent" disabled={room?.locked} onPress={onShuffle} containerStyle={s.flex} />
       </View>
     ) : (
       <View>
-        <Button title={primaryLabel} icon="play.fill" onPress={onPlay ?? (() => player.play({ item }))} preferredFocus={isTV} />
+        <Button
+          title={primaryLabel}
+          icon={room?.locked ? 'lock.fill' : 'play.fill'}
+          disabled={room?.locked}
+          onPress={onPlay ?? (() => player.play({ item }))}
+          preferredFocus={isTV}
+        />
         {progress !== null ? (
           <View style={s.resumeTrack} accessibilityLabel={`${Math.round(progress * 100)} percent played`}>
             <View style={[s.resumeFill, { width: `${Math.round(progress * 100)}%` }]} />

@@ -10,6 +10,8 @@
  * or short code), spaudio (create a SyncPlay group with the audio queue),
  * rejoin (the saved session after an app restart), aqueue (like hostaudio,
  * with no nearby session), spfirst (join a SyncPlay group: group=id, else the last one), spgroups.
+ * Rooms: room (open an empty room), playitem (item=id: the normal Play button, so in a room it plays
+ * for everyone; a guest asks the host).
  * The desktop development build runs it too (see `__togetherLab`).
  * Release builds show nothing.
  */
@@ -21,6 +23,10 @@ import { Platform, Text, View } from 'react-native';
 import { downloadedChildren, downloadedItem } from '@/downloads';
 import { downloadsState } from '@/downloads/store';
 import { isDesktop } from '@/platform/desktop';
+import { getApi } from '@/api/client';
+import { getItem } from '@/api/jellyfin';
+import { useSessionStore } from '@/auth/session-store';
+import { playHere, playRouter } from '@/player';
 import { audioSession } from '@/player/audio/session';
 import { videoSession } from '@/player/session';
 import { nearby } from '@/together/nearby';
@@ -77,6 +83,18 @@ async function run(action: string, params: Record<string, string | undefined>): 
       return 'previous';
     case 'code':
       return n.joinWithCode(params.text ?? '') ? 'joining by code' : 'bad code';
+    case 'room':
+      return (await n.openRoom()) ? 'room open' : 'no room';
+    case 'playitem': {
+      const id = params.item ?? '';
+      const s = useSessionStore.getState().session;
+      const item = downloadedItem(id) ?? (s ? await getItem(getApi(s.serverUrl, s.token), s.userId, id) : null);
+      if (!item) return 'no such item';
+      // The same path as a Play button (usePlayer().play).
+      const routed = playRouter.route({ item }, 'user');
+      if (routed) playHere(routed);
+      return `play ${item.Name ?? id}`;
+    }
     case 'spaudio':
       await syncPlay().createForAudio();
       return 'group with the queue';

@@ -6,8 +6,9 @@
 import { AnchorFollower, type SyncSample } from './anchor-follower';
 import { ClockSync, type ClockEstimate } from './clock';
 import { DEFAULT_DRIFT, type DriftOptions } from './drift';
-import type { Anchor, ControlAction, MediaKind, Member, Message, SharedQueue } from './protocol';
+import type { Anchor, ControlAction, MediaKind, Member, Message, PickRequest, SharedQueue } from './protocol';
 import type { PlayerPort, Timers } from './player-port';
+import { ONLY_HOST_PICKS_TEXT } from './room-route';
 
 export type { SyncSample } from './anchor-follower';
 
@@ -25,6 +26,8 @@ export interface FollowerDeps {
   onQueue?(queue: SharedQueue): void;
   /** Audio: the player is on another queue entry than the group. */
   onTrackMismatch?(track: string, anchor: Anchor): void;
+  /** Rooms: the host plays another item, or none. The player is let go: load the new item, then `attach`. */
+  onMedia?(media: Extract<Message, { t: 'media' }>): void;
 }
 
 /** What the host told this guest about the session (for reconnects and the election). */
@@ -76,6 +79,10 @@ export class Follower {
   onlyHostControls = false;
   private local = false;
   private server = false;
+  /** Rooms: the number of the room's current item (null: a host of an older build). */
+  media: number | null = null;
+  /** This device cannot play the current item (or closed its player). */
+  private noMedia = false;
   private hello: { name: string; have: string[]; extra: { memberId?: string; canHost?: boolean; maker?: boolean } } | null = null;
 
   constructor(
@@ -91,7 +98,7 @@ export class Follower {
   /** Sends hello and starts the clock sync. */
   start(name: string, have: string[], extra: { memberId?: string; canHost?: boolean; maker?: boolean } = {}): void {
     this.hello = { name, have, extra };
-    this.deps.send({ t: 'hello', name, have, ...extra, deltas: true });
+    this.deps.send({ t: 'hello', name, have, ...extra, deltas: true, rooms: true });
     for (let i = 0; i < BURST; i++) this.timers.push(this.deps.timers.setTimeout(() => this.ping(), i * BURST_GAP));
     this.schedulePing();
     this.timers.push(this.deps.timers.setInterval(() => this.anchors.follow(false), TICK));
@@ -106,13 +113,48 @@ export class Follower {
     this.player = player;
     this.local = local;
     this.server = server;
+    this.noMedia = false;
     this.unsubBuffering = player.onBuffering((b) => this.deps.send(this.bufferingMessage(b)));
     this.deps.send(this.bufferingMessage(player.isBuffering()));
     this.anchors.attach(player);
   }
 
   private bufferingMessage(buffering: boolean): Message {
-    return { t: 'buffering', buffering, local: this.local, server: this.server };
+    return {
+      t: 'buffering',
+      buffering,
+      local: this.local,
+      server: this.server,
+      ...(this.media !== null ? { media: this.media } : {}),
+      ...(this.noMedia ? { noMedia: true } : {}),
+    };
+  }
+
+  /** Lets the player go (a new item loads, or the player closed). The group anchor stays. */
+  detachPlayer(): void {
+    this.unsubBuffering?.();
+    this.unsubBuffering = null;
+    this.player = null;
+    this.anchors.detach();
+  }
+
+  /** This device cannot play the room's item, or closed its player: the group does not wait for it. */
+  cannotPlay(): void {
+    this.detachPlayer();
+    this.noMedia = true;
+    this.local = false;
+    this.server = false;
+    this.deps.send(this.bufferingMessage(false));
+  }
+
+  /** Rooms: asks the host to play something for everyone. False when only the host picks. */
+  pick(p: PickRequest): boolean {
+    if (this.onlyHostControls) {
+      this.deps.onDenied?.(ONLY_HOST_PICKS_TEXT);
+      return false;
+    }
+    this.deps.send({ t: 'pick', pick: p });
+    return true;
   }
 
   get stats(): FollowerStats {
@@ -142,7 +184,7 @@ export class Follower {
     this.seq = -1;
     this.pending.clear();
     if (newHost) this.clock = new ClockSync();
-    if (this.hello) this.deps.send({ t: 'hello', name: this.hello.name, have: this.hello.have, ...this.hello.extra, ...extra, deltas: true });
+    if (this.hello) this.deps.send({ t: 'hello', name: this.hello.name, have: this.hello.have, ...this.hello.extra, ...extra, deltas: true, rooms: true });
     // The player plays already: tell the host at once, so the group does not wait for this device.
     if (this.player) this.deps.send({ ...this.bufferingMessage(this.player.isBuffering()), ...(extra?.canHost !== undefined ? { canHost: extra.canHost } : {}) } as Message);
     for (let i = 0; i < BURST; i++) this.timers.push(this.deps.timers.setTimeout(() => this.ping(), i * BURST_GAP));
@@ -189,6 +231,7 @@ export class Follower {
           kind: message.kind ?? 'video',
           selfId: this.selfId,
         };
+        this.media = message.media ?? null;
         if (message.queue) {
           this.queue = message.queue;
           this.deps.onQueue?.(message.queue);
@@ -202,6 +245,19 @@ export class Follower {
         this.seq = message.seq;
         this.waiting = message.waiting;
         this.anchors.setAnchor(message.anchor, message.track ?? (this.queue ? this.anchors.currentTrack : null));
+        this.deps.onChange?.();
+        return;
+      case 'media':
+        // Each item has a new number; an old or repeated message changes nothing.
+        if (this.media !== null && message.media <= this.media) return;
+        if (message.seq > this.seq) this.seq = message.seq;
+        this.media = message.media;
+        this.waiting = false;
+        if (this.facts) this.facts = { ...this.facts, kind: message.kind };
+        this.queue = message.queue ?? null;
+        this.detachPlayer();
+        this.anchors.setAnchor(message.anchor, message.track ?? null);
+        this.deps.onMedia?.(message);
         this.deps.onChange?.();
         return;
       case 'queue':

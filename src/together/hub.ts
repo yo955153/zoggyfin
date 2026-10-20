@@ -68,7 +68,7 @@ export function mergeSessions(
     rows.push({
       key: `n:${h.peerId}`,
       hostName: a.hostName,
-      title: a.itemName || (a.kind === 'audio' ? 'Music' : 'A video'),
+      title: a.itemName || (a.itemId === 'room' ? 'Picking something to play' : a.kind === 'audio' ? 'Music' : 'A video'),
       tag: 'Nearby',
       kind: a.kind ?? 'video',
       peerId: h.peerId,
@@ -115,9 +115,11 @@ export interface WhoInput {
   onServer: boolean;
   /** The host has the item (or every queue entry) downloaded. */
   downloaded: boolean;
+  /** A room with no item yet: the host picks later. */
+  room?: boolean;
 }
 
-/** The "Who can join?" choices for a picked item, and the one to start with. */
+/** The "Who can join?" choices for a picked item (or an empty room), and the one to start with. */
 export function whoCanJoin(i: WhoInput): { options: WhoOption[]; initial: Transport | null } {
   const server = i.serverName ?? 'your server';
   const options: WhoOption[] = [];
@@ -125,9 +127,11 @@ export function whoCanJoin(i: WhoInput): { options: WhoOption[]; initial: Transp
     options.push({
       id: 'nearby',
       title: 'People near you',
-      detail: i.downloaded
-        ? 'Same Wi-Fi or Bluetooth. No internet needed.'
-        : `Same Wi-Fi or Bluetooth. Each guest needs the download, or a sign-in to ${server}.`,
+      detail: i.room
+        ? `Same Wi-Fi or Bluetooth. Guests play their own download, ${server}, or a stream from you.`
+        : i.downloaded
+          ? 'Same Wi-Fi or Bluetooth. No internet needed.'
+          : `Same Wi-Fi or Bluetooth. Each guest needs the download, or a sign-in to ${server}.`,
     });
   }
   if (i.signedIn && !i.offline && i.onServer) {
@@ -135,7 +139,7 @@ export function whoCanJoin(i: WhoInput): { options: WhoOption[]; initial: Transp
   }
   const has = (t: Transport) => options.some((o) => o.id === t);
   let initial: Transport | null = null;
-  if (has('nearby') && (i.downloaded || i.offline || !has('server'))) initial = 'nearby';
+  if (has('nearby') && (i.downloaded || i.offline || i.room || !has('server'))) initial = 'nearby';
   else if (has('server')) initial = 'server';
   return { options, initial };
 }
@@ -147,4 +151,63 @@ export function sessionHeadline(st: Pick<TogetherState, 'mode' | 'role' | 'membe
   // The host is not in its own member list; a guest's list has every other guest.
   const n = st.members.length + (st.role === 'host' ? 1 : 2);
   return `Nearby · ${n} ${n === 1 ? 'person' : 'people'}`;
+}
+
+/** The first part of a nearby name ("Sam · iPhone" → "Sam"). */
+export function shortName(name: string | null | undefined): string {
+  return (name ?? '').split(' · ')[0]!.trim() || 'the host';
+}
+
+function people(n: number): string {
+  return `${n} ${n === 1 ? 'person' : 'people'}`;
+}
+
+/**
+ * The room bar text while a session runs ("Together · Dune · 3 people",
+ * "Together · 3 people · Pick something to play"), or null when no session
+ * runs. The title is the room's item.
+ */
+export function roomLabel(st: Pick<TogetherState, 'mode' | 'role' | 'phase' | 'members' | 'requests' | 'item' | 'hostName' | 'waiting' | 'syncplay'>): string | null {
+  const title = st.item ? st.item.album || st.item.name : null;
+  if (st.syncplay.group) {
+    const n = st.syncplay.group.participants.length || 1;
+    if (st.waiting && title) return `Together · ${title} · Waiting for everyone`;
+    return title ? `Together · ${title} · ${people(n)}` : `Together · ${people(n)} · Pick something to play`;
+  }
+  if (st.mode !== 'nearby') return null;
+  switch (st.phase.name) {
+    case 'hosting': {
+      const n = st.members.length + 1;
+      if (st.requests.length === 1) return `Together · ${shortName(st.requests[0]!.name)} wants to join`;
+      if (st.requests.length > 1) return `Together · ${st.requests.length} want to join`;
+      if (st.members.some((m) => m.away)) return 'Together · Reconnecting…';
+      if (!title) return `Together · ${people(n)} · Pick something to play`;
+      return st.waiting ? `Together · ${title} · Waiting for everyone` : `Together · ${title} · ${people(n)}`;
+    }
+    case 'requesting':
+    case 'syncing':
+      return 'Together · Connecting…';
+    case 'joined': {
+      const n = st.members.length + 2;
+      if (!title) return `Together · Waiting for ${shortName(st.hostName)} to pick something`;
+      return st.waiting ? `Together · ${title} · Waiting for everyone` : `Together · ${title} · ${people(n)}`;
+    }
+    case 'reconnecting':
+      return st.phase.waitingForHost ? 'Together · Waiting for the host' : 'Together · Reconnecting…';
+    case 'ended':
+      return 'Together · Ended';
+    default:
+      return null;
+  }
+}
+
+/** What an item page's Play button does in a session: play for everyone, or nothing (only the host picks). */
+export function playForEveryone(st: Pick<TogetherState, 'mode' | 'role' | 'phase' | 'onlyHostControls' | 'syncplay'>): { label: string; locked: boolean } | null {
+  if (st.syncplay.group) return { label: 'Play for everyone', locked: false };
+  if (st.mode !== 'nearby') return null;
+  if (st.role === 'host' && st.phase.name === 'hosting') return { label: 'Play for everyone', locked: false };
+  if (st.role === 'guest' && (st.phase.name === 'joined' || st.phase.name === 'reconnecting')) {
+    return st.onlyHostControls ? { label: 'Only the host picks', locked: true } : { label: 'Play for everyone', locked: false };
+  }
+  return null;
 }

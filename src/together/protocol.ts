@@ -13,6 +13,12 @@ export const PROTOCOL_VERSION = 1;
 // reconnects and the host election: they are optional, and an older receiver
 // ignores them. The transport changed from Multipeer to TCP (link.ts), so a
 // build with Multipeer does not see a build with TCP at all.
+//
+// Rooms (also version 1): a session no longer depends on one item. A guest
+// that sends `hello.rooms` can get a welcome with no item (`item: null`) and
+// `media` messages when the host plays something else; it can send `pick`.
+// A guest with no `rooms` (an older build) joins only a room that has an
+// item, and the host removes it, with a reason, when the item changes.
 
 export type MediaKind = 'video' | 'audio';
 
@@ -95,7 +101,36 @@ export interface Member {
   maker?: boolean;
   /** The member streams from the item's Jellyfin server (not from the host). */
   server?: boolean;
+  /** The member cannot play the current item (no copy, no server, no host file), or closed its player. */
+  noMedia?: boolean;
 }
+
+/** An item that a guest picks, as slim as the host needs to play it. */
+export interface PickItem {
+  id: string;
+  name: string;
+  type: string;
+  serverId?: string | null;
+  mediaType?: string | null;
+}
+
+/** A guest's pick: the same facts as a play request on the guest (see `PlayRequest`). */
+export interface PickRequest {
+  item: PickItem;
+  /** Video: the items after it (next episodes). */
+  queue?: PickItem[];
+  /** Audio: the whole list, with `index` at `item`. */
+  list?: PickItem[];
+  index?: number;
+  /** Audio: the album or playlist of the list. */
+  context?: PickItem;
+  shuffle?: boolean;
+  /** Ticks; left out: from the saved position. */
+  start?: number;
+}
+
+/** At most this many items in a pick's list or queue. */
+export const MAX_PICK_ITEMS = 300;
 
 export type ControlAction =
   | { action: 'play'; position?: number }
@@ -123,12 +158,15 @@ export type Message =
       maker?: boolean;
       /** The guest understands `memberDelta` and `welcome.members` (else it gets full `members` lists). */
       deltas?: boolean;
+      /** The guest understands rooms: a welcome with no item, `media` and `pick`. */
+      rooms?: boolean;
     }
   /** Host to a guest that joined. */
   | {
       t: 'welcome';
       sessionId: string;
-      item: SharedItem;
+      /** Null: the room has no item yet (only to a guest that sent `rooms`). */
+      item: SharedItem | null;
       /** The host's media stream, or null when no stream is offered. */
       stream: StreamRef | null;
       onlyHostControls: boolean;
@@ -147,14 +185,35 @@ export type Message =
       hostId?: string;
       /** The members now (for a guest that sent `deltas`; later changes come as `memberDelta`). */
       members?: Member[];
+      /** Rooms: the number of the room's current item. It grows with each `media`. */
+      media?: number;
     }
   /** Clock sync: the guest sends t0 (its clock); the host answers with t1 (receive) and t2 (send), host clock. */
   | { t: 'ping'; id: number; t0: number }
   | { t: 'pong'; id: number; t0: number; t1: number; t2: number }
   /** Host to all: the new group state. `seq` grows with each change. */
   | { t: 'state'; seq: number; anchor: Anchor; waiting: boolean; /** Audio: the queue entry key that the anchor applies to. */ track?: string }
-  /** Host to all (audio): the queue changed. */
-  | { t: 'queue'; seq: number; queue: SharedQueue }
+  /** Host to all (audio): the queue changed. `by`: the member id of a guest that picked a new queue. */
+  | { t: 'queue'; seq: number; queue: SharedQueue; by?: string }
+  /**
+   * Host to the guests that sent `rooms`: the room plays another item, or
+   * none (`item: null`). The anchor applies to the new item. `by`: the member
+   * id of a guest that picked it (the others see a short note).
+   */
+  | {
+      t: 'media';
+      seq: number;
+      media: number;
+      kind: MediaKind;
+      item: SharedItem | null;
+      stream: StreamRef | null;
+      anchor: Anchor;
+      queue?: SharedQueue;
+      track?: string;
+      by?: string;
+    }
+  /** Guest to host (rooms): play this for everyone. */
+  | { t: 'pick'; pick: PickRequest }
   /** Guest to host: a control request. */
   | ({ t: 'control' } & ControlAction)
   /** Guest to host: the guest buffers (true) or is ready (false). */
@@ -166,6 +225,10 @@ export type Message =
       canHost?: boolean;
       /** The guest streams from the item's Jellyfin server, not from the host. */
       server?: boolean;
+      /** Rooms: the number of the item that this state is for (a host drops a state for an older item). */
+      media?: number;
+      /** Rooms: the guest cannot play the item; the group does not wait for it. */
+      noMedia?: boolean;
     }
   /** Host to the guests that did not send `deltas`: the whole list. */
   | { t: 'members'; members: Member[]; onlyHostControls: boolean }
@@ -206,8 +269,35 @@ const optBool = (x: unknown) => x === undefined || bool(x);
 const isRepeat = (x: unknown): x is 'off' | 'all' | 'one' => x === 'off' || x === 'all' || x === 'one';
 
 function isMember(x: unknown): x is Member {
-  return isObj(x) && str(x.id) && str(x.name) && bool(x.local) && optBool(x.buffering) && optNum(x.joinedAt) && optBool(x.canHost) && optBool(x.away) && optBool(x.maker) && optBool(x.server);
+  return (
+    isObj(x) &&
+    str(x.id) &&
+    str(x.name) &&
+    bool(x.local) &&
+    optBool(x.buffering) &&
+    optNum(x.joinedAt) &&
+    optBool(x.canHost) &&
+    optBool(x.away) &&
+    optBool(x.maker) &&
+    optBool(x.server) &&
+    optBool(x.noMedia)
+  );
 }
+
+function isPickItem(x: unknown): x is PickItem {
+  return isObj(x) && str(x.id) && x.id.length > 0 && x.id.length <= 64 && str(x.name) && str(x.type) && optStr(x.serverId) && optStr(x.mediaType);
+}
+
+const optPickList = (x: unknown) => x === undefined || (Array.isArray(x) && x.length <= MAX_PICK_ITEMS && x.every(isPickItem));
+
+export function isPick(x: unknown): x is PickRequest {
+  if (!isObj(x) || !isPickItem(x.item) || !optPickList(x.queue) || !optPickList(x.list)) return false;
+  if (x.context !== undefined && !isPickItem(x.context)) return false;
+  if (x.index !== undefined && !(num(x.index) && Number.isInteger(x.index) && x.index >= 0)) return false;
+  return optBool(x.shuffle) && (x.start === undefined || (num(x.start) && x.start >= 0));
+}
+
+const isStream = (x: unknown) => x === null || (isObj(x) && str(x.service) && str(x.path));
 
 function isFullItem(x: unknown): x is SharedItem {
   return isItem(x) && optStr(x.path) && optStr(x.art) && optStr(x.album) && optStr(x.artist);
@@ -224,12 +314,14 @@ export function isQueue(x: unknown): x is SharedQueue {
 function valid(x: Record<string, unknown>): boolean {
   switch (x.t) {
     case 'hello':
-      return str(x.name) && Array.isArray(x.have) && x.have.every(str) && optStr(x.memberId) && optBool(x.canHost) && optBool(x.maker) && optBool(x.deltas);
+      return (
+        str(x.name) && Array.isArray(x.have) && x.have.every(str) && optStr(x.memberId) && optBool(x.canHost) && optBool(x.maker) && optBool(x.deltas) && optBool(x.rooms)
+      );
     case 'welcome':
       return (
         str(x.sessionId) &&
-        isItem(x.item) &&
-        (x.stream === null || (isObj(x.stream) && str(x.stream.service) && str(x.stream.path))) &&
+        (x.item === null || isItem(x.item)) &&
+        isStream(x.stream) &&
         bool(x.onlyHostControls) &&
         isAnchor(x.anchor) &&
         (x.you === undefined || str(x.you)) &&
@@ -239,7 +331,8 @@ function valid(x: Record<string, unknown>): boolean {
         optStr(x.key) &&
         optNum(x.epoch) &&
         optStr(x.hostId) &&
-        (x.members === undefined || (Array.isArray(x.members) && x.members.every(isMember)))
+        (x.members === undefined || (Array.isArray(x.members) && x.members.every(isMember))) &&
+        optNum(x.media)
       );
     case 'ping':
       return num(x.id) && num(x.t0);
@@ -248,7 +341,21 @@ function valid(x: Record<string, unknown>): boolean {
     case 'state':
       return num(x.seq) && isAnchor(x.anchor) && bool(x.waiting) && optStr(x.track);
     case 'queue':
-      return num(x.seq) && isQueue(x.queue);
+      return num(x.seq) && isQueue(x.queue) && optStr(x.by);
+    case 'media':
+      return (
+        num(x.seq) &&
+        num(x.media) &&
+        (x.kind === 'video' || x.kind === 'audio') &&
+        (x.item === null || isFullItem(x.item)) &&
+        isStream(x.stream) &&
+        isAnchor(x.anchor) &&
+        (x.queue === undefined || isQueue(x.queue)) &&
+        optStr(x.track) &&
+        optStr(x.by)
+      );
+    case 'pick':
+      return isPick(x.pick);
     case 'control':
       switch (x.action) {
         case 'play':
@@ -271,7 +378,7 @@ function valid(x: Record<string, unknown>): boolean {
           return false;
       }
     case 'buffering':
-      return bool(x.buffering) && bool(x.local) && optBool(x.canHost) && optBool(x.server);
+      return bool(x.buffering) && bool(x.local) && optBool(x.canHost) && optBool(x.server) && optNum(x.media) && optBool(x.noMedia);
     case 'members':
       return Array.isArray(x.members) && x.members.every(isMember) && bool(x.onlyHostControls);
     case 'memberDelta':

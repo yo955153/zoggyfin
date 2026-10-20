@@ -31,6 +31,8 @@ first commit to today. All of it was built in the first weeks of the project.
 - **Server discovery.** The first screen finds Jellyfin servers on the local network.
 - **Watch and listen together.** Nearby sessions with no internet and no server (Bonjour, a join code,
   drops and rejoin), and Jellyfin SyncPlay groups. Clock sync keeps devices within a few milliseconds.
+  A session is a room: start it, then pick anything with the normal app, and it plays for everyone.
+  A room bar shows on every screen while the session runs.
 - **Invites.** An administrator adds a person and shares one link or QR code. The invite page on the
   website opens the app or the store.
 - **Admin panel.** Dashboard, now playing, users, libraries, tasks, activity, devices, logs, restart

@@ -1,35 +1,28 @@
 /**
- * "Start a session" in the together sheet: pick what to play (when the
- * sheet has no item yet), then one choice, "Who can join?". The transport
- * (nearby or the Jellyfin server) follows from that choice; the user never
- * picks "SyncPlay" or "LAN".
+ * "Start a session" in the together sheet: one choice, "Who can join?".
+ * The transport (nearby or the Jellyfin server) follows from that choice;
+ * the user never picks "SyncPlay" or "LAN".
+ *
+ * A session is a room: it opens with no item, the sheet closes, and the
+ * user picks what to play with the normal app (the Play buttons play for
+ * everyone). The shortcuts ("Watch together" on an item page, the pill in a
+ * player) open a room that starts with that item.
  */
-import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Text, View } from 'react-native';
 
-import { getApi } from '@/api/client';
-import * as jf from '@/api/jellyfin';
 import type { BaseItemDto } from '@/api/types';
 import { useSession, useSessionStore } from '@/auth/session-store';
 import { Button } from '@/components/button';
-import { Icon } from '@/components/icon';
-import { ItemImage } from '@/components/item-image';
 import { findDownload } from '@/downloads';
-import { searchDownloads } from '@/downloads/lists';
-import { useDownloadsStore } from '@/downloads/store';
-import { useDebounced } from '@/lib/use-debounced';
-import { toast } from '@/lib/toast';
-import { isAudioItem } from '@/player';
-import { audioSession } from '@/player/audio/session';
+import { isAudioItem, playHere } from '@/player';
 import { audioState } from '@/player/audio/store';
-import { videoSession } from '@/player/session';
-import { playerState, usePlayerStore } from '@/player/store';
-import { useStyles, useTheme } from '@/theme';
+import { playerState } from '@/player/store';
+import { useStyles } from '@/theme';
 import { whoCanJoin, type Transport } from '@/together/hub';
 import { defaultFindable, type Findable } from '@/together/join-gate';
-import { canHostAudio, nearby, nearbySupported } from '@/together/nearby';
-import { closeTogetherSheet, openTogetherSheet, type SheetPlace, togetherState } from '@/together/store';
+import { nearby, nearbySupported } from '@/together/nearby';
+import { closeTogetherSheet, type SheetPlace, togetherState } from '@/together/store';
 import { syncPlay, syncPlaySupported } from '@/together/syncplay';
 
 import { ChoiceRow, makeStyles, RowIcon, Section } from './together-parts';
@@ -37,7 +30,7 @@ import { ChoiceRow, makeStyles, RowIcon, Section } from './together-parts';
 const VIDEO_TYPES = new Set(['Movie', 'Episode', 'Video', 'MusicVideo']);
 const AUDIO_TYPES = new Set(['Audio', 'AudioBook', 'MusicAlbum']);
 
-/** What a new session plays: a video, an audio item, or (item null) the audio queue that plays now. */
+/** What a new session starts with: a video, an audio item, or (item null) the audio queue that plays now. No target: an empty room. */
 export type StartTarget = { kind: 'video'; item: BaseItemDto } | { kind: 'audio'; item: BaseItemDto | null };
 
 export function targetFor(item: BaseItemDto | null, where: SheetPlace): StartTarget | null {
@@ -58,183 +51,25 @@ function isDownloaded(id: string | null | undefined): boolean {
 }
 
 /** The host has every file of the target on this device. */
-function targetDownloaded(t: StartTarget): boolean {
+function targetDownloaded(t: StartTarget | null): boolean {
+  if (!t) return false;
   if (t.item) return isDownloaded(t.item.Id);
   const entries = audioState().queue.entries;
   return entries.length > 0 && entries.every((e) => isDownloaded(e.item.Id));
 }
 
-/** The target is on the signed-in server. */
-function targetOnServer(t: StartTarget): boolean {
+/** The target is on the signed-in server (an empty room: the server can hold it). */
+function targetOnServer(t: StartTarget | null): boolean {
   const session = useSessionStore.getState().session;
   if (!session) return false;
+  if (!t) return true;
   const serverId = t.item ? t.item.ServerId : audioState().queue.entries[audioState().queue.index]?.item.ServerId;
   return !serverId || serverId === session.serverId;
 }
 
-// ---- Picker ----------------------------------------------------------------------
-
-function usePickerLists(kind: 'video' | 'audio', term: string, offline: boolean) {
-  const session = useSession();
-  const api = useMemo(() => (session ? getApi(session.serverUrl, session.token) : null), [session]);
-  const online = !!api && !offline;
-  const key = [session?.serverId ?? '', session?.userId ?? '', kind] as const;
-  const resume = useQuery({
-    queryKey: ['together-picker', ...key, 'resume'],
-    queryFn: () => jf.getResume(api!, session!.userId, kind === 'video' ? 'Video' : 'Audio'),
-    enabled: online,
-  });
-  const recent = useQuery({ queryKey: ['together-picker', ...key, 'recent'], queryFn: () => jf.getPickerItems(api!, session!.userId, kind), enabled: online });
-  const t = term.trim();
-  const search = useQuery({
-    queryKey: ['together-picker', ...key, 'search', t],
-    queryFn: ({ signal }) => jf.search(api!, session!.userId, t, signal),
-    enabled: online && t.length >= 2,
-  });
-  const records = useDownloadsStore((s) => s.records);
-  const fits = (i: BaseItemDto) => (kind === 'video' ? VIDEO_TYPES.has(i.Type ?? '') : AUDIO_TYPES.has(i.Type ?? ''));
-  const downloads = useMemo(() => {
-    const list =
-      t.length >= 2
-        ? searchDownloads(records, t)
-        : Object.values(records)
-            .filter((r) => r.state === 'completed')
-            .map((r) => r.item);
-    return list.filter(fits).slice(0, 30);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [records, t, kind]);
-  return {
-    searching: t.length >= 2,
-    loading: online && (resume.isPending || recent.isPending),
-    resume: (resume.data ?? []).filter(fits),
-    recent: (recent.data ?? []).filter(fits),
-    search: (search.data ?? []).filter(fits),
-    searchLoading: online && t.length >= 2 && search.isFetching,
-    downloads,
-  };
-}
-
-function PickRow({ item, onPick, last }: { item: BaseItemDto; onPick: (i: BaseItemDto) => void; last: boolean }) {
-  const s = useStyles(makeStyles);
-  const { c } = useTheme();
-  const audio = !VIDEO_TYPES.has(item.Type ?? '');
-  const detail = [
-    item.SeriesName,
-    item.Type === 'Episode' ? null : item.ProductionYear,
-    item.AlbumArtist ?? item.Artists?.[0],
-    isDownloaded(item.Id) ? 'Downloaded' : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-  return (
-    <Pressable
-      onPress={() => onPick(item)}
-      accessibilityRole="button"
-      accessibilityLabel={`Start with ${item.Name ?? 'this item'}`}
-      style={({ pressed }) => [s.row, !last && s.rowLine, pressed && { backgroundColor: c.surface2 }]}>
-      <ItemImage item={item} variant={audio ? 'square' : 'poster'} width={audio ? 40 : 30} aspectRatio={audio ? 1 : 2 / 3} rounded={6} hideArtTitle />
-      <View style={s.rowText}>
-        <Text style={s.rowTitle} numberOfLines={1}>
-          {item.Name ?? 'Untitled'}
-        </Text>
-        {detail ? (
-          <Text style={s.rowDetail} numberOfLines={1}>
-            {detail}
-          </Text>
-        ) : null}
-      </View>
-      <Icon name="chevron.right" size={13} color={c.text3} weight="semibold" />
-    </Pressable>
-  );
-}
-
-function PickList({ title, items, onPick }: { title: string; items: BaseItemDto[]; onPick: (i: BaseItemDto) => void }) {
-  const s = useStyles(makeStyles);
-  if (!items.length) return null;
-  return (
-    <Section title={title}>
-      <View style={s.group}>
-        {items.map((it, i) => (
-          <PickRow key={`${it.Id}-${i}`} item={it} onPick={onPick} last={i === items.length - 1} />
-        ))}
-      </View>
-    </Section>
-  );
-}
-
-/** Pick what the new session plays: Continue watching, Recently added, Downloads, or a search. Music: Recently played and downloaded music. */
-export function StartPicker({
-  onPick,
-  onBack,
-  offline,
-  fixedKind,
-}: {
-  onPick: (t: StartTarget) => void;
-  onBack: () => void;
-  offline: boolean;
-  fixedKind?: 'video' | 'audio';
-}) {
-  const s = useStyles(makeStyles);
-  const { c, scheme } = useTheme();
-  const [kind, setKind] = useState<'video' | 'audio'>(fixedKind ?? 'video');
-  const [text, setText] = useState('');
-  const term = useDebounced(text, 300);
-  const lists = usePickerLists(kind, term, offline);
-  const pick = (item: BaseItemDto) => {
-    const t = targetFor(item, 'hub');
-    if (t) onPick(t);
-  };
-  const nothing = !lists.loading && !lists.resume.length && !lists.recent.length && !lists.downloads.length && !lists.search.length;
-  return (
-    <>
-      <View style={s.buttonRow}>
-        <Button title="Back" variant="smallTonal" icon="chevron.left" onPress={onBack} />
-      </View>
-      <Section title="What do you want to play?">
-        {fixedKind ? null : (
-          <View style={s.buttonRow}>
-            <Button title="Video" variant={kind === 'video' ? 'small' : 'smallTonal'} icon="film" onPress={() => setKind('video')} />
-            <Button title="Music" variant={kind === 'audio' ? 'small' : 'smallTonal'} icon="music.note" onPress={() => setKind('audio')} />
-          </View>
-        )}
-        <TextInput
-          value={text}
-          onChangeText={setText}
-          placeholder={kind === 'video' ? 'Search films and episodes' : 'Search music'}
-          placeholderTextColor={c.text3}
-          selectionColor={c.accent}
-          cursorColor={c.accent}
-          keyboardAppearance={scheme}
-          autoCorrect={false}
-          returnKeyType="search"
-          accessibilityLabel="Search"
-          style={[s.codeInput, s.searchInput]}
-        />
-      </Section>
-      {lists.searching ? (
-        <>
-          {lists.searchLoading ? <ActivityIndicator color={c.text3} /> : null}
-          <PickList title="Results" items={lists.search} onPick={pick} />
-          <PickList title="Downloads" items={lists.downloads} onPick={pick} />
-        </>
-      ) : (
-        <>
-          {lists.loading ? <ActivityIndicator color={c.text3} /> : null}
-          <PickList title={kind === 'video' ? 'Continue watching' : 'Continue listening'} items={lists.resume} onPick={pick} />
-          <PickList title={kind === 'video' ? 'Recently added' : 'Recently played'} items={lists.recent} onPick={pick} />
-          <PickList title={kind === 'video' ? 'Downloads' : 'Downloaded music'} items={lists.downloads} onPick={pick} />
-        </>
-      )}
-      {nothing ? (
-        <Text style={s.note}>{offline ? 'You are offline. Download something first, or search when you are online.' : 'Nothing here yet. Search for it.'}</Text>
-      ) : null}
-    </>
-  );
-}
-
 // ---- Who can join? ---------------------------------------------------------------
 
-/** After a pick: who can join, and (nearby) who can find it. Then Start. */
+/** Who can join, and (nearby) who can find it. Then Start. No target: an empty room. */
 export function WhoStep({
   target,
   where,
@@ -242,7 +77,7 @@ export function WhoStep({
   networkType,
   onBack,
 }: {
-  target: StartTarget;
+  target: StartTarget | null;
   where: SheetPlace;
   offline: boolean;
   networkType: string | null;
@@ -259,6 +94,7 @@ export function WhoStep({
     serverName,
     onServer: targetOnServer(target),
     downloaded,
+    room: !target,
   });
   const [choice, setChoice] = useState<Transport | null>(who.initial);
   const [findable, setFindable] = useState<Findable>(() => defaultFindable({ networkType, hotspot: !!togetherState().hotspot }));
@@ -281,15 +117,19 @@ export function WhoStep({
           <Button title="Back" variant="smallTonal" icon="chevron.left" onPress={onBack} />
         </View>
       ) : null}
-      <View style={[s.group, s.row]}>
-        <RowIcon name={target.kind === 'audio' ? 'music.note' : 'film'} />
-        <View style={s.rowText}>
-          <Text style={s.rowTitle} numberOfLines={2}>
-            {targetTitle(target)}
-          </Text>
-          <Text style={s.rowDetail}>{downloaded ? 'Downloaded on this device' : 'Streams from your server'}</Text>
+      {target ? (
+        <View style={[s.group, s.row]}>
+          <RowIcon name={target.kind === 'audio' ? 'music.note' : 'film'} />
+          <View style={s.rowText}>
+            <Text style={s.rowTitle} numberOfLines={2}>
+              {targetTitle(target)}
+            </Text>
+            <Text style={s.rowDetail}>{downloaded ? 'Downloaded on this device' : 'Streams from your server'}</Text>
+          </View>
         </View>
-      </View>
+      ) : (
+        <Text style={s.note}>You open the session first. Then pick something to play anywhere in the app, and it plays for everyone.</Text>
+      )}
       {who.options.length === 0 ? (
         <Text style={s.note}>
           {offline ? 'You are offline, and this is not downloaded. Download it first.' : 'Sign in to a server to start a session here.'}
@@ -326,59 +166,36 @@ export function WhoStep({
           </View>
         </Section>
       ) : null}
-      <Button title="Start" icon="play.fill" loading={busy} disabled={!choice} onPress={() => void start()} />
+      <Button title={target ? 'Start' : 'Open the session'} icon={target ? 'play.fill' : 'person.2.fill'} loading={busy} disabled={!choice} onPress={() => void start()} />
     </>
   );
 }
 
-/** Waits until the full player shows (or gives up), then opens the session sheet on it. */
-function openOnPlayer(place: 'player' | 'music'): void {
-  const shown = () => playerState().presentation === 'full';
-  if (shown()) {
-    setTimeout(() => openTogetherSheet(place, null), 350);
-    return;
-  }
-  const t = setTimeout(() => unsub(), 15_000);
-  const unsub = usePlayerStore.subscribe(() => {
-    if (!shown()) return;
-    unsub();
-    clearTimeout(t);
-    setTimeout(() => openTogetherSheet(place, null), 350);
-  });
+/** True when the target plays already (the pill in a player): the room starts with it, with no reload. */
+function playsNow(target: StartTarget | null, where: SheetPlace): boolean {
+  const now = playerState().now;
+  if (!target || !now) return false;
+  if (target.kind === 'audio') return now.kind === 'audio' && (!target.item || audioState().queue.source?.id === target.item.Id || now.item.Id === target.item.Id);
+  return now.kind === 'video' && (where === 'player' || now.item.Id === target.item.Id);
 }
 
-/** Plays an audio item (album, playlist, track) when it does not play yet. */
-async function playAudio(item: BaseItemDto): Promise<void> {
-  if (audioState().queue.source?.id === item.Id && playerState().now?.kind === 'audio') return;
-  if (playerState().now?.kind === 'video') await videoSession().stop();
-  await audioSession().play({ item });
-}
-
-/** Starts the session the user chose. The sheet then shows the host view. */
-export async function startSession(target: StartTarget, transport: Transport, findable: Findable, where: SheetPlace): Promise<void> {
+/**
+ * Opens the session the user chose and closes the sheet. A target that plays
+ * already stays as it is; another target starts in the room (for everyone).
+ */
+export async function startSession(target: StartTarget | null, transport: Transport, findable: Findable, where: SheetPlace): Promise<void> {
+  const adopt = playsNow(target, where);
+  const item = target?.item ?? null;
   if (transport === 'nearby') {
     nearby().setFindable(findable);
-    if (target.kind === 'video') {
-      const onPlayer = where === 'player';
-      if (!onPlayer) closeTogetherSheet();
-      await nearby().host(target.item);
-      if (!onPlayer && togetherState().role === 'host') openOnPlayer('player');
-      return;
-    }
-    if (target.item) await playAudio(target.item);
-    if (canHostAudio()) await nearby().hostAudio();
-    else toast('Play it first, then start the session.');
+    if (!(await nearby().openRoom({ adopt }))) return;
+    closeTogetherSheet();
+    if (item && !adopt) playHere(isAudioItem(item) ? { item } : { item, autoplay: false });
     return;
   }
-  // Through the server (Jellyfin SyncPlay).
+  // Through the server (Jellyfin SyncPlay): the group is the room.
   void nearby().stopAll();
-  if (target.kind === 'video') {
-    const onPlayer = where === 'player';
-    if (!onPlayer) closeTogetherSheet();
-    await syncPlay().create(target.item);
-    if (!onPlayer) openOnPlayer('player');
-    return;
-  }
-  if (target.item) await syncPlay().create(target.item);
-  else await syncPlay().createForAudio();
+  closeTogetherSheet();
+  if (adopt && target?.kind === 'audio') await syncPlay().createForAudio();
+  else await syncPlay().create(adopt ? (playerState().now?.item ?? null) : item);
 }

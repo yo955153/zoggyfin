@@ -23,6 +23,7 @@ import { bitrateFor, usePlaybackSettings } from '@/settings/playback';
 
 import { mediaCapabilities } from './capabilities';
 import { controlGate } from './control-gate';
+import { playRouter } from './play-router';
 import { buildDeviceProfile } from './device-profile';
 import { getEngine } from './engine';
 import type { EngineEvent } from './engine-types';
@@ -703,13 +704,16 @@ class VideoSession {
     const now = playerState().now;
     if (!now?.next) return;
     const rest = now.queue[0]?.Id === now.next.Id ? now.queue.slice(1) : [];
-    await this.play({ item: now.next, queue: rest, startPositionTicks: 0 });
+    // In a together session the next episode goes to the group (see play-router.ts).
+    const request = playRouter.route({ item: now.next, queue: rest, startPositionTicks: 0 }, 'next');
+    if (request) await this.play(request);
   }
 
   private async onEnded() {
     const now = playerState().now;
-    // In a watch-together session the group decides what plays next.
-    if (now?.next && usePlaybackSettings.getState().autoplayNext && !controlGate.active) {
+    // In a together session the session says who starts the next episode (the host, or the member who picked it).
+    const mayAutoplay = playRouter.active ? playRouter.autoplay() : !controlGate.active;
+    if (now?.next && usePlaybackSettings.getState().autoplayNext && mayAutoplay) {
       await this.playNext();
       return;
     }

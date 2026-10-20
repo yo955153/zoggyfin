@@ -92,7 +92,9 @@ export function NearbyHomeCard() {
         <View key={h.peerId} style={s.cardRow}>
           <Icon name={h.advert.kind === 'audio' ? 'music.note' : 'person.2.fill'} size={16} color={s.cardIcon.color} />
           <Text style={s.cardText} numberOfLines={2}>
-            {`${h.advert.hostName} is ${h.advert.kind === 'audio' ? 'listening to' : 'watching'} ${h.advert.itemName || (h.advert.kind === 'audio' ? 'music' : 'a video')} nearby`}
+            {h.advert.itemId === 'room' && !h.advert.itemName
+              ? `${h.advert.hostName} has a session open nearby`
+              : `${h.advert.hostName} is ${h.advert.kind === 'audio' ? 'listening to' : 'watching'} ${h.advert.itemName || (h.advert.kind === 'audio' ? 'music' : 'a video')} nearby`}
           </Text>
           <Button
             title="Join"

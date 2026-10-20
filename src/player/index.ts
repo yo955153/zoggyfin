@@ -8,13 +8,17 @@ import { router } from 'expo-router';
 
 import type { BaseItemDto } from '@/api/types';
 
+import { toast } from '@/lib/toast';
+
 import { audioSession } from './audio/session';
+import { playRouter } from './play-router';
 import { videoSession } from './session';
 import { playerState, setPlayerState } from './store';
-import type { PlayerController } from './types';
+import type { PlayerController, PlayRequest } from './types';
 
 export type { PlayerController, PlayRequest } from './types';
 export { usePlayerStore } from './store';
+export { playRouter } from './play-router';
 
 const AUDIO_TYPES = new Set(['Audio', 'AudioBook', 'MusicAlbum', 'MusicArtist', 'MusicGenre']);
 
@@ -52,30 +56,47 @@ export const activePlayback = {
   },
 };
 
+/**
+ * Plays a request on this device, with no together routing. The together
+ * host uses it for a guest's pick; screens use `usePlayer().play`.
+ */
+export function playHere(request: PlayRequest): void {
+  if (isAudioItem(request.item)) {
+    void (async () => {
+      if (playerState().now?.kind === 'video') await videoSession().stop();
+      await audioSession().play(request);
+    })();
+    return;
+  }
+  void (async () => {
+    if (playerState().now?.kind === 'audio') await audioSession().stopForVideo();
+    await videoSession().play(request);
+  })();
+  router.navigate('/player');
+}
+
+/** True when a together session lets this device change its queue; else says why. */
+function queueAllowed(): boolean {
+  const lock = playRouter.queueLock();
+  if (lock) toast(lock, { icon: 'lock.fill' });
+  return !lock;
+}
+
 const controller: PlayerController = {
   available: true,
   play(request) {
-    if (isAudioItem(request.item)) {
-      void (async () => {
-        if (playerState().now?.kind === 'video') await videoSession().stop();
-        await audioSession().play(request);
-      })();
-      return;
-    }
-    void (async () => {
-      if (playerState().now?.kind === 'audio') await audioSession().stopForVideo();
-      await videoSession().play(request);
-    })();
-    router.navigate('/player');
+    // In a together session the session decides first (play-router.ts).
+    const routed = playRouter.route(request, 'user');
+    if (routed) playHere(routed);
   },
   playNext(item) {
-    void audioSession().playNext(item);
+    if (queueAllowed()) void audioSession().playNext(item);
   },
   addToQueue(item) {
-    void audioSession().addToQueue(item);
+    if (queueAllowed()) void audioSession().addToQueue(item);
   },
   instantMix(item) {
-    void audioSession().instantMix(item);
+    if (queueAllowed()) void audioSession().instantMix(item);
   },
 };
 

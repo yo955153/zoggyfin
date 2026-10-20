@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDownloadsStore } from '@/downloads/store';
 import { GlobalPlayerKeys } from '@/features/player/global-keys';
 import { MiniPlayer, useMiniPlayerVisible } from '@/features/player/mini-player';
+import { RoomLayer } from '@/features/together/room-bar';
 import { HAS_ACCESSORY, TAB_BAR_HEIGHT } from '@/lib/tab-bar-inset';
 import { features, isTV } from '@/platform/tv';
 import { fontFamily, spacing, useLayout, useTheme } from '@/theme';
@@ -112,6 +113,7 @@ export default function TabsLayout() {
     <View style={styles.flex}>
       {tabs}
       {mini && !HAS_ACCESSORY ? <FloatingMiniPlayer /> : null}
+      {features.watchTogether ? <RoomLayer /> : null}
       <GlobalPlayerKeys />
     </View>
   );

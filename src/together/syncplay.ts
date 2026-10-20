@@ -20,7 +20,8 @@ import type { BaseItemDto } from '@/api/types';
 import { useSessionStore } from '@/auth/session-store';
 import { toast } from '@/lib/toast';
 import { features } from '@/platform/tv';
-import { isAudioItem } from '@/player';
+import { isAudioItem, type PlayRequest } from '@/player';
+import { type PlayRoute, playRouter } from '@/player/play-router';
 import { slimItem } from '@/player/audio/item';
 import { isLongFormList } from '@/player/audio/long-form';
 import { audioSession } from '@/player/audio/session';
@@ -83,6 +84,22 @@ class SyncPlayController {
   /** The group plays audio: the audio player follows the group queue (entry keys are SyncPlay's playlist item ids). */
   private audio = false;
   private unsubTrack: (() => void) | null = null;
+  /** This device set the group queue last: it starts the next episode at the end (one member, not all). */
+  private picker = false;
+  private pickedAt = 0;
+
+  /**
+   * The play router of a group: a Play button anywhere in the app sets the
+   * group queue (SetNewQueue), so everyone loads the item.
+   */
+  private readonly router: PlayRoute = {
+    route: (request) => {
+      void this.playRequest(request).catch((e: unknown) => toast(describeError(e).title));
+      return null;
+    },
+    autoplay: () => this.picker,
+    queueLock: () => 'Pick an album or a playlist to play it for the group.',
+  };
 
   private api(): Api | null {
     const s = useSessionStore.getState().session;
@@ -145,6 +162,52 @@ class SyncPlayController {
     this.teardown();
   }
 
+  /** A Play button while in the group: the request becomes the group queue. */
+  async playRequest(request: PlayRequest): Promise<void> {
+    const api = this.api();
+    const s = useSessionStore.getState().session;
+    if (!api || !s || !request.item.Id) return;
+    let ids: string[];
+    let index = 0;
+    let start = request.startPositionTicks;
+    if (isAudioItem(request.item)) {
+      if (request.list?.length) {
+        ids = request.list.map((i) => i.Id).filter((x): x is string => !!x);
+        index = Math.max(0, request.index ?? ids.indexOf(request.item.Id));
+      } else if (request.item.Type === 'Audio' || request.item.Type === 'AudioBook') {
+        ids = [request.item.Id, ...(request.queue ?? []).map((i) => i.Id).filter((x): x is string => !!x)];
+      } else {
+        const tracks = await jf.getAudioTracks(api, s.userId, request.item);
+        ids = tracks.map((t) => t.Id).filter((x): x is string => !!x);
+      }
+      if (request.shuffle) {
+        ids = [...ids].sort(() => Math.random() - 0.5);
+        index = 0;
+      }
+      start ??= 0;
+    } else {
+      // A show or a season: the episode to watch, as the player picks it.
+      const target = await jf.resolvePlayable(api, s.userId, request.item);
+      if (!target?.Id) {
+        toast('Nothing to play here yet.');
+        return;
+      }
+      ids = [target.Id, ...(request.queue ?? []).map((i) => i.Id).filter((x): x is string => !!x && x !== target.Id)];
+      start ??= target.Id === request.item.Id ? (request.item.UserData?.PlaybackPositionTicks ?? target.UserData?.PlaybackPositionTicks ?? 0) : (target.UserData?.PlaybackPositionTicks ?? 0);
+    }
+    if (!ids.length) {
+      toast('Nothing to play here yet.');
+      return;
+    }
+    this.picker = true;
+    this.pickedAt = Date.now();
+    const at = Math.min(index, 499);
+    const from = Math.max(0, at - 100);
+    await getSyncPlayApi(api).syncPlaySetNewQueue({
+      playRequestDto: { PlayingQueue: ids.slice(from, from + 500), PlayingItemPosition: at - from, StartPositionTicks: start },
+    });
+  }
+
   /** Puts an item at the head of the group queue: everyone loads it. Audio: the album, playlist or the queue that plays. */
   async playInGroup(item: BaseItemDto): Promise<void> {
     const api = this.api();
@@ -155,6 +218,8 @@ class SyncPlayController {
     }
     const st = playerState();
     const start = st.now?.item.Id === item.Id ? st.position : (item.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
+    this.picker = true;
+    this.pickedAt = Date.now();
     await getSyncPlayApi(api).syncPlaySetNewQueue({
       playRequestDto: { PlayingQueue: [item.Id], PlayingItemPosition: 0, StartPositionTicks: secondsToTicks(start) },
     });
@@ -184,6 +249,8 @@ class SyncPlayController {
       toast('Nothing to play here yet.');
       return;
     }
+    this.picker = true;
+    this.pickedAt = Date.now();
     await getSyncPlayApi(api).syncPlaySetNewQueue({
       playRequestDto: { PlayingQueue: ids.slice(0, 500), PlayingItemPosition: Math.min(index, 499), StartPositionTicks: secondsToTicks(start) },
     });
@@ -231,8 +298,9 @@ class SyncPlayController {
         const g = groupView((u.Data ?? {}) as Record<string, never>);
         if (!g) return;
         this.groupId = g.id;
-        setTogether({ mode: 'syncplay', role: null, phase: IDLE, notice: null });
+        setTogether({ mode: 'syncplay', role: null, phase: IDLE, notice: null, item: null });
         setSyncPlayView({ group: g, error: null });
+        playRouter.set(this.router);
         this.startClock();
         return;
       }
@@ -251,6 +319,9 @@ class SyncPlayController {
         return;
       }
       case 'PlayQueue': {
+        // A new queue from another member: that member starts the next episode now.
+        const reason = (u.Data as { Reason?: string } | undefined)?.Reason;
+        if (reason === 'NewPlaylist' && Date.now() - this.pickedAt > 5000) this.picker = false;
         const t = queueTarget((u.Data ?? {}) as Record<string, never>);
         void this.onQueue(t);
         return;
@@ -359,6 +430,7 @@ class SyncPlayController {
         return;
       }
       if (this.audio) this.leaveAudio();
+      setTogether({ kind: 'video', item: { id: item.Id ?? t.itemId, name: item.Name ?? 'Video', type: item.Type ?? 'Video' } });
       // While it loads, the group waits: the server holds a play until this device is ready.
       void videoSession().play({ item, startPositionTicks: secondsToTicks(t.startSeconds), autoplay: false });
       router.navigate('/player');
@@ -388,6 +460,8 @@ class SyncPlayController {
     const entries = t.entries.map((e, i) => ({ key: e.playlistItemId, item: slimItem(items[i] as BaseItemDto), user: false }));
     const queue = { entries, index: t.entryIndex, original: entries.map((e) => e.key), shuffle: t.shuffle, repeat: t.repeat, source: null };
     this.audio = true;
+    const first = items[t.entryIndex] ?? items[0];
+    setTogether({ kind: 'audio', item: first ? { id: first.Id ?? '', name: first.Album ?? first.Name ?? 'Music', type: first.Type ?? 'Audio' } : null });
     queueGate.set('The group plays the queue. Use Next, Previous or the queue rows.');
     // No shared files: each track comes from this device's download or the server.
     await audioSession().loadShared(queue, isLongFormList(items, null), () => null, t.startSeconds, { reports: true });
@@ -520,10 +594,12 @@ class SyncPlayController {
     this.groupId = null;
     if (this.audio) this.leaveAudio();
     controlGate.set(null);
+    playRouter.set(null);
+    this.picker = false;
     this.unsub?.();
     this.unsub = null;
     setSyncPlayView({ group: null });
-    if (togetherState().mode === 'syncplay') setTogether({ mode: 'none', sync: null, waiting: false });
+    if (togetherState().mode === 'syncplay') setTogether({ mode: 'none', sync: null, waiting: false, item: null });
   }
 }
 

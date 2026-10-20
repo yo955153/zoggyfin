@@ -1,7 +1,8 @@
 /**
  * The Together sheet ("Watch together" / "Listen together"): one hub for
  * every session. Join a session (nearby or on the server, one list), start
- * one (pick, then "Who can join?"), or join with a code. In a session: the
+ * one ("Who can join?", then the room opens and the user picks what to play
+ * with the normal app), or join with a code. In a session: the
  * people, the session settings (controls, new people, who can find it) and
  * end or leave. Nearby help: who can find the host, join codes, hotspots
  * and the guest's help card.
@@ -27,12 +28,12 @@ import { linkNative } from '@/together/nearby-native';
 import { closeTogetherSheet, openTogetherSheet, releaseTogetherSheet, setTogether, type SheetPlace, type TogetherState, useTogetherStore } from '@/together/store';
 import { canSyncPlay, syncPlay, syncPlaySupported } from '@/together/syncplay';
 import { groupStateLabel } from '@/together/syncplay-logic';
-import { joinTransport, mergeSessions, type SessionRow, sessionHeadline } from '@/together/hub';
+import { joinTransport, mergeSessions, playForEveryone, type SessionRow, sessionHeadline, shortName } from '@/together/hub';
 import { SHOWN_REQUESTS, visibleRequests } from '@/together/join-gate';
 import type { Member } from '@/together/protocol';
 
 import { QrCode } from './qr-code';
-import { StartPicker, startSession, type StartTarget, targetFor, WhoStep } from './start-flow';
+import { startSession, type StartTarget, targetFor, WhoStep } from './start-flow';
 import { ChoiceRow, makeStyles, RowIcon, Section } from './together-parts';
 
 const VIDEO_TYPES = new Set(['Movie', 'Episode', 'Video', 'MusicVideo']);
@@ -53,10 +54,23 @@ export interface TogetherEntry {
 /** The item page's "Together" action, or null where watch or listen together does not apply. */
 export function useTogetherEntry(item: BaseItemDto): TogetherEntry | null {
   const signedIn = useSessionStore((s) => !!s.session);
+  const inSession = useTogetherStore((x) => playForEveryone(x) !== null);
   const video = VIDEO_TYPES.has(item.Type ?? '');
   if (!features.watchTogether || (!video && !isAudioEntry(item))) return null;
   if (!nearbySupported && !(syncPlaySupported && signedIn)) return null;
-  return { open: () => openTogetherSheet('item', item), label: video ? 'Watch together' : 'Listen together' };
+  // In a session, the item's Play button plays for everyone; this opens the session sheet.
+  return { open: () => openTogetherSheet('item', inSession ? null : item), label: inSession ? 'Together' : video ? 'Watch together' : 'Listen together' };
+}
+
+/**
+ * The item page's Play button in a session: "Play for everyone", or
+ * "Only the host picks" (locked) for a guest when only the host picks.
+ * Null with no session.
+ */
+export function usePlayForEveryone(): { label: string; locked: boolean } | null {
+  const label = useTogetherStore((x) => playForEveryone(x)?.label ?? null);
+  const locked = useTogetherStore((x) => playForEveryone(x)?.locked ?? false);
+  return label ? { label, locked } : null;
 }
 
 /** Mount once per screen that can open the sheet; it shows only for its own screen. */
@@ -152,7 +166,7 @@ function TogetherSheet() {
   };
 
   const base = sheetTitle(st, item);
-  const title = group ? group.name : nearbySession ? (st.item?.name ?? base) : base;
+  const title = group ? group.name : nearbySession ? (st.item ? st.item.album || st.item.name : 'Together') : base;
   return (
     <Sheet visible title={title} onClose={close} doneLabel="Done" fixedHeight>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: spacing.xl, paddingBottom: spacing.md }} keyboardShouldPersistTaps="handled">
@@ -184,7 +198,8 @@ export function TogetherSheetContent({
 
 // ---- Lobby (the Together hub) -------------------------------------------------------
 
-type LobbyStep = { name: 'main' } | { name: 'pick' } | { name: 'who'; target: StartTarget; picked: boolean };
+/** `target` null: an empty room (the host picks with the normal app). */
+type LobbyStep = { name: 'main' } | { name: 'who'; target: StartTarget | null };
 
 /**
  * The hub: one list of sessions to join (nearby hosts and server groups,
@@ -206,19 +221,8 @@ function Lobby({ st, item, signedIn, offline, env }: { st: TogetherState; item: 
     groupStateLabel,
   );
 
-  if (step.name === 'pick') {
-    return <StartPicker offline={offline} onBack={() => setStep({ name: 'main' })} onPick={(target) => setStep({ name: 'who', target, picked: true })} />;
-  }
   if (step.name === 'who') {
-    return (
-      <WhoStep
-        target={step.target}
-        where={st.sheet.where}
-        offline={offline}
-        networkType={env.network?.type ?? null}
-        onBack={() => setStep(step.picked ? { name: 'pick' } : { name: 'main' })}
-      />
-    );
+    return <WhoStep target={step.target} where={st.sheet.where} offline={offline} networkType={env.network?.type ?? null} onBack={() => setStep({ name: 'main' })} />;
   }
 
   const join = (row: SessionRow) => {
@@ -285,9 +289,9 @@ function Lobby({ st, item, signedIn, offline, env }: { st: TogetherState; item: 
       </Section>
 
       {st.sheet.where === 'join' && !signedIn ? null : (
-        <Section title="Start a session">
-          <Button title={startTitle} icon="play.fill" onPress={() => setStep(direct ? { name: 'who', target: direct, picked: false } : { name: 'pick' })} />
-          {direct ? <Button title="Pick something else" variant="text" onPress={() => setStep({ name: 'pick' })} /> : null}
+        <Section title="Start a session" footer={direct ? undefined : 'Then pick something to play anywhere in the app. It plays for everyone.'}>
+          <Button title={startTitle} icon={direct ? 'play.fill' : 'person.2.fill'} onPress={() => setStep({ name: 'who', target: direct })} />
+          {direct ? <Button title="Start an empty session" variant="text" onPress={() => setStep({ name: 'who', target: null })} /> : null}
         </Section>
       )}
 
@@ -544,6 +548,8 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
         </View>
       ) : null}
 
+      <RoomNow st={st} />
+
       <Section title={sessionHeadline(st, null) ?? 'People'} footer={peopleFooter(st)}>
         <View style={s.group}>
           {reconnecting ? (
@@ -568,7 +574,7 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
               <RowIcon name="person.fill" />
               <View style={s.rowText}>
                 <Text style={s.rowTitle}>You</Text>
-                <Text style={s.rowDetail}>{st.source === 'local' ? 'Plays your download' : 'Streams from the host'}</Text>
+                <Text style={s.rowDetail}>{!st.item ? 'Waiting' : st.source === 'local' ? 'Plays your download' : st.source === 'stream' ? 'Streams' : 'Not playing'}</Text>
               </View>
             </View>
           )}
@@ -591,7 +597,7 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
           <View style={s.group}>
             <SwitchRow
               title="Only I control"
-              detail={st.onlyHostControls ? 'Guests watch; you play, pause and seek.' : 'Everyone can play, pause, seek and change the speed.'}
+              detail={st.onlyHostControls ? 'Guests watch; you pick, play, pause and seek.' : 'Everyone can pick what plays, play, pause, seek and change the speed.'}
               value={st.onlyHostControls}
               onChange={(v) => nearby().setOnlyHostControls(v)}
             />
@@ -625,7 +631,7 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
             <View style={s.rowText}>
               <Text style={s.rowTitle}>{st.onlyHostControls ? 'Only the host controls' : 'Everyone controls'}</Text>
               <Text style={s.rowDetail}>
-                {st.onlyHostControls ? 'The host plays, pauses and seeks.' : 'Everyone can play, pause, seek and change the speed.'}
+                {st.onlyHostControls ? 'The host picks, plays, pauses and seeks.' : 'Everyone can pick what plays, play, pause, seek and change the speed.'}
               </Text>
             </View>
             <Icon name={st.onlyHostControls ? 'lock.fill' : 'person.2.fill'} size={18} color={c.text2} />
@@ -647,6 +653,44 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
   );
 }
 
+/**
+ * What the room plays, or who picks next. The host (and a guest who may
+ * pick) closes the sheet to pick something with the normal app.
+ */
+function RoomNow({ st }: { st: TogetherState }) {
+  const s = useStyles(makeStyles);
+  const signedIn = useSessionStore((x) => !!x.session);
+  const host = st.role === 'host' || !!st.syncplay.group;
+  const canPick = host || (signedIn && !st.onlyHostControls);
+  const title = st.item ? st.item.album || st.item.name : null;
+  const hostName = shortName(st.hostName);
+  const line = title
+    ? host
+      ? 'Play something else anywhere in the app to switch for everyone.'
+      : canPick
+        ? 'Play something in the app to switch for everyone.'
+        : `Only ${hostName} picks what plays.`
+    : host
+      ? 'Pick something to play anywhere in the app. It plays for everyone.'
+      : canPick
+        ? `Or pick something yourself: it plays for everyone.`
+        : `Only ${hostName} picks what plays.`;
+  return (
+    <Section title="Playing">
+      <View style={[s.group, s.row]}>
+        <RowIcon name={title ? (st.kind === 'audio' ? 'music.note' : 'film') : 'person.2.fill'} />
+        <View style={s.rowText}>
+          <Text style={s.rowTitle} numberOfLines={2}>
+            {title ?? (host ? 'Nothing yet' : `Waiting for ${hostName} to pick something`)}
+          </Text>
+          <Text style={s.rowDetail}>{line}</Text>
+        </View>
+      </View>
+      {!title && canPick ? <Button title="Pick something" variant="tonal" icon="magnifyingglass" onPress={() => closeTogetherSheet()} /> : null}
+    </Section>
+  );
+}
+
 /** A switch row in "Session settings". */
 function SwitchRow({ title, detail, value, onChange }: { title: string; detail: string; value: boolean; onChange: (v: boolean) => void }) {
   const s = useStyles(makeStyles);
@@ -664,6 +708,7 @@ function SwitchRow({ title, detail, value, onChange }: { title: string; detail: 
 
 /** Where a member's media comes from. */
 function memberSource(m: Member, host: boolean): string {
+  if (m.noMedia) return 'Not playing this';
   if (m.local) return 'Own download';
   if (m.server) return 'Streams from the server';
   return host ? 'Streams from you' : 'Streams from the host';
@@ -873,6 +918,7 @@ function GroupView({ st, item }: { st: TogetherState; item: BaseItemDto | null }
   const canMove = nearbySupported && !!moveTarget && (moveTarget.kind === 'audio' || canHostNearby(playing));
   return (
     <>
+      <RoomNow st={st} />
       <Section
         title={sessionHeadline(st, serverName) ?? 'Session'}
         footer={`Anyone with an account on ${serverName ?? 'this server'} can join. ${groupStateLabel(group.state)}.${st.sync ? ` Server clock: ${Math.round(st.sync.rtt)} ms round trip.` : ''}`}>

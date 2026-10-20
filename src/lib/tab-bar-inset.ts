@@ -3,6 +3,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isTV } from '@/platform/tv';
 import { usePlayerStore } from '@/player/store';
+import { roomLabel } from '@/together/hub';
+import { useTogetherStore } from '@/together/store';
 import { spacing } from '@/theme';
 
 /** iOS 26 has the tab bar bottom accessory slot; elsewhere the mini player floats. */
@@ -14,6 +16,12 @@ export const TAB_BAR_HEIGHT = Platform.OS === 'web' ? 68 : Platform.OS === 'andr
 /** Height of the floating mini player capsule (its row is 52 pt). */
 export const FLOATING_MINI_HEIGHT = 52;
 
+/** Height of the together room bar (it floats above the mini player and the tab bar). */
+export const ROOM_BAR_HEIGHT = 40;
+
+/** Height of the iOS 26 tab bar accessory (the mini player), with its gap. */
+export const ACCESSORY_HEIGHT = 56;
+
 export interface TabOverlapInput {
   os: typeof Platform.OS;
   tv: boolean;
@@ -23,6 +31,8 @@ export interface TabOverlapInput {
   floatingMini: boolean;
   /** The scroll view uses contentInsetAdjustmentBehavior="automatic" (iOS adds the tab bar itself). */
   autoInset: boolean;
+  /** The together room bar shows (it floats over the content on every platform). */
+  roomBar?: boolean;
 }
 
 /**
@@ -34,9 +44,9 @@ export interface TabOverlapInput {
  * - iOS: a scroll view with automatic insets already clears the bar.
  * - Web (and the Mac app): the bar floats 16 px over the content.
  */
-export function tabBarOverlap({ os, tv, safeBottom, floatingMini, autoInset }: TabOverlapInput): number {
+export function tabBarOverlap({ os, tv, safeBottom, floatingMini, autoInset, roomBar = false }: TabOverlapInput): number {
   if (tv) return 0;
-  const mini = floatingMini ? FLOATING_MINI_HEIGHT + spacing.sm : 0;
+  const mini = (floatingMini ? FLOATING_MINI_HEIGHT + spacing.sm : 0) + (roomBar ? ROOM_BAR_HEIGHT + spacing.sm : 0);
   if (os === 'android') return mini;
   if (os === 'web') return Math.max(16, safeBottom) + 52 + mini;
   return (autoInset ? 0 : safeBottom + TAB_BAR_HEIGHT) + mini;
@@ -46,7 +56,8 @@ export function tabBarOverlap({ os, tv, safeBottom, floatingMini, autoInset }: T
 export function useTabBarOverlap({ autoInset = true }: { autoInset?: boolean } = {}): number {
   const safeBottom = useSafeAreaInsets().bottom;
   const miniVisible = usePlayerStore((s) => !!s.now && s.presentation === 'mini');
-  return tabBarOverlap({ os: Platform.OS, tv: isTV, safeBottom, floatingMini: miniVisible && !HAS_ACCESSORY, autoInset });
+  const roomBar = useTogetherStore((s) => roomLabel(s) !== null);
+  return tabBarOverlap({ os: Platform.OS, tv: isTV, safeBottom, floatingMini: miniVisible && !HAS_ACCESSORY, autoInset, roomBar });
 }
 
 /** Bottom padding for a tab screen's scroll content: `base` space below the last row, clear of the bars. */

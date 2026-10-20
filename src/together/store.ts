@@ -16,8 +16,9 @@ export type TogetherMode = 'none' | 'nearby' | 'syncplay';
 /**
  * The screen that shows the session sheet. `join`: a screen with no item
  * (sign-in, offline banner) that only joins. `music`: the music player.
+ * `room`: over the app (the room bar), outside the players.
  */
-export type SheetPlace = 'player' | 'item' | 'join' | 'music' | 'hub';
+export type SheetPlace = 'player' | 'item' | 'join' | 'music' | 'hub' | 'room';
 
 export interface JoinRequest {
   inviteId: string;

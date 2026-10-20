@@ -9,14 +9,21 @@
  * comes back while the group plays catches up instead: the group does not
  * wait for it.
  *
+ * A room: the session does not depend on one item. The room can have no
+ * item (`setMedia(null)`), and the host can play another item at any time
+ * (`setMedia`): every guest that understands rooms gets a `media` message,
+ * loads the item, and the group starts when everyone is ready (or after
+ * `LOAD_LIMIT`). A guest of an older build gets a clear `removed` instead.
+ *
  * Members: a guest that sent `deltas` gets the whole list in its welcome,
  * then only the changes (`memberDelta`), at most one in `MEMBERS_EVERY` ms.
  * An older guest gets the whole list, at the same pace. Buffering is not
  * part of the list that goes out (it changes often, and only the host needs it).
  */
 import { positionAt } from './drift';
-import type { Anchor, ControlAction, MediaKind, Member, Message, SharedItem, SharedQueue, StreamRef } from './protocol';
+import type { Anchor, ControlAction, MediaKind, Member, Message, PickRequest, SharedItem, SharedQueue, StreamRef } from './protocol';
 import type { PlayerPort, Timers } from './player-port';
+import { ONLY_HOST_PICKS_TEXT } from './room-route';
 
 /** The queue actions of an audio session. */
 export type QueueAction = Extract<ControlAction, { action: 'next' | 'previous' | 'jump' | 'shuffle' | 'repeat' }>;
@@ -44,6 +51,39 @@ export const AWAY_LIMIT = 120_000;
 /** Member changes within this long go out as one message, ms. */
 export const MEMBERS_EVERY = 250;
 
+/** After a new item, the group waits at most this long for a member that loads, ms. */
+export const LOAD_LIMIT = 20_000;
+
+/** What an older guest reads when it cannot follow the room. */
+export const UPDATE_TEXT = {
+  empty: 'This session has nothing playing yet. Update Zoggyfin to join it.',
+  changed: 'The host picked something new. Update Zoggyfin to follow the session.',
+} as const;
+
+/** The text for a guest's pick when only the host picks. */
+export const ONLY_HOST_PICKS = ONLY_HOST_PICKS_TEXT;
+
+/** The media of the room: the item, how guests read it, the audio queue, and the host's player for it. */
+export interface RoomMedia {
+  kind: MediaKind;
+  item: SharedItem;
+  stream: StreamRef | null;
+  queue?: RoomQueue;
+  player: PlayerPort;
+}
+
+/** The player of a room with no item: it stays at 0 and paused. */
+export const IDLE_PORT: PlayerPort = {
+  position: () => 0,
+  isPlaying: () => false,
+  isBuffering: () => false,
+  play: () => undefined,
+  pause: () => undefined,
+  seek: () => undefined,
+  setRate: () => undefined,
+  onBuffering: () => () => undefined,
+};
+
 export interface RoomDeps {
   send(message: Message, to?: string[]): void;
   /** Host monotonic clock, ms. */
@@ -56,6 +96,10 @@ export interface RoomDeps {
   onDenied?(peerId: string): void;
   /** Answers a ping with `t2` stamped as late as it can be (link.ts `sendPong`). Unset: `send` with `now()`. */
   pong?(peerId: string, id: number, t0: number, t1: number): void;
+  /** A guest picked something for everyone (the host allows it). `memberId` and `name` are the guest's. */
+  onPick?(memberId: string, name: string, pick: PickRequest): void;
+  /** Close this socket (a guest that the room removed). */
+  drop?(peerId: string): void;
 }
 
 /** A member as the room keeps it: the public facts and the socket it uses now. */
@@ -66,11 +110,16 @@ interface RoomMember extends Member {
   catchingUp?: boolean;
   /** The guest takes `memberDelta` (else full `members` lists). */
   deltas?: boolean;
+  /** The guest understands rooms (`media`, `pick`, a welcome with no item). */
+  rooms?: boolean;
+  /** The member loads this item number: a buffering report for an older item does not count. */
+  loading?: number;
 }
 
 export interface RoomOptions {
   sessionId: string;
-  item: SharedItem;
+  /** Null: the room starts with no item (`deps.player` is then not used). */
+  item: SharedItem | null;
   /** The host's stream, or null. */
   stream: StreamRef | null;
   onlyHostControls: boolean;
@@ -87,6 +136,8 @@ export interface RoomOptions {
   /** A new host: the anchor to start from (from its own player), and the members it takes over (all away until they come back). */
   anchor?: Anchor;
   members?: Member[];
+  /** A new host: the item number of the room so far (it goes on from there). */
+  media?: number;
 }
 
 export class HostRoom {
@@ -99,23 +150,27 @@ export class HostRoom {
   private readonly members = new Map<string, RoomMember>();
   private readonly peerToMember = new Map<string, string>();
   private unsubQueue: (() => void)[] = [];
+  private player: PlayerPort;
+  /** The number of the current item; it grows with each `setMedia`. */
+  private mediaSeq: number;
+  private loadTimer: unknown = null;
   /** The members as the guests know them (the last list or delta that went out), by id. */
   private sentMembers = new Map<string, string>();
   private sentOnlyHostControls: boolean | null = null;
   private membersTimer: unknown = null;
-  readonly kind: MediaKind;
+  kind: MediaKind;
   readonly key: string | null;
   readonly epoch: number;
   readonly hostId: string | null;
-  private readonly queue: RoomQueue | null;
+  private queue: RoomQueue | null;
   private hostBuffering = false;
   private startTimer: unknown = null;
   private heartbeat: unknown = null;
-  private unsubBuffering: () => void;
+  private unsubBuffering: () => void = () => undefined;
   onlyHostControls: boolean;
   readonly sessionId: string;
-  readonly item: SharedItem;
-  private readonly stream: StreamRef | null;
+  item: SharedItem | null;
+  private stream: StreamRef | null;
   private readonly startLead: number;
 
   constructor(
@@ -132,31 +187,158 @@ export class HostRoom {
     this.key = opts.key ?? null;
     this.epoch = opts.epoch ?? 0;
     this.hostId = opts.hostId ?? null;
-    const p = deps.player;
+    this.mediaSeq = opts.media ?? 0;
+    const p = opts.item ? deps.player : IDLE_PORT;
+    this.player = p;
     this.wantPlaying = opts.anchor ? opts.anchor.playing : p.isPlaying();
     this.anchor = opts.anchor ?? { playing: p.isPlaying(), rate: 1, hostTime: deps.now(), position: p.position() };
     for (const m of opts.members ?? []) {
       this.members.set(m.id, { ...m, buffering: false, away: true, peerId: null, awayTimer: deps.timers.setTimeout(() => this.forget(m.id), AWAY_LIMIT) });
     }
+    if (!opts.item) this.queue = null;
+    this.listen();
+    this.heartbeat = deps.timers.setInterval(() => this.beat(), opts.heartbeatMs ?? 2000);
+  }
+
+  /** Listens to the player's buffering and the queue of the current item. */
+  private listen(): void {
+    this.unsubBuffering();
+    this.unsubQueue.forEach((u) => u());
+    this.unsubQueue = [];
     if (this.queue) {
       const q = this.queue;
       this.unsubQueue = [q.onTrack(() => this.trackChanged()), q.onQueue(() => this.broadcastQueue())];
     }
-    this.unsubBuffering = p.onBuffering((b) => {
+    this.hostBuffering = this.player.isBuffering();
+    this.unsubBuffering = this.player.onBuffering((b) => {
       this.hostBuffering = b;
       this.updateWaiting();
     });
-    this.heartbeat = deps.timers.setInterval(() => this.beat(), opts.heartbeatMs ?? 2000);
+  }
+
+  /** The number of the current item. */
+  get media(): number {
+    return this.mediaSeq;
+  }
+
+  /** True while the room has an item. */
+  get hasMedia(): boolean {
+    return this.item !== null;
+  }
+
+  /**
+   * The host plays another item (or none: `media` null). Every guest that
+   * understands rooms gets it; a guest of an older build is removed with a
+   * reason (returned: its sockets, which the room already told).
+   *
+   * `keep`: the player plays already (a room that starts with what plays
+   * now): the group takes its play state. Else the group starts the new item
+   * together once every member has loaded it (or after `LOAD_LIMIT`).
+   * `by`: the member id of a guest that picked it.
+   */
+  setMedia(media: RoomMedia | null, opts: { keep?: boolean; by?: string } = {}): string[] {
+    this.cancelStart();
+    this.clearLoadTimer();
+    this.mediaSeq += 1;
+    this.item = media?.item ?? null;
+    this.stream = media?.stream ?? null;
+    this.queue = media?.queue ?? null;
+    if (media) this.kind = media.kind;
+    this.player = media?.player ?? IDLE_PORT;
+    this.listen();
+    // An older guest cannot load another item: tell it why, and let it go.
+    const dropped: string[] = [];
+    for (const m of [...this.members.values()]) {
+      if (m.rooms || !m.peerId) continue;
+      this.deps.send({ t: 'removed', reason: UPDATE_TEXT.changed }, [m.peerId]);
+      dropped.push(m.peerId);
+      this.forget(m.id);
+    }
+    const loads = !!media && !opts.keep;
+    for (const [id, { noMedia: _n, ...m }] of this.members) {
+      this.members.set(id, { ...m, buffering: loads && !m.away, catchingUp: false, loading: loads ? this.mediaSeq : undefined });
+    }
+    const p = this.player;
+    const now = this.deps.now();
+    const playing = !!media && !!opts.keep && p.isPlaying();
+    this.wantPlaying = playing;
+    this.waiting = false;
+    this.anchor = { playing, rate: this.anchor.rate > 0 ? this.anchor.rate : 1, hostTime: now, position: media ? p.position() : 0 };
+    this.seq += 1;
+    const track = this.queue?.track() ?? undefined;
+    const message: Message = {
+      t: 'media',
+      seq: this.seq,
+      media: this.mediaSeq,
+      kind: this.kind,
+      item: this.item,
+      stream: this.stream,
+      anchor: this.anchor,
+      ...(this.queue ? { queue: this.queue.snapshot() } : {}),
+      ...(track ? { track } : {}),
+      ...(opts.by ? { by: opts.by } : {}),
+    };
+    if (this.peers.length) this.deps.send(message, this.peers);
+    for (const peer of dropped) this.deps.drop?.(peer);
+    this.broadcastMembers();
+    if (loads) {
+      this.loadTimer = this.deps.timers.setTimeout(() => this.loadTimedOut(), LOAD_LIMIT);
+      this.apply({ action: 'play' });
+    } else {
+      this.deps.onChange?.();
+    }
+    return dropped;
+  }
+
+  /** The rate of the group (a new item keeps it, as the players do). */
+  setGroupRate(rate: number): void {
+    if (rate > 0) this.anchor = { ...this.anchor, rate };
+  }
+
+  /**
+   * The host's player loads something new: the group pauses where it is
+   * until `setMedia` brings the new item. The old player is let go.
+   */
+  suspend(): void {
+    if (this.player === IDLE_PORT) return;
+    const position = this.currentAnchor().position;
+    this.cancelStart();
+    this.clearLoadTimer();
+    this.player = IDLE_PORT;
+    this.queue = null;
+    this.listen();
+    this.waiting = false;
+    this.anchor = { ...this.anchor, playing: false, hostTime: this.deps.now(), position };
+    this.broadcastState();
+  }
+
+  /** The members that still load the new item stop holding the group: they catch up. */
+  private loadTimedOut(): void {
+    this.loadTimer = null;
+    for (const [id, m] of this.members) {
+      if (m.loading === this.mediaSeq && m.buffering) this.members.set(id, { ...m, catchingUp: true });
+    }
+    this.updateWaiting();
+  }
+
+  private clearLoadTimer(): void {
+    if (this.loadTimer !== null) this.deps.timers.clearTimeout(this.loadTimer);
+    this.loadTimer = null;
   }
 
   /** Every member, with its buffering state (for the host's own UI). */
   get memberList(): Member[] {
-    return [...this.members.values()].map(({ peerId: _p, awayTimer: _t, catchingUp: _c, deltas: _d, ...m }) => m);
+    return [...this.members.values()].map(({ peerId: _p, awayTimer: _t, catchingUp: _c, deltas: _d, rooms: _r, loading: _l, ...m }) => m);
   }
 
   /** The members as they go to the guests: no buffering. */
   private get wireMembers(): Member[] {
     return this.memberList.map(({ buffering: _b, ...m }) => m);
+  }
+
+  /** The socket of a member, or null. */
+  peerOf(memberId: string): string | null {
+    return this.members.get(memberId)?.peerId ?? null;
   }
 
   /** The member id of a socket, or null. */
@@ -176,7 +358,13 @@ export class HostRoom {
         else this.deps.send({ t: 'pong', id: message.id, t0: message.t0, t1: receivedAt, t2: this.deps.now() }, [peerId]);
         return;
       case 'hello': {
-        const local = message.have.includes(this.item.id);
+        if (!this.item && !message.rooms) {
+          // An older build cannot wait in a room with no item.
+          this.deps.send({ t: 'removed', reason: UPDATE_TEXT.empty }, [peerId]);
+          this.deps.drop?.(peerId);
+          return;
+        }
+        const local = !!this.item && message.have.includes(this.item.id);
         const id = message.memberId || peerId;
         const old = this.members.get(id);
         if (old) {
@@ -188,7 +376,8 @@ export class HostRoom {
           id,
           name: message.name || 'Guest',
           local,
-          buffering: true,
+          // With no item there is nothing to load.
+          buffering: !!this.item,
           joinedAt: old?.joinedAt ?? this.deps.now(),
           canHost: message.canHost ?? false,
           maker: message.maker ?? false,
@@ -198,6 +387,8 @@ export class HostRoom {
           // Nobody pauses for a member that joins or comes back while the group plays: it catches up.
           catchingUp: this.wantPlaying,
           deltas: message.deltas ?? false,
+          rooms: message.rooms ?? false,
+          loading: this.item ? this.mediaSeq : undefined,
         });
         this.peerToMember.set(peerId, id);
         this.deps.send(
@@ -215,6 +406,7 @@ export class HostRoom {
             epoch: this.epoch,
             ...(this.hostId ? { hostId: this.hostId } : {}),
             ...(message.deltas ? { members: this.wireMembers } : {}),
+            ...(message.rooms ? { media: this.mediaSeq } : {}),
           },
           [peerId],
         );
@@ -230,19 +422,37 @@ export class HostRoom {
           this.deps.onDenied?.(peerId);
           return;
         }
+        if (!this.item) return;
         this.apply(message);
         return;
+      case 'pick': {
+        const id = this.peerToMember.get(peerId);
+        const m = id ? this.members.get(id) : undefined;
+        if (!id || !m) return;
+        if (this.onlyHostControls) {
+          this.deps.send({ t: 'denied', reason: ONLY_HOST_PICKS }, [peerId]);
+          this.deps.onDenied?.(peerId);
+          return;
+        }
+        this.deps.onPick?.(id, m.name, message.pick);
+        return;
+      }
       case 'buffering': {
         const id = this.peerToMember.get(peerId);
         const m = id ? this.members.get(id) : undefined;
         if (!id || !m) return;
+        // A report for an item before the current one (the guest had not loaded the new one yet).
+        if (message.media !== undefined && message.media < this.mediaSeq) return;
+        const { noMedia: _n, ...rest } = m;
         this.members.set(id, {
-          ...m,
-          buffering: message.buffering,
+          ...rest,
+          buffering: message.buffering && !message.noMedia,
           local: message.local,
           server: message.server ?? m.server,
           canHost: message.canHost ?? m.canHost,
           catchingUp: message.buffering ? m.catchingUp : false,
+          ...(message.noMedia ? { noMedia: true } : {}),
+          loading: message.buffering ? m.loading : undefined,
         });
         this.broadcastMembers();
         this.updateWaiting();
@@ -304,7 +514,8 @@ export class HostRoom {
 
   /** A control from the host's own player. */
   apply(c: ControlAction): void {
-    const p = this.deps.player;
+    if (!this.item) return;
+    const p = this.player;
     const now = this.deps.now();
     if (isQueueAction(c)) {
       const q = this.queue;
@@ -374,6 +585,7 @@ export class HostRoom {
 
   dispose(): void {
     this.cancelStart();
+    this.clearLoadTimer();
     if (this.membersTimer !== null) this.deps.timers.clearTimeout(this.membersTimer);
     this.membersTimer = null;
     this.deps.timers.clearInterval(this.heartbeat);
@@ -402,12 +614,22 @@ export class HostRoom {
   private broadcastQueue(): void {
     if (!this.queue) return;
     this.seq += 1;
-    if (this.peers.length) this.deps.send({ t: 'queue', seq: this.seq, queue: this.queue.snapshot() }, this.peers);
+    const by = this.queueBy;
+    this.queueBy = null;
+    if (this.peers.length) this.deps.send({ t: 'queue', seq: this.seq, queue: this.queue.snapshot(), ...(by ? { by } : {}) }, this.peers);
     this.deps.onChange?.();
   }
 
+  /** The guest that picked the next queue change (for its note on the other guests). */
+  private queueBy: string | null = null;
+
+  /** A guest picked a new queue for the audio item that plays: the next queue message names it. */
+  markQueuePick(memberId: string): void {
+    this.queueBy = memberId;
+  }
+
   private scheduleStart(position: number): void {
-    const p = this.deps.player;
+    const p = this.player;
     const at = this.deps.now() + this.startLead;
     this.waiting = false;
     p.pause();
@@ -431,7 +653,7 @@ export class HostRoom {
     if (blocked && this.wantPlaying && !this.waiting) {
       // Everyone waits for the member that buffers.
       this.cancelStart();
-      const p = this.deps.player;
+      const p = this.player;
       p.pause();
       this.waiting = true;
       this.anchor = { ...this.anchor, playing: false, hostTime: this.deps.now(), position: p.position() };
@@ -448,15 +670,15 @@ export class HostRoom {
   /** The anchor at the host player's real position (it can drift from the plan). */
   private currentAnchor(): Anchor {
     const now = this.deps.now();
-    if (this.anchor.playing && now >= this.anchor.hostTime && this.deps.player.isPlaying()) {
-      return { ...this.anchor, hostTime: now, position: this.deps.player.position() };
+    if (this.anchor.playing && now >= this.anchor.hostTime && this.player.isPlaying()) {
+      return { ...this.anchor, hostTime: now, position: this.player.position() };
     }
     return this.anchor.playing && now >= this.anchor.hostTime ? { ...this.anchor, hostTime: now, position: positionAt(this.anchor, now) } : this.anchor;
   }
 
   /** Re-anchors to the host player and repeats the state, so late or lost messages heal. */
   private beat(): void {
-    if (this.startTimer !== null) return;
+    if (this.startTimer !== null || !this.item) return;
     this.anchor = this.currentAnchor();
     if (this.peers.length) this.broadcastState();
   }
