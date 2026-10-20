@@ -112,6 +112,7 @@ pub fn run() {
             now_playing_clear,
             links::desktop_take_links,
             nearby::nearby_call,
+            nearby::nearby_post,
             discovery::discovery_udp,
             discovery::discovery_interfaces,
             discovery::discovery_lan_probe,

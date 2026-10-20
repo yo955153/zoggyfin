@@ -154,6 +154,11 @@ export interface NearbyLinkNative {
   // Both
   send(socketId: string, text: string): boolean;
   /**
+   * Sends one text to several sockets in one call (a broadcast: the group
+   * state, a members delta). Optional: without it, `send` goes once per socket.
+   */
+  sendMany?(socketIds: string[], text: string): void;
+  /**
    * Host: sends a pong to a ping. The native layer builds the message and
    * stamps `t2` (its monotonic clock) right before the frame goes to the
    * socket, so a wait in a queue (the JavaScript thread, the Mac app's Tauri

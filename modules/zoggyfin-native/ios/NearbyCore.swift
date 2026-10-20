@@ -304,6 +304,16 @@ public final class NearbyCore {
     }
   }
 
+  /// Sends one text to several sockets (a broadcast) in one call.
+  public func sendMany(socketIds: [String], text: String) {
+    let body = Data(text.utf8)
+    queue.async {
+      for id in socketIds {
+        if let s = self.sockets[id], s.isOpen { s.send(body) }
+      }
+    }
+  }
+
   /// Host: a pong to a ping. The text is built here and `t2` is stamped right before the frame
   /// goes to the connection, after any wait in JavaScript or in the Mac app's bridge.
   public func sendPong(socketId: String, id: Double, t0: Double, t1: Double) -> Bool {

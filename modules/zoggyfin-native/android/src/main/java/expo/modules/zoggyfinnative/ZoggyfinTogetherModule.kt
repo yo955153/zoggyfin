@@ -259,6 +259,11 @@ class ZoggyfinTogetherModule : Module() {
       sockets[socketId]?.send(text) ?: false
     }
 
+    /** One text to several sockets (a broadcast) in one call from JavaScript. */
+    Function("sendMany") { socketIds: List<String>, text: String ->
+      for (id in socketIds) sockets[id]?.send(text)
+    }
+
     /** Host: a pong to a ping. The writer thread stamps `t2` right before the frame goes out. */
     Function("sendPong") { socketId: String, id: Double, t0: Double, t1: Double ->
       if (id.isFinite() && t0.isFinite() && t1.isFinite()) {

@@ -39,6 +39,7 @@ function wrap(m: Module): NearbyLinkNative {
     stopRelay: () => m.stopRelay(),
     send: (id, text) => m.send(id, text),
     sendPong: opt('sendPong')?.bind(m),
+    sendMany: opt('sendMany')?.bind(m),
     close: (id) => m.close(id),
     addresses: () => m.addresses(),
     stopAll: () => m.stopAll(),

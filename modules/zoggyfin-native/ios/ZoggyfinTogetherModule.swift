@@ -116,6 +116,10 @@ public class ZoggyfinTogetherModule: Module {
       self.core.send(socketId: socketId, text: text)
     }
 
+    Function("sendMany") { (socketIds: [String], text: String) in
+      self.core.sendMany(socketIds: socketIds, text: text)
+    }
+
     Function("sendPong") { (socketId: String, id: Double, t0: Double, t1: Double) -> Bool in
       self.core.sendPong(socketId: socketId, id: id, t0: t0, t1: t1)
     }

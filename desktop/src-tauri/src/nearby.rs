@@ -4,8 +4,11 @@
 //! (`swift/NearbyBridge.swift`).
 //!
 //! The web app calls `nearby_call(cmd, args)` (`src/together/link-desktop.ts`).
-//! Each call gets one answer from Swift. Events go to
-//! `window.__zoggyfinDesktop.nearby(event)`. On other systems the command fails.
+//! Each call gets one answer from Swift. The short commands (send, close, ...)
+//! come in batches with no answers: `nearby_post(calls)`. Events go to
+//! `window.__zoggyfinDesktop.nearby(event)`: a thread collects the events that
+//! wait and runs one `window.eval` for all of them, not one per frame. On
+//! other systems the commands fail.
 
 #[cfg(target_os = "macos")]
 mod imp {
@@ -13,6 +16,7 @@ mod imp {
     use std::ffi::{c_char, CStr, CString};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{mpsc, Mutex, Once, OnceLock};
+    use std::thread;
     use std::time::Duration;
 
     use serde_json::{json, Value};
@@ -21,7 +25,11 @@ mod imp {
     extern "C" {
         fn zgf_nearby_init(callback: extern "C" fn(*const c_char));
         fn zgf_nearby_call(json: *const c_char);
+        fn zgf_nearby_post(json: *const c_char);
     }
+
+    /// The most events in one `window.eval`.
+    const MAX_BATCH: usize = 256;
 
     type Reply = Result<Value, String>;
 
@@ -29,6 +37,8 @@ mod imp {
     static PENDING: OnceLock<Mutex<HashMap<u64, mpsc::Sender<Reply>>>> = OnceLock::new();
     static NEXT_ID: AtomicU64 = AtomicU64::new(1);
     static INIT: Once = Once::new();
+    /// The events for the page, in order (see `deliver`).
+    static EVENTS: OnceLock<Mutex<mpsc::Sender<String>>> = OnceLock::new();
 
     /// The longest wait for an answer (a Bluetooth or Wi-Fi prompt can take long).
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -63,18 +73,59 @@ mod imp {
                 let _ = tx.send(reply);
             }
         } else if msg.get("event").is_some() {
-            if let Some(window) = APP.get().and_then(|a| a.get_webview_window("main")) {
-                let _ = window.eval(format!(
-                    "window.__zoggyfinDesktop && window.__zoggyfinDesktop.nearby && window.__zoggyfinDesktop.nearby({msg})"
-                ));
+            if let Some(tx) = EVENTS.get().and_then(|t| t.lock().ok()) {
+                let _ = tx.send(msg.to_string());
             }
         }
     }
 
-    pub async fn call(app: AppHandle, cmd: String, args: Vec<Value>) -> Result<Value, String> {
+    /// Takes the events from `on_message` and gives them to the page. It waits for one
+    /// event, then takes all the events that came meanwhile, and runs one `window.eval` for
+    /// them. When the page is quick, each event goes alone and at once; under a storm the
+    /// events of one eval go together.
+    fn deliver(rx: mpsc::Receiver<String>) {
+        while let Ok(first) = rx.recv() {
+            let mut batch = vec![first];
+            while batch.len() < MAX_BATCH {
+                match rx.try_recv() {
+                    Ok(e) => batch.push(e),
+                    Err(_) => break,
+                }
+            }
+            let Some(window) = APP.get().and_then(|a| a.get_webview_window("main")) else {
+                continue;
+            };
+            let _ = window.eval(format!(
+                "(function(z){{if(!z||!z.nearby)return;for(const e of [{}])z.nearby(e);}})(window.__zoggyfinDesktop)",
+                batch.join(",")
+            ));
+        }
+    }
+
+    fn init(app: AppHandle) {
         let _ = APP.set(app);
-        // SAFETY: `on_message` is a plain C function that lives for the whole program.
-        INIT.call_once(|| unsafe { zgf_nearby_init(on_message) });
+        INIT.call_once(|| {
+            let (tx, rx) = mpsc::channel();
+            let _ = EVENTS.set(Mutex::new(tx));
+            let _ = thread::Builder::new()
+                .name("zgf-nearby-events".into())
+                .spawn(move || deliver(rx));
+            // SAFETY: `on_message` is a plain C function that lives for the whole program.
+            unsafe { zgf_nearby_init(on_message) };
+        });
+    }
+
+    /// Runs a batch of short commands in order, with no answers.
+    pub fn post(app: AppHandle, calls: Vec<Value>) -> Result<(), String> {
+        init(app);
+        let request = CString::new(Value::Array(calls).to_string()).map_err(|e| e.to_string())?;
+        // SAFETY: `request` is a valid C string; Swift copies it before it returns.
+        unsafe { zgf_nearby_post(request.as_ptr()) };
+        Ok(())
+    }
+
+    pub async fn call(app: AppHandle, cmd: String, args: Vec<Value>) -> Result<Value, String> {
+        init(app);
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel();
         pending().lock().map_err(|e| e.to_string())?.insert(id, tx);
@@ -91,6 +142,21 @@ mod imp {
         })
         .await
         .map_err(|e| e.to_string())?
+    }
+}
+
+/// A batch of short nearby commands (send, close, ...), in order and with no answers.
+/// The page sends one batch per JavaScript tick (`src/together/link-desktop.ts`).
+#[tauri::command]
+pub async fn nearby_post(app: tauri::AppHandle, calls: Vec<serde_json::Value>) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        imp::post(app, calls)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, calls);
+        Err("Nearby sessions need macOS in the desktop app.".into())
     }
 }
 

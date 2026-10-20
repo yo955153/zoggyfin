@@ -16,11 +16,15 @@
  * - `mediaStats`: the last value; each call starts a refresh.
  * - `randomBytes`: `crypto.getRandomValues` in the page.
  *
- * Order: Tauri can run two calls in parallel, so the order of arrival is not
- * sure. The short commands go one after the other here: each waits for the
- * answer of the command before it (the answer comes at once). A long command
- * (`startServer`, `mediaBase`, the BLE state, `joinWifi`, `addresses`) waits
- * for the commands before it, but the commands after it do not wait for it.
+ * Order and cost: each Tauri call is one IPC round trip, and a broadcast to
+ * N guests or a join storm makes many sends. So the short commands (send,
+ * sendMany, sendPong, close, connect, the BLE sends ...) are fire and
+ * forget: they go to an outbox, and the outbox goes to Swift as one batch
+ * (`nearby_post`) per JavaScript tick. A batch starts after the batch
+ * before it, so the order stays. A long command (`startServer`,
+ * `mediaBase`, the BLE state, `joinWifi`, `addresses`) goes after the
+ * batches before it and waits for its own answer; the batches after it do
+ * not wait for it.
  */
 import { invoke, isDesktop, type NearbyEvent, onNearbyEvent } from '@/platform/desktop';
 
@@ -30,24 +34,35 @@ function call<T>(cmd: string, args: unknown[] = []): Promise<T> {
   return invoke<T>('nearby_call', { cmd, args });
 }
 
-/** The end of the queue of short commands. */
+/** The end of the chain of batches. */
 let tail: Promise<unknown> = Promise.resolve();
+/** The short commands of this tick, in order. */
+let outbox: { cmd: string; args: unknown[] }[] = [];
+let flushQueued = false;
 
-/** A short command, in order after the commands before it. Errors go to the log. */
-function queued<T>(cmd: string, args: unknown[] = []): Promise<T | undefined> {
-  const run = tail.then(
-    () => call<T>(cmd, args),
-    () => call<T>(cmd, args),
-  );
-  tail = run.catch(() => undefined);
-  return run.catch((e: unknown) => {
-    console.warn(`[nearby] ${cmd} failed:`, e);
-    return undefined;
-  });
+/** Sends the outbox as one batch, after the batches before it. */
+function flush(): void {
+  flushQueued = false;
+  if (!outbox.length) return;
+  const calls = outbox;
+  outbox = [];
+  tail = tail
+    .then(() => invoke('nearby_post', { calls }))
+    .catch((e: unknown) => console.warn(`[nearby] a batch of ${calls.length} commands failed:`, e));
 }
 
-/** A long command: it starts after the queued commands before it, and does not block the queue. */
+/** A short command: fire and forget, in order with the other commands. */
+function post(cmd: string, args: unknown[] = []): void {
+  outbox.push({ cmd, args });
+  if (!flushQueued) {
+    flushQueued = true;
+    queueMicrotask(flush);
+  }
+}
+
+/** A long command: it starts after the commands before it, and does not block the commands after it. */
 function afterQueue<T>(cmd: string, args: unknown[] = []): Promise<T> {
+  flush();
   return tail.then(() => call<T>(cmd, args));
 }
 
@@ -134,45 +149,50 @@ function makeLink(): NearbyLinkNative {
 
     // Host
     startServer: (serviceName, txt) => afterQueue<{ port: number; service: string }>('startServer', [serviceName, txt]),
-    stopAdvertising: () => void queued('stopAdvertising'),
-    shareFile: (urlPath, filePath, mimeType) => void queued('shareFile', [urlPath, filePath, mimeType]),
-    setPace: (urlPath, bytesPerSecond) => void queued('setPace', [urlPath, bytesPerSecond]),
-    unshareAll: () => void queued('unshareAll'),
-    stopServer: () => void queued('stopServer'),
+    stopAdvertising: () => post('stopAdvertising'),
+    shareFile: (urlPath, filePath, mimeType) => post('shareFile', [urlPath, filePath, mimeType]),
+    setPace: (urlPath, bytesPerSecond) => post('setPace', [urlPath, bytesPerSecond]),
+    unshareAll: () => post('unshareAll'),
+    stopServer: () => post('stopServer'),
 
     // Guest
-    startBrowsing: () => void queued('startBrowsing'),
-    stopBrowsing: () => void queued('stopBrowsing'),
+    startBrowsing: () => post('startBrowsing'),
+    stopBrowsing: () => post('stopBrowsing'),
     connect(serviceId) {
       const id = newSocketId();
-      void queued('connect', [serviceId, id]);
+      post('connect', [serviceId, id]);
       return id;
     },
     connectAddress(host, port) {
       const id = newSocketId();
-      void queued('connectAddress', [host, port, id]);
+      post('connectAddress', [host, port, id]);
       return id;
     },
     mediaBase: (serviceId, host, port) => afterQueue<string>('mediaBase', [serviceId, host, port]),
-    stopRelay: () => void queued('stopRelay'),
+    stopRelay: () => post('stopRelay'),
 
     // Both
     send(socketId, text) {
       if (!openSockets.has(socketId)) return false;
-      void queued('send', [socketId, text]);
+      post('send', [socketId, text]);
       return true;
+    },
+    // One batch entry for a broadcast, not one per guest.
+    sendMany(socketIds, text) {
+      const open = socketIds.filter((id) => openSockets.has(id));
+      if (open.length) post('sendMany', [open, text]);
     },
     // Swift stamps t2 when the frame leaves, after the wait in the Tauri queue.
     sendPong(socketId, id, t0, t1) {
       if (!openSockets.has(socketId)) return false;
-      void queued('sendPong', [socketId, id, t0, t1]);
+      post('sendPong', [socketId, id, t0, t1]);
       return true;
     },
-    close: (socketId) => void queued('close', [socketId]),
+    close: (socketId) => post('close', [socketId]),
     addresses: () => afterQueue<LinkAddress[]>('addresses'),
     stopAll() {
       openSockets.clear();
-      void queued('stopAll');
+      post('stopAll');
     },
     mediaStats() {
       refreshStats();
@@ -182,22 +202,22 @@ function makeLink(): NearbyLinkNative {
     // Bluetooth LE
     bleState: () => afterQueue<BleState>('bleState'),
     bleRequestPermission: () => afterQueue<BleState>('bleRequestPermission'),
-    bleAdvertise: (info, localName) => void queued('bleAdvertise', [info, localName]),
-    bleStopAdvertising: () => void queued('bleStopAdvertising'),
-    bleScan: () => void queued('bleScan'),
-    bleStopScan: () => void queued('bleStopScan'),
+    bleAdvertise: (info, localName) => post('bleAdvertise', [info, localName]),
+    bleStopAdvertising: () => post('bleStopAdvertising'),
+    bleScan: () => post('bleScan'),
+    bleStopScan: () => post('bleStopScan'),
     // The real answer comes later; a failed send closes nothing, so true is the best guess.
     bleSend(peerId, text) {
-      void queued('bleSend', [peerId, text]);
+      post('bleSend', [peerId, text]);
       return true;
     },
-    bleDisconnect: (peerId) => void queued('bleDisconnect', [peerId]),
-    bleStopAll: () => void queued('bleStopAll'),
+    bleDisconnect: (peerId) => post('bleDisconnect', [peerId]),
+    bleStopAll: () => post('bleStopAll'),
 
     // Wi-Fi join
     joinWifi: (ssid, password) => afterQueue<null>('joinWifi', [ssid, password]).then(() => undefined),
-    leaveWifi: (ssid) => void queued('leaveWifi', [ssid]),
-    openSettings: () => void queued('openSettings'),
+    leaveWifi: (ssid) => post('leaveWifi', [ssid]),
+    openSettings: () => post('openSettings'),
 
     on<K extends keyof LinkEvents>(name: K, listener: LinkEvents[K]) {
       let set = listeners.get(name);

@@ -135,12 +135,15 @@ export class NearbyLink {
 
   // ---- Both ---------------------------------------------------------------------
 
-  /** Sends a session message to some accepted peers, or to all of them. */
+  /** Sends a session message to some accepted peers, or to all of them. A broadcast is one native call when the build can. */
   send(message: Message, to?: string[] | null): void {
     const text = encode(message);
-    for (const id of to ?? this.upPeers) {
-      if (this.isUp(id)) this.native.send(id, text);
+    const ids = (to ?? this.upPeers).filter((id) => this.isUp(id));
+    if (ids.length > 1 && this.native.sendMany) {
+      this.native.sendMany(ids, text);
+      return;
     }
+    for (const id of ids) this.native.send(id, text);
   }
 
   /** Host: answers a ping. `t2` is stamped in native code when the build can (link-native-types.ts). */

@@ -12,6 +12,8 @@
 //   The answer goes to the callback: `{"reply": n, "ok": true, "value": ...}` or
 //   `{"reply": n, "ok": false, "error": "..."}`. Sync commands answer at once,
 //   async commands answer later.
+// - `zgf_nearby_post(json)`: runs a batch of short commands, `[{"cmd": "...", "args": [...]}, ...]`,
+//   in order and with no answers (send, sendMany, close, ...).
 // - Events go to the callback as `{"event": name, "body": {...}}`.
 //
 // `connect` and `connectAddress` take an optional last argument: the socket id
@@ -128,6 +130,26 @@ private final class NearbyBridge: NearbyEventSink {
 
   // MARK: Input
 
+  /// A batch of short commands with no answers (`[{"cmd": ..., "args": [...]}, ...]`), in order.
+  /// A failed command goes to the log; the next ones still run.
+  func post(_ json: String) {
+    guard let data = json.data(using: .utf8),
+          let list = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else {
+      NSLog("[nearby] bad batch")
+      return
+    }
+    for msg in list {
+      let cmd = msg["cmd"] as? String ?? ""
+      do {
+        _ = try run(cmd, Args(msg["args"] as? [Any] ?? []), NSNull())
+      } catch let e as BridgeError {
+        NSLog("[nearby] %@ failed: %@", cmd, e.message)
+      } catch {
+        NSLog("[nearby] %@ failed: %@", cmd, error.localizedDescription)
+      }
+    }
+  }
+
   func call(_ json: String) {
     guard let data = json.data(using: .utf8),
           let msg = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
@@ -202,6 +224,8 @@ private final class NearbyBridge: NearbyEventSink {
     // Both
     case "send":
       return .value(core.send(socketId: nativeId(try a.string(0)), text: try a.string(1)))
+    case "sendMany":
+      core.sendMany(socketIds: try a.stringList(0).map(nativeId), text: try a.string(1))
     case "sendPong":
       return .value(core.sendPong(socketId: nativeId(try a.string(0)), id: try a.double(1), t0: try a.double(2), t1: try a.double(3)))
     case "close":
@@ -295,6 +319,11 @@ private struct Args {
     return n.intValue
   }
 
+  func stringList(_ i: Int) throws -> [String] {
+    guard let l = at(i) as? [Any] else { throw BridgeError("Argument \(i + 1) must be a list.") }
+    return l.compactMap { $0 as? String }
+  }
+
   func stringMap(_ i: Int) throws -> [String: String] {
     guard let m = at(i) as? [String: Any] else { throw BridgeError("Argument \(i + 1) must be an object.") }
     var out: [String: String] = [:]
@@ -357,4 +386,10 @@ public func zgf_nearby_init(_ callback: ZgfNearbyCallback?) {
 @_cdecl("zgf_nearby_call")
 public func zgf_nearby_call(_ json: UnsafePointer<CChar>) {
   NearbyBridge.shared.call(String(cString: json))
+}
+
+/// A batch of short commands with no answers (see `NearbyBridge.post`).
+@_cdecl("zgf_nearby_post")
+public func zgf_nearby_post(_ json: UnsafePointer<CChar>) {
+  NearbyBridge.shared.post(String(cString: json))
 }
