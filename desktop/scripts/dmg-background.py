@@ -14,11 +14,19 @@ The layout must agree with desktop/dmg/settings.py: a 600x380 window, 128 pt ico
 centres at (150, 170) for the app and (450, 170) for the Applications link. Finder draws the
 icon labels in black, so the background is light: a quiet off-white, an arrow in the light
 accent colour (docs/design/brand.md) and one grey line of text in the system font.
+
+The art also draws the Applications link icon (the system folder icon with the alias arrow) in
+the exact 128 pt box of the link. Finder on macOS 26 can leave the icon of the /Applications
+symlink blank in a disk image. Then the drawn icon shows in its place. When Finder draws the
+icon, it covers the drawn one at the same position and size. The icon comes from NSWorkspace
+(the macOS 26 style, light appearance), so run this script on macOS 26 or later.
 """
 
 from __future__ import annotations
 
 import pathlib
+import subprocess
+import tempfile
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -36,6 +44,36 @@ TEXT_COLOR = (89, 89, 99)  # text2 (light theme) #595963
 
 FONTS = ["/System/Library/Fonts/SFNS.ttf", "/System/Library/Fonts/Helvetica.ttc"]
 OUT = pathlib.Path(__file__).resolve().parent.parent / "dmg"
+
+# Draws the icon of a path at <pixels> x <pixels> into a PNG, as Finder draws it (light appearance).
+ICON_SWIFT = r"""
+import AppKit
+let a = CommandLine.arguments
+let px = Int(a[2])!
+let img = NSWorkspace.shared.icon(forFile: a[1])
+let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8,
+  samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+rep.size = NSSize(width: px, height: px)
+NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance {
+  NSGraphicsContext.saveGraphicsState()
+  NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+  NSGraphicsContext.current!.imageInterpolation = .high
+  img.draw(in: NSRect(x: 0, y: 0, width: px, height: px))
+  NSGraphicsContext.restoreGraphicsState()
+}
+try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: a[3]))
+"""
+
+
+def applications_link_icon(pixels: int) -> Image.Image:
+    """The icon of a symlink to /Applications, as Finder shows the link in the DMG."""
+    with tempfile.TemporaryDirectory() as tmp:
+        work = pathlib.Path(tmp)
+        (work / "icon.swift").write_text(ICON_SWIFT)
+        (work / "Applications").symlink_to("/Applications")
+        out = work / "icon.png"
+        subprocess.run(["swift", str(work / "icon.swift"), str(work / "Applications"), str(pixels), str(out)], check=True)
+        return Image.open(out).convert("RGBA").copy()
 
 
 def system_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -73,6 +111,11 @@ def render(scale: int) -> Image.Image:
     for cx, cy in [(x0, y), (x1, y), (x1 - head, y - head), (x1 - head, y + head)]:
         px.ellipse([cx - r, cy - r, cx + r, cy + r], fill=ARROW)
     img = img.resize((WIDTH * scale, HEIGHT * scale), Image.LANCZOS)
+
+    # The Applications link icon, in the exact box where Finder draws the link icon.
+    size = ICON_SIZE * scale
+    icon = applications_link_icon(size)
+    img.paste(icon, (round((APPS_X - ICON_SIZE / 2) * scale), round((ICON_Y - ICON_SIZE / 2) * scale)), icon)
 
     # Text is drawn at the target size: the font rasterizer antialiases it.
     draw = ImageDraw.Draw(img)

@@ -170,13 +170,13 @@ pnpm -s tauri signer sign -f "$TAURI_SIGNING_PRIVATE_KEY_PATH" -p "${TAURI_SIGNI
 # 7. The DMG. dmgbuild writes the Finder window (.DS_Store: 600x380, 128 pt icons, the app left,
 # the Applications link right, the background) with no Finder or AppleScript. A plain
 # `hdiutil create` has no .DS_Store, and Finder then opens a large default window.
-# desktop/dmg/verify.py checks the layout.
+# desktop/dmg/verify.py checks the layout and the Applications icon drawn in the art.
 log "DMG"
 rm -f "$DMG"
 uvx --python 3.12 --from dmgbuild==1.6.7 --with ds_store==1.3.3 --with mac_alias==2.2.3 \
   dmgbuild -s "$DMG_DIR/settings.py" -D app="$APP" -D icon="$TAURI_DIR/icons/icon.icns" \
   -D background="$DMG_DIR/background.png" Zoggyfin "$DMG"
-uv run --no-project --python 3.12 --with ds_store==1.3.3 --with mac_alias==2.2.3 \
+uv run --no-project --python 3.12 --with ds_store==1.3.3 --with mac_alias==2.2.3 --with pillow==11.3.0 \
   python "$DMG_DIR/verify.py" "$DMG"
 codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$DMG"
 

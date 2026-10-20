@@ -4,6 +4,10 @@ Each section is the notes of one release. `pnpm desktop:publish` puts the sectio
 version into `latest.json` (the update card shows it) and into the GitHub release.
 Write one short line per item.
 
+## 0.1.2 (2026-10-19)
+
+- The install window now shows the Applications folder
+
 ## 0.1.1 (2026-10-19)
 
 - The update card has a solid background, so the notes are easy to read over artwork
