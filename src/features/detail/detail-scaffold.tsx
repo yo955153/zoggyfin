@@ -180,11 +180,12 @@ export function DetailScaffold<Row>({
       });
     }
   }
+  // Together sits with the main actions, before the ones that move to More on a narrow window.
+  if (together) secondary.push({ icon: 'person.2', label: 'Together', a11y: together.label, onPress: together.open });
   const playlistAction = actions.find((a) => a.id === 'builtin.addToPlaylist');
   if (playlistAction && item.Type !== 'Playlist') secondary.push({ icon: 'text.badge.plus', label: 'Playlist', a11y: 'Add to playlist', spare: true, onPress: () => run(playlistAction) });
   if (playedAction) secondary.push({ icon: 'checkmark', label: 'Played', active: played, spare: true, onPress: () => run(playedAction) });
   if (favAction) secondary.push({ icon: favorite ? 'heart.fill' : 'heart', label: 'Favourite', active: favorite, spare: true, onPress: () => run(favAction) });
-  if (together) secondary.push({ icon: 'person.2', label: 'Together', a11y: together.label, onPress: together.open });
   for (const a of extraActions ?? []) secondary.push(a);
   secondary.push({ icon: 'ellipsis', label: 'More', onPress: () => setSheet(true) });
 

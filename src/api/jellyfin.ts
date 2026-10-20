@@ -400,6 +400,22 @@ export async function getMusicPage(
   }
 }
 
+/** The newest videos, or the most recently played songs, across every library (the Together picker). */
+export async function getPickerItems(api: Api, userId: string, kind: 'video' | 'audio'): Promise<BaseItemDto[]> {
+  const res = await getLibraryApi(api).getItems({
+    userId,
+    includeItemTypes: kind === 'video' ? ['Movie', 'Episode', 'Video', 'MusicVideo'] : ['Audio', 'AudioBook'],
+    recursive: true,
+    ...(kind === 'audio' ? { filters: ['IsPlayed' as const] } : null),
+    sortBy: kind === 'video' ? ['DateCreated'] : ['DatePlayed'],
+    sortOrder: ['Descending'],
+    limit: 20,
+    enableTotalRecordCount: false,
+    ...tile,
+  });
+  return res.data.Items ?? [];
+}
+
 /** "Recently played" and "Most played" songs in a library. */
 export async function getPlayedSongs(api: Api, userId: string, libraryId: string, kind: 'recent' | 'most'): Promise<BaseItemDto[]> {
   const res = await getLibraryApi(api).getItems({

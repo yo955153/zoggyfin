@@ -1,12 +1,13 @@
 /**
- * The "Watch together" / "Listen together" session sheet (design spec,
- * Watch together): start or join a nearby session or a SyncPlay group,
- * answer join requests, see the people in the session, who controls, and
+ * The Together sheet ("Watch together" / "Listen together"): one hub for
+ * every session. Join a session (nearby or on the server, one list), start
+ * one (pick, then "Who can join?"), or join with a code. In a session: the
+ * people, the session settings (controls, new people, who can find it) and
  * end or leave. Nearby help: who can find the host, join codes, hotspots
  * and the guest's help card.
  */
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 
 import type { BaseItemDto } from '@/api/types';
 import { useSessionStore } from '@/auth/session-store';
@@ -14,24 +15,25 @@ import { Button } from '@/components/button';
 import { Icon, type IconName } from '@/components/icon';
 import { Sheet } from '@/components/sheet';
 import { useOffline } from '@/lib/online';
-import { toast } from '@/lib/toast';
 import { features } from '@/platform/tv';
 import { isAudioItem } from '@/player';
-import { audioSession } from '@/player/audio/session';
-import { audioState } from '@/player/audio/store';
-import { videoSession } from '@/player/session';
-import { playerState, usePlayerStore } from '@/player/store';
+import { usePlayerStore } from '@/player/store';
 import { networkSource } from '@/servers/network-source';
-import { createStyles, type AppTheme, font, fontFamily, radius, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
+import { spacing, useStyles, useTheme } from '@/theme';
 import { wifiQr } from '@/together/join-code';
-import { canHostAudio, canHostNearby, nearby, nearbySupported } from '@/together/nearby';
+import { canHostNearby, nearby, nearbySupported } from '@/together/nearby';
 import { guestHelp, HELP_DELAY_MS, helpCopy, type HelpItem, type HelpPlatform, type NetworkInfo } from '@/together/nearby-help';
 import { linkNative } from '@/together/nearby-native';
-import { closeTogetherSheet, openTogetherSheet, releaseTogetherSheet, type SheetPlace, type TogetherState, useTogetherStore } from '@/together/store';
+import { closeTogetherSheet, openTogetherSheet, releaseTogetherSheet, setTogether, type SheetPlace, type TogetherState, useTogetherStore } from '@/together/store';
 import { canSyncPlay, syncPlay, syncPlaySupported } from '@/together/syncplay';
 import { groupStateLabel } from '@/together/syncplay-logic';
+import { joinTransport, mergeSessions, type SessionRow, sessionHeadline } from '@/together/hub';
+import { SHOWN_REQUESTS, visibleRequests } from '@/together/join-gate';
+import type { Member } from '@/together/protocol';
 
 import { QrCode } from './qr-code';
+import { StartPicker, startSession, type StartTarget, targetFor, WhoStep } from './start-flow';
+import { ChoiceRow, makeStyles, RowIcon, Section } from './together-parts';
 
 const VIDEO_TYPES = new Set(['Movie', 'Episode', 'Video', 'MusicVideo']);
 const AUDIO_ENTRY_TYPES = new Set(['Audio', 'AudioBook', 'MusicAlbum']);
@@ -118,6 +120,7 @@ function useSheetEnv(browsingSince: number | null): SheetEnv {
 /** "Listen together" for audio, else "Watch together". */
 export function sheetTitle(st: TogetherState, item: BaseItemDto | null): string {
   const inSession = st.mode !== 'none' && st.phase.name !== 'idle' && st.phase.name !== 'browsing';
+  if (st.sheet.where === 'hub' && !inSession && !st.syncplay.group) return 'Together';
   const audio = st.sheet.where === 'music' || (!!item && isAudioItem(item)) || (inSession && st.kind === 'audio');
   return audio ? 'Listen together' : 'Watch together';
 }
@@ -145,7 +148,7 @@ function TogetherSheet() {
     closeTogetherSheet();
     // Stop looking when nothing was joined.
     const s = useTogetherStore.getState();
-    if (s.mode === 'nearby' && (s.phase.name === 'browsing' || s.phase.name === 'idle')) void nearby().stopAll();
+    if (s.mode === 'nearby' && (s.phase.name === 'browsing' || s.phase.name === 'idle')) void nearby().stopAll().then(() => setTogether({ notice: null }));
   };
 
   const base = sheetTitle(st, item);
@@ -179,155 +182,118 @@ export function TogetherSheetContent({
   return <Lobby st={st} item={item} signedIn={signedIn} offline={offline} env={env} />;
 }
 
-// ---- Lobby -------------------------------------------------------------------
+// ---- Lobby (the Together hub) -------------------------------------------------------
 
-/** Starts playback of an audio item (album, playlist, track), then hosts its queue. */
-async function playThenHostAudio(item: BaseItemDto): Promise<void> {
-  if (audioState().queue.source?.id !== item.Id || playerState().now?.kind !== 'audio') {
-    if (playerState().now?.kind === 'video') await videoSession().stop();
-    await audioSession().play({ item });
-  }
-  if (canHostAudio()) await nearby().hostAudio();
-  else toast('Play it first, then start the session.');
-}
+type LobbyStep = { name: 'main' } | { name: 'pick' } | { name: 'who'; target: StartTarget; picked: boolean };
 
+/**
+ * The hub: one list of sessions to join (nearby hosts and server groups,
+ * merged), one "Start a session" button, and "Join with a code". The help
+ * card comes last, so that it moves none of the buttons above it.
+ */
 function Lobby({ st, item, signedIn, offline, env }: { st: TogetherState; item: BaseItemDto | null; signedIn: boolean; offline: boolean; env: SheetEnv }) {
   const s = useStyles(makeStyles);
   const { c } = useTheme();
-  const music = st.sheet.where === 'music';
-  const isVideo = !!item && VIDEO_TYPES.has(item.Type ?? '');
-  const isAudio = music || (!!item && isAudioItem(item));
-  const hostable = canHostNearby(item);
-  const [starting, setStarting] = useState(false);
-  // The music player shares the queue that plays now; an item page plays its item first.
-  const shareQueue = music || !item;
+  const session = useSessionStore((x) => x.session);
+  const serverName = session?.serverName ?? null;
+  const [step, setStep] = useState<LobbyStep>({ name: 'main' });
+  const direct = targetFor(item, st.sheet.where);
+  const server = signedIn && syncPlaySupported && !offline;
+  const rows = mergeSessions(
+    env.nearbyOn ? st.hosts : [],
+    server ? st.syncplay.groups : [],
+    { serverId: session?.serverId ?? null, serverName },
+    groupStateLabel,
+  );
 
-  const startAudio = async () => {
-    setStarting(true);
-    try {
-      if (shareQueue || !item) await nearby().hostAudio();
-      else await playThenHostAudio(item);
-    } finally {
-      setStarting(false);
+  if (step.name === 'pick') {
+    return <StartPicker offline={offline} onBack={() => setStep({ name: 'main' })} onPick={(target) => setStep({ name: 'who', target, picked: true })} />;
+  }
+  if (step.name === 'who') {
+    return (
+      <WhoStep
+        target={step.target}
+        where={st.sheet.where}
+        offline={offline}
+        networkType={env.network?.type ?? null}
+        onBack={() => setStep(step.picked ? { name: 'pick' } : { name: 'main' })}
+      />
+    );
+  }
+
+  const join = (row: SessionRow) => {
+    const how = joinTransport(row);
+    if (how === 'nearby' && row.peerId) {
+      nearby().join(row.peerId);
+      return;
+    }
+    if (how === 'server' && row.groupId) {
+      closeTogetherSheet();
+      void nearby().stopAll();
+      void syncPlay().join(row.groupId);
     }
   };
+  const scanning = env.nearbyOn || (server && st.syncplay.loading);
+  const startTitle = direct
+    ? direct.kind === 'audio' && !direct.item
+      ? 'Start a session with this music'
+      : `Start a session with “${direct.item?.Name ?? 'this'}”`
+    : 'Start a session';
 
   return (
     <>
       {env.nearbyOn && st.rejoin ? <RejoinCard st={st} /> : null}
 
-      {env.nearbyOn ? (
-        <Section
-          title="Nearby"
-          footer="Works with no internet. Apple devices (iPhone, iPad, Mac app) connect directly. Android needs the same Wi-Fi or a hotspot.">
-          {item && isVideo ? (
-            hostable ? (
-              <Button
-                title="Start a nearby session"
-                icon="antenna.radiowaves.left.and.right"
-                onPress={() => {
-                  closeTogetherSheet();
-                  void nearby().host(item);
-                }}
-              />
-            ) : (
-              <Text style={s.note}>Download this item to share it nearby.</Text>
-            )
-          ) : null}
-          {isAudio && st.sheet.where !== 'join' ? (
-            <Button
-              title={shareQueue ? 'Start a nearby session' : 'Play and start a nearby session'}
-              icon="antenna.radiowaves.left.and.right"
-              loading={starting}
-              onPress={() => void startAudio()}
-            />
-          ) : null}
-          <Text style={s.label}>Nearby sessions</Text>
-          <View style={s.group}>
-            {st.hosts.length === 0 ? (
-              <View style={s.row}>
-                <ActivityIndicator color={c.text3} />
-                <Text style={s.rowDetail}>Looking for sessions nearby…</Text>
-              </View>
-            ) : (
-              st.hosts.map((h, i) => {
-                const audio = h.advert.kind === 'audio';
-                return (
-                  <View key={h.peerId} style={[s.row, i < st.hosts.length - 1 && s.rowLine]}>
-                    <RowIcon name={audio ? 'music.note' : h.via === 'ble' ? 'dot.radiowaves.left.and.right' : 'antenna.radiowaves.left.and.right'} />
-                    <View style={s.rowText}>
-                      <Text style={s.rowTitle} numberOfLines={1}>
-                        {h.advert.itemName || (audio ? 'Music' : 'A video')}
-                      </Text>
-                      <Text style={s.rowDetail} numberOfLines={2}>
-                        {h.via === 'ble' ? `${h.advert.hostName} · Needs a quick Wi-Fi link` : h.advert.hostName}
-                      </Text>
-                    </View>
-                    <Button title="Join" variant="small" onPress={() => nearby().join(h.peerId)} />
-                  </View>
-                );
-              })
-            )}
+      <Section
+        title="Sessions you can join"
+        footer={
+          server
+            ? `Anyone with an account on ${serverName ?? 'your server'} can join its sessions there.`
+            : env.nearbyOn
+              ? undefined
+              : 'Sign in to a server to see its sessions.'
+        }>
+        {st.notice ? (
+          <View style={[s.group, s.row]}>
+            <Icon name="exclamationmark.triangle" size={18} color={c.warning} />
+            <Text style={[s.rowDetail, s.rowText, { color: c.warning }]}>{st.notice}</Text>
           </View>
-          {st.notice ? <Text style={s.notice}>{st.notice}</Text> : null}
-        </Section>
-      ) : null}
-
-      {syncPlaySupported && signedIn ? (
-        <Section title="On this server (SyncPlay)" footer="Everyone signs in to this Jellyfin server. Works on the web too.">
-          {offline ? (
-            <Text style={s.note}>SyncPlay needs the server. You are offline.</Text>
+        ) : null}
+        <View style={s.group}>
+          {rows.length === 0 ? (
+            <View style={s.row}>
+              {scanning ? <ActivityIndicator color={c.text3} /> : null}
+              <Text style={s.rowDetail}>{env.nearbyOn ? 'No sessions nearby yet' : 'No sessions yet'}</Text>
+            </View>
           ) : (
-            <>
-              <Button
-                title={music ? 'Start a group with this queue' : item && canSyncPlay(item) ? 'Start a group with this' : 'Start a group'}
-                variant="tonal"
-                icon="person.2.fill"
-                onPress={() => {
-                  closeTogetherSheet();
-                  void nearby().stopAll();
-                  if (music) void syncPlay().createForAudio();
-                  else void syncPlay().create(item && canSyncPlay(item) ? item : null);
-                }}
-              />
-              <Text style={s.label}>Groups</Text>
-              <View style={s.group}>
-                {st.syncplay.loading && !st.syncplay.groups.length ? (
-                  <View style={s.row}>
-                    <ActivityIndicator color={c.text3} />
-                  </View>
-                ) : st.syncplay.groups.length === 0 ? (
-                  <View style={s.row}>
-                    <Text style={s.rowDetail}>No groups on this server yet.</Text>
-                  </View>
-                ) : (
-                  st.syncplay.groups.map((g, i) => (
-                    <View key={g.id} style={[s.row, i < st.syncplay.groups.length - 1 && s.rowLine]}>
-                      <RowIcon name="person.2.fill" />
-                      <View style={s.rowText}>
-                        <Text style={s.rowTitle} numberOfLines={1}>
-                          {g.name}
-                        </Text>
-                        <Text style={s.rowDetail} numberOfLines={1}>
-                          {[groupStateLabel(g.state), g.participants.join(', ')].filter(Boolean).join(' · ')}
-                        </Text>
-                      </View>
-                      <Button
-                        title="Join"
-                        variant="small"
-                        onPress={() => {
-                          closeTogetherSheet();
-                          void nearby().stopAll();
-                          void syncPlay().join(g.id);
-                        }}
-                      />
-                    </View>
-                  ))
-                )}
+            rows.map((r, i) => (
+              <View key={r.key} style={[s.row, i < rows.length - 1 && s.rowLine]}>
+                <RowIcon name={r.kind === 'audio' ? 'music.note' : r.peerId ? 'antenna.radiowaves.left.and.right' : 'person.2.fill'} />
+                <View style={s.rowText}>
+                  <Text style={s.rowTitle} numberOfLines={1}>
+                    {r.hostName}
+                  </Text>
+                  <Text style={s.rowDetail} numberOfLines={2}>
+                    {[r.title, r.tag, r.ble ? 'Needs a quick Wi-Fi link' : null].filter(Boolean).join(' · ')}
+                  </Text>
+                </View>
+                <Button title="Join" variant="small" onPress={() => join(r)} />
               </View>
-              {st.syncplay.error ? <Text style={s.notice}>{st.syncplay.error}</Text> : null}
-            </>
+            ))
           )}
+        </View>
+      </Section>
+
+      {st.sheet.where === 'join' && !signedIn ? null : (
+        <Section title="Start a session">
+          <Button title={startTitle} icon="play.fill" onPress={() => setStep(direct ? { name: 'who', target: direct, picked: false } : { name: 'pick' })} />
+          {direct ? <Button title="Pick something else" variant="text" onPress={() => setStep({ name: 'pick' })} /> : null}
+        </Section>
+      )}
+
+      {env.nearbyOn ? (
+        <Section title="Join with a code" footer="Type the code that the host’s screen shows, or scan its QR code with the Camera app.">
+          <CodeInput />
         </Section>
       ) : null}
 
@@ -442,12 +408,7 @@ function HelpCard({ st, env }: { st: TogetherState; env: SheetEnv }) {
                 <Text style={s.rowDetail}>{copy.detail}</Text>
                 {action && !hotspotDone ? (
                   <View style={s.helpAction}>
-                    <Button
-                      title={action.label}
-                      variant="smallTonal"
-                      loading={action.id === 'make-hotspot' && busy}
-                      onPress={() => void run(it)}
-                    />
+                    <Button title={action.label} variant="smallTonal" loading={action.id === 'make-hotspot' && busy} onPress={() => void run(it)} />
                   </View>
                 ) : null}
                 {action?.id === 'make-hotspot' && error ? <Text style={s.notice}>{error}</Text> : null}
@@ -546,17 +507,17 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
   return (
     <>
       {host && st.requests.length ? (
-        <Section title="Wants to join">
+        <Section title="Wants to join" footer={st.requests.length > SHOWN_REQUESTS ? 'Requests with no answer close after a minute.' : undefined}>
           <View style={s.group}>
-            {st.requests.map((r, i) => (
-              <View key={r.inviteId} style={[s.row, i < st.requests.length - 1 && s.rowLine]}>
+            {visibleRequests(st.requests).shown.map((r, i, shown) => (
+              <View key={r.inviteId} style={[s.row, (i < shown.length - 1 || st.requests.length > shown.length) && s.rowLine]}>
                 <RowIcon name="person.fill" />
                 <View style={s.rowText}>
                   <Text style={s.rowTitle} numberOfLines={1}>
                     {r.name}
                   </Text>
                   <Text style={s.rowDetail}>
-                    {[r.have ? 'Has it downloaded' : 'Streams it from you', r.code ? 'Has your code' : null, r.ble ? 'Over Bluetooth' : null]
+                    {[r.have ? 'Has it downloaded' : st.item?.path ? 'Streams it from you' : 'Streams it from the server', r.code ? 'Has your code' : null, r.ble ? 'Over Bluetooth' : null]
                       .filter(Boolean)
                       .join(' · ')}
                   </Text>
@@ -565,13 +526,18 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
                 <Button title="Accept" variant="small" onPress={() => nearby().respond(r.inviteId, true)} />
               </View>
             ))}
+            {visibleRequests(st.requests).more ? (
+              <View style={s.row}>
+                <Text style={s.rowDetail}>{`+${visibleRequests(st.requests).more} more`}</Text>
+              </View>
+            ) : null}
           </View>
         </Section>
       ) : null}
 
       {host && st.rendezvous ? <RendezvousRow st={st} /> : null}
 
-      <Section title="People" footer={peopleFooter(st)}>
+      <Section title={sessionHeadline(st, null) ?? 'People'} footer={peopleFooter(st)}>
         <View style={s.group}>
           {reconnecting ? (
             <View style={[s.row, s.rowLine]}>
@@ -600,17 +566,7 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
             </View>
           )}
           {st.members.map((m, i, list) => (
-            <View key={m.id} style={[s.row, i < list.length - 1 && s.rowLine]}>
-              <RowIcon name="person.fill" />
-              <View style={s.rowText}>
-                <Text style={s.rowTitle} numberOfLines={1}>
-                  {m.name}
-                </Text>
-                <Text style={s.rowDetail}>
-                  {m.away ? 'Reconnecting…' : [m.local ? 'Own download' : 'Streams from the host', m.buffering ? 'Loading' : null].filter(Boolean).join(' · ')}
-                </Text>
-              </View>
-            </View>
+            <MemberRow key={m.id} member={m} host={host} last={i === list.length - 1} />
           ))}
           {host && !st.members.length ? (
             <View style={s.row}>
@@ -623,20 +579,53 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
 
       {host ? <HostHelp st={st} env={env} /> : null}
 
-      <Section title="Controls">
-        <View style={[s.group, s.row]}>
-          <View style={s.rowText}>
-            <Text style={s.rowTitle}>Only the host controls</Text>
-            <Text style={s.rowDetail}>{st.onlyHostControls ? 'Guests watch; the host plays, pauses and seeks.' : 'Everyone can play, pause, seek and change the speed.'}</Text>
+      {host ? (
+        <Section title="Session settings">
+          <View style={s.group}>
+            <SwitchRow
+              title="Only I control"
+              detail={st.onlyHostControls ? 'Guests watch; you play, pause and seek.' : 'Everyone can play, pause, seek and change the speed.'}
+              value={st.onlyHostControls}
+              onChange={(v) => nearby().setOnlyHostControls(v)}
+            />
+            <SwitchRow
+              title="Don’t allow new people"
+              detail={st.locked ? 'New requests are refused at once.' : 'People can ask to join. You accept each person.'}
+              value={st.locked}
+              onChange={(v) => nearby().setLocked(v)}
+            />
+            <ChoiceRow
+              title="Anyone nearby can find it"
+              selected={st.findable === 'anyone'}
+              disabled={st.findable === 'code'}
+              onPress={() => nearby().setFindable('anyone')}
+            />
+            <ChoiceRow
+              title="Only with my code"
+              detail={
+                st.findable === 'code' ? 'Not shown nearby. To show it again, start a new session.' : 'Hides the session. People join with the code above.'
+              }
+              selected={st.findable === 'code'}
+              onPress={() => nearby().setFindable('code')}
+              last
+            />
           </View>
-          {host ? (
-            <Switch value={st.onlyHostControls} onValueChange={(v) => nearby().setOnlyHostControls(v)} trackColor={{ true: c.accent }} />
-          ) : (
+          {st.notice ? <Text style={s.notice}>{st.notice}</Text> : null}
+        </Section>
+      ) : (
+        <Section title="Controls">
+          <View style={[s.group, s.row]}>
+            <View style={s.rowText}>
+              <Text style={s.rowTitle}>{st.onlyHostControls ? 'Only the host controls' : 'Everyone controls'}</Text>
+              <Text style={s.rowDetail}>
+                {st.onlyHostControls ? 'The host plays, pauses and seeks.' : 'Everyone can play, pause, seek and change the speed.'}
+              </Text>
+            </View>
             <Icon name={st.onlyHostControls ? 'lock.fill' : 'person.2.fill'} size={18} color={c.text2} />
-          )}
-        </View>
-        {st.notice ? <Text style={s.notice}>{st.notice}</Text> : null}
-      </Section>
+          </View>
+          {st.notice ? <Text style={s.notice}>{st.notice}</Text> : null}
+        </Section>
+      )}
 
       <Button
         title={host ? 'End session' : 'Leave session'}
@@ -648,6 +637,49 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
         }}
       />
     </>
+  );
+}
+
+/** A switch row in "Session settings". */
+function SwitchRow({ title, detail, value, onChange }: { title: string; detail: string; value: boolean; onChange: (v: boolean) => void }) {
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  return (
+    <View style={[s.row, s.rowLine]}>
+      <View style={s.rowText}>
+        <Text style={s.rowTitle}>{title}</Text>
+        <Text style={s.rowDetail}>{detail}</Text>
+      </View>
+      <Switch value={value} onValueChange={onChange} trackColor={{ true: c.accent }} accessibilityLabel={title} />
+    </View>
+  );
+}
+
+/** A person in the session. The host can remove them, and block their device for this session. */
+function MemberRow({ member: m, host, last }: { member: Member; host: boolean; last: boolean }) {
+  const s = useStyles(makeStyles);
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={!last && s.rowLine}>
+      <View style={s.row}>
+        <RowIcon name="person.fill" />
+        <View style={s.rowText}>
+          <Text style={s.rowTitle} numberOfLines={1}>
+            {m.name}
+          </Text>
+          <Text style={s.rowDetail}>
+            {m.away ? 'Reconnecting…' : [m.local ? 'Own download' : 'Streams', m.buffering ? 'Loading' : null].filter(Boolean).join(' · ')}
+          </Text>
+        </View>
+        {host ? <Button title={open ? 'Cancel' : 'Remove'} variant="smallTonal" onPress={() => setOpen((o) => !o)} /> : null}
+      </View>
+      {host && open ? (
+        <View style={s.cardButtons}>
+          <Button title="Remove" variant="smallTonal" onPress={() => nearby().removeMember(m.id, false)} />
+          <Button title="Remove and block this device" variant="small" onPress={() => nearby().removeMember(m.id, true)} />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -665,6 +697,7 @@ function RendezvousRow({ st }: { st: TogetherState }) {
 }
 
 function visibleIcon(line: string): IconName {
+  if (line.startsWith('Only people with your code')) return 'qrcode';
   if (line.startsWith('No Wi-Fi')) return 'exclamationmark.triangle';
   if (line.includes('Bluetooth')) return 'dot.radiowaves.left.and.right';
   if (line.includes('direct')) return 'antenna.radiowaves.left.and.right';
@@ -721,8 +754,8 @@ function HostHelp({ st, env }: { st: TogetherState; env: SheetEnv }) {
           {androidOpen ? (
             <View style={s.expand}>
               <Text style={s.rowDetail}>
-                Put both devices on the same Wi-Fi. With no Wi-Fi, the Android device makes the network: on that device, tap Make a hotspot in this sheet. If your
-                iPhone has mobile data, Personal Hotspot also works.
+                Put both devices on the same Wi-Fi. With no Wi-Fi, the Android device makes the network: on that device, tap Make a hotspot in this sheet. If
+                your iPhone has mobile data, Personal Hotspot also works.
               </Text>
             </View>
           ) : null}
@@ -796,7 +829,9 @@ function HotspotCard({ st, env, guest = false }: { st: TogetherState; env: Sheet
     <Section title="No Wi-Fi?" footer="This phone makes a Wi-Fi network for the session. It needs no mobile data.">
       <Button title="Create a hotspot for this session" variant="tonal" icon="personalhotspot" loading={busy} onPress={() => void make()} />
       {error ? <Text style={s.notice}>{error}</Text> : null}
-      {error && SETTINGS_ERROR.test(error) ? <Button title="Open Settings" variant="smallTonal" icon="gearshape" onPress={() => nearby().openSettings()} /> : null}
+      {error && SETTINGS_ERROR.test(error) ? (
+        <Button title="Open Settings" variant="smallTonal" icon="gearshape" onPress={() => nearby().openSettings()} />
+      ) : null}
     </Section>
   );
 }
@@ -815,38 +850,67 @@ function peopleFooter(st: TogetherState): string | undefined {
 
 function GroupView({ st, item }: { st: TogetherState; item: BaseItemDto | null }) {
   const s = useStyles(makeStyles);
+  const { c } = useTheme();
   const group = st.syncplay.group!;
-  const playingId = usePlayerStore((x) => x.now?.item.Id ?? null);
+  const serverName = useSessionStore((x) => x.session?.serverName ?? null);
+  const playing = usePlayerStore((x) => x.now?.item ?? null);
+  const playingId = playing?.Id ?? null;
+  const moveTarget = playing ? targetFor(playing, st.sheet.where) : null;
+  const canMove = nearbySupported && !!moveTarget && (moveTarget.kind === 'audio' || canHostNearby(playing));
   return (
     <>
-      <Section title="SyncPlay" footer={st.sync ? `Server clock: ${Math.round(st.sync.rtt)} ms round trip.` : undefined}>
+      <Section
+        title={sessionHeadline(st, serverName) ?? 'Session'}
+        footer={`Anyone with an account on ${serverName ?? 'this server'} can join. ${groupStateLabel(group.state)}.${st.sync ? ` Server clock: ${Math.round(st.sync.rtt)} ms round trip.` : ''}`}>
         <View style={s.group}>
-          <View style={[s.row, s.rowLine]}>
-            <RowIcon name="person.2.fill" />
-            <View style={s.rowText}>
-              <Text style={s.rowTitle}>{groupStateLabel(group.state)}</Text>
-              <Text style={s.rowDetail} numberOfLines={2}>
-                {group.participants.join(', ') || 'Only you'}
-              </Text>
+          {(group.participants.length ? group.participants : ['You']).map((name, i, list) => (
+            <View key={`${name}-${i}`} style={[s.row, i < list.length - 1 && s.rowLine]}>
+              <RowIcon name="person.fill" />
+              <View style={s.rowText}>
+                <Text style={s.rowTitle} numberOfLines={1}>
+                  {name}
+                </Text>
+                <Text style={s.rowDetail}>Streams from the server</Text>
+              </View>
             </View>
+          ))}
+        </View>
+      </Section>
+      <Section title="Controls">
+        <View style={[s.group, s.row]}>
+          <View style={s.rowText}>
+            <Text style={s.rowTitle}>Everyone controls</Text>
+            <Text style={s.rowDetail}>Everyone can play, pause and seek.</Text>
           </View>
-          <View style={s.row}>
-            <Text style={s.rowDetail}>Everyone in the group can play, pause and seek.</Text>
-          </View>
+          <Icon name="person.2.fill" size={18} color={c.text2} />
         </View>
       </Section>
       {item && canSyncPlay(item) && item.Id !== playingId ? (
-        <Button title={`Play “${item.Name ?? 'this'}” for the group`} icon="play.fill" onPress={() => void syncPlay().playInGroup(item)} />
+        <Button title={`Play “${item.Name ?? 'this'}” for everyone`} icon="play.fill" onPress={() => void syncPlay().playInGroup(item)} />
       ) : null}
       {item && canSyncPlay(item) && item.Id === playingId && group.state === 'Idle' ? (
-        <Button title="Play this for the group" icon="play.fill" onPress={() => void syncPlay().playInGroup(item)} />
+        <Button title="Play this for everyone" icon="play.fill" onPress={() => void syncPlay().playInGroup(item)} />
       ) : null}
       <View style={s.buttonRow}>
         <Button title="Previous" variant="tonal" icon="backward.fill" onPress={() => void syncPlay().previous()} containerStyle={{ flex: 1 }} />
         <Button title="Next" variant="tonal" icon="forward.fill" onPress={() => void syncPlay().next()} containerStyle={{ flex: 1 }} />
       </View>
+      {canMove && moveTarget ? (
+        <Section title="Only people you choose" footer="Leaves the server session and starts a nearby one that only people with your code can join.">
+          <Button
+            title="Move to a nearby session with a code"
+            variant="tonal"
+            icon="qrcode"
+            onPress={() => {
+              void syncPlay()
+                .leave()
+                .then(() => startSession(moveTarget, 'nearby', 'code', st.sheet.where));
+            }}
+          />
+        </Section>
+      ) : null}
       <Button
-        title="Leave group"
+        title="Leave session"
         variant="tonal"
         icon="person.2.slash"
         onPress={() => {
@@ -857,93 +921,3 @@ function GroupView({ st, item }: { st: TogetherState; item: BaseItemDto | null }
     </>
   );
 }
-
-// ---- Parts -----------------------------------------------------------------------
-
-function Section({ title, footer, children }: { title: string; footer?: string; children: React.ReactNode }) {
-  const s = useStyles(makeStyles);
-  return (
-    <View style={s.section}>
-      <Text style={s.header} accessibilityRole="header">
-        {title.toUpperCase()}
-      </Text>
-      {children}
-      {footer ? <Text style={s.footer}>{footer}</Text> : null}
-    </View>
-  );
-}
-
-function RowIcon({ name }: { name: IconName }) {
-  const s = useStyles(makeStyles);
-  const { c } = useTheme();
-  return (
-    <View style={s.rowIcon}>
-      <Icon name={name} size={16} color={c.text} />
-    </View>
-  );
-}
-
-const monoFamily = Platform.select({ ios: 'Menlo', android: 'monospace', default: fontFamily.webMono });
-
-const makeStyles = createStyles(({ c }: AppTheme) => ({
-  section: { gap: spacing.sm },
-  header: { ...font(type.footnote), color: c.text2, letterSpacing: 0.4, paddingHorizontal: spacing.xs },
-  footer: { ...font(type.footnote), color: c.text2, paddingHorizontal: spacing.xs },
-  label: { ...font(type.subheadline), fontWeight: '600' as const, color: c.text, paddingHorizontal: spacing.xs, marginTop: spacing.xs },
-  note: { ...font(type.subheadline), color: c.text2, paddingHorizontal: spacing.xs },
-  notice: { ...font(type.footnote), color: c.warning, paddingHorizontal: spacing.xs },
-  group: { backgroundColor: c.surface, borderRadius: radius.lg, overflow: 'hidden' as const, borderCurve: 'continuous' as const },
-  row: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: spacing.md,
-    minHeight: scaled(sizes.settingsRow + 6),
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  rowLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.separator },
-  rowText: { flex: 1, minWidth: 0 },
-  rowTitle: { ...font(type.body), color: c.text },
-  rowDetail: { ...font(type.footnote), color: c.text2, flexShrink: 1 },
-  rowIcon: { width: 29, height: 29, borderRadius: 7, backgroundColor: c.surface3, alignItems: 'center' as const, justifyContent: 'center' as const },
-  buttonRow: { flexDirection: 'row' as const, gap: spacing.md },
-  cardButtons: {
-    flexDirection: 'row' as const,
-    justifyContent: 'flex-end' as const,
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-  },
-  helpRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'flex-start' as const,
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  helpText: { gap: spacing.xs },
-  helpAction: { flexDirection: 'row' as const, marginTop: spacing.xs },
-  codeWrap: { gap: spacing.xs, marginTop: spacing.xs },
-  codeRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm },
-  codeInput: {
-    ...font(type.body),
-    fontFamily: monoFamily,
-    letterSpacing: 2,
-    flex: 1,
-    minWidth: 0,
-    color: c.text,
-    backgroundColor: c.surface2,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    minHeight: scaled(40),
-    borderWidth: 1,
-    borderColor: c.controlBorder,
-    borderCurve: 'continuous' as const,
-  },
-  codeCard: { alignItems: 'center' as const, gap: spacing.md, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg },
-  shortCode: { ...font(type.title2), fontFamily: monoFamily, fontWeight: '600' as const, letterSpacing: 3, color: c.text, textAlign: 'center' as const },
-  wifiFacts: { alignSelf: 'stretch' as const, gap: 2 },
-  wifiLabel: { ...font(type.footnote), color: c.text2 },
-  wifiValue: { ...font(type.body), fontFamily: monoFamily, color: c.text, marginBottom: spacing.xs },
-  expand: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, paddingLeft: spacing.lg + 29 + spacing.md },
-}));

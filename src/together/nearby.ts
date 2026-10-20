@@ -39,6 +39,7 @@ import { keyMatches, joinLink, newSessionKey, type JoinPayload, parseJoinLink, p
 import { NearbyLink } from './link';
 import type { BleState, NearbyLinkNative } from './link-native-types';
 import { IDLE, type PhaseEvent, transition } from './machine';
+import { chooseGuestVideoSource, noAccessText } from './guest-source';
 import { guestSource, HostShares, localRecord } from './nearby-media';
 import { linkNative } from './nearby-native';
 import { visibleTo, type HelpPlatform } from './nearby-help';
@@ -48,6 +49,7 @@ import { type Advert, type Anchor, decodeAdvert, encodeAdvert, type JoinContext,
 import { afterHostLoss, handoverAnchor, handoverJump, REJOIN_WINDOW, retryDelay, shouldRetry } from './recovery';
 import { createRendezvous, decodeInfo, encodeInfo, type Rendezvous, type RendezvousEffect } from './rendezvous';
 import { generateKeyPair } from './rendezvous-crypto';
+import { deviceKey, type Findable, isFinalRefusal, JoinGate, MAX_GUESTS, REFUSAL_TEXT } from './join-gate';
 import { HostRoom } from './room';
 import { closeTogetherSheet, initialTogether, openTogetherSheet, type SavedSession, setTogether, togetherState } from './store';
 import { syncLog } from './sync-log';
@@ -63,9 +65,19 @@ function helpPlatform(): HelpPlatform {
   return Platform.OS === 'ios' ? 'ios' : 'mac';
 }
 
-/** The host can share this item: a downloaded video. */
+/** The host plays this video from its server (signed in to the item's server). */
+function streamsFromServer(item: BaseItemDto): boolean {
+  const session = useSessionStore.getState().session;
+  return !!session && (!item.ServerId || item.ServerId === session.serverId);
+}
+
+/**
+ * The host can start a nearby session for this video: it has it downloaded,
+ * or it streams it from its server. Guests then play their own copy, the
+ * host's file, or the same server (see guest-source.ts).
+ */
 export function canHostNearby(item: BaseItemDto | null | undefined): boolean {
-  return nearbySupported && !!item && VIDEO_TYPES.has(item.Type ?? '') && localRecord(item.Id) !== null;
+  return nearbySupported && !!item && VIDEO_TYPES.has(item.Type ?? '') && (localRecord(item.Id) !== null || streamsFromServer(item));
 }
 
 /** The host can share the audio that plays now (its queue). */
@@ -115,6 +127,11 @@ class NearbyController {
   /** The session as this device knows it (host or guest). */
   private session: { id: string; key: string; epoch: number; kind: MediaKind; title: string; itemId: string | null } | null = null;
   private codeKey: string | null = null;
+  /** Host: the guard against strangers (join-gate.ts). */
+  private gate: JoinGate | null = null;
+  private expiryTimer: ReturnType<typeof setInterval> | null = null;
+  /** "Who can find it" for the next session (stopAll before a new host must not lose it). */
+  private nextFindable: Findable = 'anyone';
   private serverPort = 0;
   private serviceName: string | null = null;
   /** This device's member id for the session (stable across reconnects). */
@@ -172,6 +189,7 @@ class NearbyController {
       this.link = new NearbyLink(n, realTimers, {
         sessionKey: () => (this.room ? (this.session?.key ?? null) : null),
         isCodeKey: (k) => !!this.codeKey && keyMatches(k, this.codeKey),
+        admit: (e) => this.admit(e.peerId, e.ctx, e.withKey),
       });
       this.link.open();
       this.miscSubs.push(
@@ -227,18 +245,25 @@ class NearbyController {
 
   // ---- Host ----------------------------------------------------------------------
 
-  /** Starts a session for a downloaded video. Starts the player (paused) when it plays something else. */
+  /**
+   * Starts a session for a video: a download, or a stream from the host's
+   * server. Starts the player (paused) when it plays something else.
+   */
   async host(item: BaseItemDto, resume?: SavedSession): Promise<void> {
     const r = localRecord(item.Id);
-    if (!this.native || !r) {
-      toast('Download this item first to watch it together nearby.');
+    if (!this.native || (!r && !streamsFromServer(item))) {
+      toast('Download this item first, or sign in to its server.');
       return;
     }
     if (togetherState().mode !== 'none') await this.stopAll();
-    const uri = localFileFor(r.itemId)!;
-    if (playerState().now?.item.Id !== r.itemId) {
-      const start = (r.item.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
-      void videoSession().playSource({ item: r.item, uri, startSeconds: start, autoplay: false, record: r });
+    if (playerState().now?.item.Id !== item.Id) {
+      if (r) {
+        const uri = localFileFor(r.itemId)!;
+        const start = (r.item.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
+        void videoSession().playSource({ item: r.item, uri, startSeconds: start, autoplay: false, record: r });
+      } else {
+        void videoSession().play({ item, autoplay: false });
+      }
       router.navigate('/player');
       await whenPlayerReady();
     }
@@ -278,16 +303,22 @@ class NearbyController {
     this.codeKey = hex(this.random(10));
 
     // The port first: starting it clears the shared files.
-    const videoRecord = opts.kind === 'video' ? localRecord(itemId)! : null;
+    const videoRecord = opts.kind === 'video' ? localRecord(itemId) : null;
+    // A video with no download: the host streams it from its server, and so do guests that are signed in there.
+    const streamedVideo = opts.kind === 'video' && !videoRecord && opts.item ? opts.item : null;
+    const activeServerId = useSessionStore.getState().session?.serverId ?? null;
     const curEntry = opts.kind === 'audio' ? audioState().queue.entries[audioState().queue.index] : undefined;
-    const advertItemId = videoRecord?.itemId ?? curEntry?.item.Id ?? 'queue';
-    const advertServerId = videoRecord ? videoRecord.serverId || null : (curEntry?.item.ServerId ?? null);
+    const advertItemId = videoRecord?.itemId ?? streamedVideo?.Id ?? curEntry?.item.Id ?? 'queue';
+    const advertServerId = videoRecord ? videoRecord.serverId || null : streamedVideo ? (streamedVideo.ServerId ?? activeServerId) : (curEntry?.item.ServerId ?? null);
     this.serviceName = `zgf-${hex(this.random(4))}`;
     const advert = encodeAdvert({ sessionId, hostName: displayName(), itemId: advertItemId, itemName: title, serverId: advertServerId, kind: opts.kind, epoch });
     try {
       const server = await n.startServer(this.serviceName, advert);
       this.serverPort = server.port;
       this.serviceName = server.service;
+      // "Only with my code": the port stays open, nobody can find it.
+      setTogether({ findable: this.nextFindable, locked: false });
+      if (this.nextFindable === 'code') n.stopAdvertising();
     } catch (e) {
       opts.port.dispose();
       this.session = null;
@@ -317,6 +348,20 @@ class NearbyController {
         art: shares.artPath(r.itemId),
       };
       if (path) stream = { service: this.serviceName, path };
+    } else if (streamedVideo) {
+      const it = streamedVideo;
+      shared = {
+        id: it.Id ?? itemId ?? 'video',
+        serverId: it.ServerId ?? activeServerId,
+        name: it.Name ?? 'Video',
+        type: it.Type ?? 'Video',
+        seriesName: it.SeriesName ?? null,
+        runTimeTicks: it.RunTimeTicks ?? null,
+        mediaSourceId: it.MediaSources?.[0]?.Id ?? null,
+        container: null,
+        path: null,
+        art: null,
+      };
     } else {
       shared = curEntry
         ? sharedAudioItem(curEntry.item, { path: shares.mediaPath(curEntry.item.Id, curEntry.item.ServerId), art: shares.artPath(curEntry.item.AlbumId ?? curEntry.item.Id) })
@@ -329,6 +374,10 @@ class NearbyController {
     this.hostQueueBinding = queue ?? null;
 
     this.port = opts.port;
+    this.gate = new JoinGate(this.now);
+    this.gate.locked = false;
+    if (this.expiryTimer) clearInterval(this.expiryTimer);
+    this.expiryTimer = setInterval(() => this.expireRequests(), 5_000);
     this.room = new HostRoom(
       { send: this.send, now: this.now, player: opts.port, timers: realTimers, onChange: () => this.publishHost(), onDenied: () => undefined },
       {
@@ -359,7 +408,7 @@ class NearbyController {
     this.save('host', displayName());
     this.publishHost();
     void this.refreshHostFacts();
-    void this.startBleHost();
+    if (togetherState().findable !== 'code') void this.startBleHost();
   }
 
   /** The join code and the "Visible to" lines. */
@@ -381,7 +430,10 @@ class NearbyController {
     const snap = networkSource.available ? await networkSource.snapshot() : null;
     const hs = togetherState().hotspot;
     setTogether({
-      visibleTo: visibleTo({ platform: helpPlatform(), network: snap, ble: togetherState().ble, hotspot: hs ? { ssid: hs.ssid } : null }),
+      visibleTo:
+        togetherState().findable === 'code'
+          ? ['Only people with your code (the session does not show nearby)']
+          : visibleTo({ platform: helpPlatform(), network: snap, ble: togetherState().ble, hotspot: hs ? { ssid: hs.ssid } : null }),
     });
   }
 
@@ -400,19 +452,98 @@ class NearbyController {
       this.link?.respond(peerId, false);
       return;
     }
-    const req = { inviteId: peerId, peerId, name: ctx.name, have: ctx.have, code };
+    const req = { inviteId: peerId, peerId, name: ctx.name, have: ctx.have, code, device: deviceKey(peerId, ctx.memberId), at: this.now() };
     setTogether({ requests: [...togetherState().requests.filter((r) => r.peerId !== peerId), req] });
     toast(`${req.name} wants to join you`, { icon: 'person.2.fill', action: { label: 'View', onPress: () => openTogetherSheet(this.session?.kind === 'audio' ? 'music' : 'player', null) } });
   }
 
-  respond(inviteId: string, accept: boolean): void {
+  respond(inviteId: string, accept: boolean, reason?: string): void {
     const req = togetherState().requests.find((r) => r.inviteId === inviteId);
     setTogether({ requests: togetherState().requests.filter((r) => r.inviteId !== inviteId) });
     if (req?.ble) {
       this.bleHandle(inviteId, accept ? { type: 'APPROVE' } : { type: 'DECLINE' });
       return;
     }
-    this.link?.respond(inviteId, accept);
+    // A request that got in while the session filled up.
+    if (accept && this.gate && (this.room?.memberList.length ?? 0) >= MAX_GUESTS) {
+      this.link?.respond(inviteId, false, REFUSAL_TEXT.full);
+      return;
+    }
+    this.link?.respond(inviteId, accept, reason);
+  }
+
+  // ---- Host: who may join -------------------------------------------------------
+
+  /** The link's join gate: refuse at once, ask the host, or let a member back in. */
+  private admit(peerId: string, ctx: JoinContext, withKey: boolean): 'ok' | 'ask' | { refuse: string } {
+    const g = this.gate;
+    if (!g || !this.room) return withKey ? 'ok' : 'ask';
+    const device = deviceKey(peerId, ctx.memberId);
+    if (withKey) {
+      const back = g.screenReturn(device);
+      if (back === null) return 'ok';
+      if (back !== 'ask') return { refuse: REFUSAL_TEXT[back] };
+    }
+    const r = g.screen(device, this.gateFacts());
+    if (r) this.ev('refused', { peerId, why: r });
+    return r ? { refuse: REFUSAL_TEXT[r] } : 'ask';
+  }
+
+  private gateFacts() {
+    return {
+      guests: this.room?.memberList.length ?? 0,
+      pending: togetherState().requests.map((q) => ({ peerId: q.peerId, device: q.device ?? `p:${q.peerId}`, at: q.at ?? this.now() })),
+    };
+  }
+
+  /** "Don't allow new people": new requests are refused at once, with no prompt. */
+  setLocked(value: boolean): void {
+    if (this.gate) this.gate.locked = value;
+    setTogether({ locked: value });
+  }
+
+  /**
+   * Who can find the session. "code": no Bonjour and no Bluetooth advert;
+   * guests join only with the QR code or the typed code. A running session
+   * can go from "anyone" to "code"; the other way needs a new session
+   * (the native transport cannot advertise the open port again).
+   */
+  setFindable(value: Findable): void {
+    if (!this.room) {
+      this.nextFindable = value;
+      setTogether({ findable: value });
+      return;
+    }
+    if (value === 'code') {
+      this.native?.stopAdvertising();
+      this.native?.bleStopAdvertising?.();
+      setTogether({ findable: 'code' });
+      void this.refreshHostFacts();
+    }
+  }
+
+  /** Removes a member from the session. With `block`, its device cannot ask again in this session. */
+  removeMember(memberId: string, block: boolean): void {
+    const room = this.room;
+    const g = this.gate;
+    if (!room || !g) return;
+    const peer = room.expel(memberId, block ? REFUSAL_TEXT['removed-blocked'] : REFUSAL_TEXT.removed);
+    g.remove(peer && peer === memberId ? deviceKey(peer) : deviceKey('', memberId), block);
+    if (peer) setTimeout(() => this.link?.drop(peer), 300);
+    this.publishHost();
+  }
+
+  private stopGate(): void {
+    if (this.expiryTimer) clearInterval(this.expiryTimer);
+    this.expiryTimer = null;
+    this.gate = null;
+  }
+
+  /** Refuses the requests that waited too long. */
+  private expireRequests(): void {
+    const g = this.gate;
+    if (!g) return;
+    for (const p of g.expired(this.gateFacts().pending)) this.respond(p.peerId, false, REFUSAL_TEXT.timeout);
   }
 
   setOnlyHostControls(value: boolean): void {
@@ -422,16 +553,24 @@ class NearbyController {
 
   // ---- Guest ---------------------------------------------------------------------
 
-  browse(): void {
+  /** Looks for nearby sessions. `ble: false` (the Home card): the network only, to save battery. */
+  browse(opts: { ble?: boolean } = {}): void {
     const n = this.native;
     if (!n) return;
     const st = togetherState();
     if (st.mode === 'nearby' && st.phase.name !== 'idle' && st.phase.name !== 'browsing' && st.phase.name !== 'ended') return;
     this.ensureLink();
-    setTogether({ mode: 'nearby', role: 'guest', hosts: [], notice: null, phase: IDLE, browsingSince: Date.now(), localNetwork: st.localNetwork === 'denied' ? 'denied' : 'unknown' });
+    // The notice stays: it can say why the last join failed (declined, full, blocked).
+    setTogether({ mode: 'nearby', role: 'guest', hosts: [], phase: IDLE, browsingSince: Date.now(), localNetwork: st.localNetwork === 'denied' ? 'denied' : 'unknown' });
     this.dispatch({ type: 'BROWSE' });
     n.startBrowsing();
-    void this.startBleScan(false);
+    if (opts.ble !== false) void this.startBleScan(false);
+  }
+
+  /** Stops looking, when this device only looks (no session, no join in progress). */
+  stopBrowsing(): void {
+    const st = togetherState();
+    if (st.mode === 'nearby' && (st.phase.name === 'browsing' || st.phase.name === 'idle') && !this.room && !this.follower) void this.stopAll();
   }
 
   private onServiceFound(serviceId: string, txt: Record<string, string>): void {
@@ -549,6 +688,7 @@ class NearbyController {
     if (this.reconnect && peerId === this.hostPeer) {
       this.reconnect.trying = false;
       this.hostPeer = null;
+      if (e.declined && isFinalRefusal(e.reason)) this.closeGuest(e.reason!);
       return;
     }
     if ((phase.name === 'joined' || phase.name === 'syncing') && peerId === this.hostPeer) this.linkLost();
@@ -574,6 +714,10 @@ class NearbyController {
       } else if (newHost && togetherState().source === 'stream') {
         void this.reloadStream(m.item);
       }
+    } else if (m.t === 'removed') {
+      // The host removed this device: no reconnect, and say so plainly.
+      this.dispatch({ type: 'HOST_ENDED' });
+      this.closeGuest(m.reason);
     } else if (m.t === 'end') {
       this.dispatch({ type: 'HOST_ENDED' });
       const p = togetherState().phase;
@@ -651,16 +795,28 @@ class NearbyController {
     if (!f) return;
     const token = ++this.loadToken;
     const base = this.mediaBase ?? (await this.resolveMediaBase());
-    const src = guestSource(item, base, { forceStream: this.devForceStream });
-    if (!src) {
-      this.failGuest(item.path ? 'Could not open the stream from the host.' : 'The host cannot share this item.');
+    const own = guestSource(item, null, { forceStream: this.devForceStream });
+    const src = chooseGuestVideoSource(item, {
+      ownFile: own?.local ? own.uri : null,
+      base,
+      activeServerId: useSessionStore.getState().session?.serverId ?? null,
+      forceStream: this.devForceStream,
+    });
+    if (src.kind === 'none') {
+      this.failGuest(src.reason === 'no-access' ? noAccessText(togetherState().hostName ?? 'The host') : item.path ? 'Could not open the stream from the host.' : 'The host cannot share this item.');
       return;
     }
-    setTogether({ source: src.local ? 'local' : 'stream' });
+    const local = src.kind === 'local';
+    setTogether({ source: local ? 'local' : 'stream' });
     if (!(await this.closeOtherSheet(token))) return;
     if (playerState().now?.kind === 'audio') await audioSession().stopForVideo();
-    const record = src.local ? localRecord(item.id, item.serverId) : null;
-    void videoSession().playSource({ item: toBaseItem(item), uri: src.uri, startSeconds: this.startPosition(), autoplay: false, record });
+    if (src.kind === 'server') {
+      // Signed in to the same server: stream straight from it, at the group position.
+      void videoSession().play({ item: toBaseItem(item), startPositionTicks: Math.round(this.startPosition() * 10_000_000), autoplay: false });
+    } else {
+      const record = local ? localRecord(item.id, item.serverId) : null;
+      void videoSession().playSource({ item: toBaseItem(item), uri: src.uri, startSeconds: this.startPosition(), autoplay: false, record });
+    }
     router.navigate('/player');
     const ok = await whenPlayerReady(30_000);
     if (token !== this.loadToken || this.follower !== f) return;
@@ -671,7 +827,7 @@ class NearbyController {
     this.port = bindVideoPort((c) => {
       if (!f.request(c)) this.revertOutside(c);
     });
-    this.attachGuest(f, src.local);
+    this.attachGuest(f, local);
   }
 
   private attachGuest(f: Follower, local: boolean): void {
@@ -945,6 +1101,7 @@ class NearbyController {
     const s = this.session;
     if (!s || !this.room || advert.sessionId !== s.id || (advert.epoch ?? 0) <= s.epoch || serviceId === this.serviceName) return;
     this.stopDemoteWatch();
+    this.stopGate();
     this.ev('demote', { to: advert.hostName, epoch: advert.epoch });
     const port = this.port;
     this.room.dispose();
@@ -1154,7 +1311,12 @@ class NearbyController {
           n.bleSend?.(peerId, e.text);
           break;
         case 'askApproval': {
-          const req = { inviteId: peerId, peerId, name: e.name, have: e.have, ble: true };
+          const refusal = this.gate?.screen(`b:${peerId}`, this.gateFacts()) ?? null;
+          if (refusal) {
+            this.bleHandle(peerId, { type: 'DECLINE' });
+            break;
+          }
+          const req = { inviteId: peerId, peerId, name: e.name, have: e.have, ble: true, device: `b:${peerId}`, at: this.now() };
           setTogether({ requests: [...togetherState().requests.filter((r) => r.peerId !== peerId), req] });
           toast(`${e.name} wants to join you`, { icon: 'person.2.fill' });
           break;
@@ -1311,6 +1473,7 @@ class NearbyController {
   async stopAll(): Promise<void> {
     this.ev('stop all');
     const n = this.native;
+    this.stopGate();
     if (this.room) {
       this.room.end();
       this.room = null;

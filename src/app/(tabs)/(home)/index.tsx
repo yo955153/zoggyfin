@@ -10,6 +10,7 @@ import { Touchable } from '@/components/touchable';
 import { registerBuiltinHomeSections } from '@/features/home/builtin-sections';
 import { AccountSwitcher } from '@/features/servers/account-switcher';
 import { OfflineBanner } from '@/features/offline/offline-banner';
+import { HomeTogetherSheet, homeTogether, NearbyHomeCard, TogetherHeaderButton } from '@/features/together/home-entry';
 import { useRootScreenOptions } from '@/lib/stack-options';
 import { isTV } from '@/platform/tv';
 import { homeSections } from '@/registry/home-sections';
@@ -42,16 +43,19 @@ export default function HomeScreen() {
           ...root,
           title: 'Home',
           headerRight: () => (
-            <Touchable
-              onPress={() => setAccounts(true)}
-              onLongPress={() => router.push('/(tabs)/(home)/settings')}
-              radius={sizes.avatarSmall / 2}
-              accessibilityRole="button"
-              accessibilityLabel="Accounts and settings"
-              accessibilityHint="Switch server or user"
-              hitSlop={8}>
-              <Avatar session={session} size={sizes.avatarSmall} />
-            </Touchable>
+            <View style={s.headerRow}>
+              {homeTogether ? <TogetherHeaderButton /> : null}
+              <Touchable
+                onPress={() => setAccounts(true)}
+                onLongPress={() => router.push('/(tabs)/(home)/settings')}
+                radius={sizes.avatarSmall / 2}
+                accessibilityRole="button"
+                accessibilityLabel="Accounts and settings"
+                accessibilityHint="Switch server or user"
+                hitSlop={8}>
+                <Avatar session={session} size={sizes.avatarSmall} />
+              </Touchable>
+            </View>
           ),
         }}
       />
@@ -61,6 +65,7 @@ export default function HomeScreen() {
         contentContainerStyle={[s.content, { paddingBottom: bottomPad }]}
         refreshControl={isTV ? undefined : <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={c.text2} />}>
         <OfflineBanner entries />
+        {homeTogether ? <NearbyHomeCard /> : null}
         {sections.map((sec) => (
           <View key={sec.id}>
             <sec.component />
@@ -68,6 +73,7 @@ export default function HomeScreen() {
         ))}
       </ScrollView>
       <AccountSwitcher visible={accounts} onClose={() => setAccounts(false)} />
+      {homeTogether ? <HomeTogetherSheet /> : null}
     </>
   );
 }
@@ -75,4 +81,5 @@ export default function HomeScreen() {
 const makeStyles = createStyles(({ c }: AppTheme) => ({
   flex: { flex: 1, backgroundColor: c.bg },
   content: { paddingBottom: spacing.huge * 2 },
+  headerRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.md },
 }));

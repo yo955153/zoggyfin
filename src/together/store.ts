@@ -16,7 +16,7 @@ export type TogetherMode = 'none' | 'nearby' | 'syncplay';
  * The screen that shows the session sheet. `join`: a screen with no item
  * (sign-in, offline banner) that only joins. `music`: the music player.
  */
-export type SheetPlace = 'player' | 'item' | 'join' | 'music';
+export type SheetPlace = 'player' | 'item' | 'join' | 'music' | 'hub';
 
 export interface JoinRequest {
   inviteId: string;
@@ -28,6 +28,9 @@ export interface JoinRequest {
   code?: boolean;
   /** The request came over Bluetooth (the devices then make a Wi-Fi link). */
   ble?: boolean;
+  /** The device key (join-gate.ts) and when the request came (host clock, ms). */
+  device?: string;
+  at?: number;
 }
 
 export interface NearbyHost {
@@ -86,6 +89,10 @@ export interface TogetherState {
   members: Member[];
   hostName: string | null;
   onlyHostControls: boolean;
+  /** Host: "Don't allow new people". */
+  locked: boolean;
+  /** Host: who can find the session ("Anyone nearby" or "Only with my code"). */
+  findable: 'anyone' | 'code';
   /** Host: join requests that wait for an answer. */
   requests: JoinRequest[];
   /** Guest: hosts found nearby. */
@@ -131,6 +138,8 @@ export const initialTogether: TogetherState = {
   members: [],
   hostName: null,
   onlyHostControls: false,
+  locked: false,
+  findable: 'anyone',
   requests: [],
   hosts: [],
   sync: null,
