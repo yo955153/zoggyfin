@@ -80,10 +80,13 @@ if not a.listing_only:
         a.aab, mimetype='application/octet-stream', resumable=True, chunksize=8 * 1024 * 1024)).execute(num_retries=3)
     vc = b['versionCode']
     print('bundle ok, versionCode', vc, flush=True)
-    notes = os.path.join(META, 'changelogs', f'{vc}.txt')
+    # Use changelogs/<versionCode>.txt, or else the newest changelog below that versionCode.
+    logs = {int(os.path.basename(p)[:-4]): p for p in glob.glob(os.path.join(META, 'changelogs', '*.txt'))
+            if os.path.basename(p)[:-4].isdigit()}
+    older = [n for n in logs if n <= int(vc)]
     release = {'name': f'0.1.0 ({vc})', 'versionCodes': [str(vc)], 'status': a.status}
-    if os.path.exists(notes):
-        release['releaseNotes'] = [{'language': LANG, 'text': read(f'changelogs/{vc}.txt')}]
+    if older:
+        release['releaseNotes'] = [{'language': LANG, 'text': read(f'changelogs/{max(older)}.txt')}]
     E.tracks().update(packageName=PKG, editId=eid, track='internal',
                       body={'track': 'internal', 'releases': [release]}).execute()
     print('internal track ok', flush=True)
