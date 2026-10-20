@@ -14,6 +14,10 @@ export const INVITE_VERSION = 1;
 export const INVITE_SITE = 'https://zoggyfin.zog-tech.com/join';
 export const INVITE_SCHEME = 'zoggyfin://join';
 
+/** An invite works this long after it is made (or sent again), days. */
+export const INVITE_DAYS = 7;
+export const INVITE_LIFETIME_MS = INVITE_DAYS * 24 * 60 * 60 * 1000;
+
 /** Size limits. The QR code and some messaging apps need a short link. */
 export const LIMITS = {
   encoded: 4096,
@@ -51,6 +55,8 @@ export interface Invite {
   inviter: string;
   /** The manifest URLs of the inviter's extensions. Optional. */
   extensions?: string[];
+  /** When the link stops working, epoch ms. Optional: an invite of an older app has none. */
+  expiresAt?: number;
 }
 
 /** The JSON form, with short keys so the link stays short. */
@@ -64,6 +70,8 @@ interface Wire {
   p: string;
   by: string;
   x?: string[];
+  /** Expiry, epoch seconds. */
+  e?: number;
 }
 
 // ---- base64url of UTF-8 -----------------------------------------------------------
@@ -199,8 +207,11 @@ export function validateWire(raw: unknown): DecodeResult {
     if (!Array.isArray(w.x) || w.x.length > LIMITS.extensions || !w.x.every(safeManifestUrl)) return { ok: false, error: 'field' };
     extensions = [...new Set(w.x)];
   }
+  // An expiry from 2020 to 2100, in whole seconds.
+  if (w.e !== undefined && (typeof w.e !== 'number' || !Number.isInteger(w.e) || w.e < 1_577_836_800 || w.e > 4_102_444_800)) return { ok: false, error: 'field' };
   const invite: Invite = { serverId: w.sid, serverName: w.sn, addresses, userName: w.u, password: w.p, inviter: w.by };
   if (extensions?.length) invite.extensions = extensions;
+  if (w.e !== undefined) invite.expiresAt = w.e * 1000;
   return { ok: true, invite };
 }
 
@@ -215,6 +226,7 @@ export function encodeInvite(invite: Invite): string {
     by: invite.inviter,
   };
   if (invite.extensions?.length) wire.x = invite.extensions;
+  if (invite.expiresAt !== undefined) wire.e = Math.floor(invite.expiresAt / 1000);
   return base64UrlEncode(JSON.stringify(wire));
 }
 
@@ -253,10 +265,28 @@ export function payloadFromText(input: string): string | null {
   return m ? m[1] : null;
 }
 
-/** The share text. */
-export function inviteMessage(invite: Pick<Invite, 'inviter' | 'serverName'>, link: string): string {
+/** A day for the invite texts, such as "October 27, 2026". */
+export function inviteDate(ms: number): string {
+  return new Date(ms).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+/** True when the invite has an expiry and it is past. */
+export function inviteExpired(invite: Pick<Invite, 'expiresAt'>, now: number): boolean {
+  return invite.expiresAt !== undefined && now >= invite.expiresAt;
+}
+
+/** The share text. The link stands alone on its line, so messaging apps find all of it. */
+export function inviteMessage(invite: Pick<Invite, 'inviter' | 'serverName' | 'expiresAt'>, link: string): string {
   const who = invite.inviter.trim() || 'Someone';
-  return `${who} invited you to watch on ${invite.serverName}. Open this link to join: ${link}`;
+  const text = `${who} invited you to watch on ${invite.serverName}. Open this link to join: ${link}`;
+  return invite.expiresAt === undefined ? text : `${text}\nThis link works until ${inviteDate(invite.expiresAt)}.`;
+}
+
+/** What the person reads when the invite is past its expiry. */
+export function inviteExpiredText(invite: Pick<Invite, 'inviter' | 'expiresAt'>): string {
+  const who = invite.inviter.trim() || 'the person who invited you';
+  const when = invite.expiresAt === undefined ? '' : ` on ${inviteDate(invite.expiresAt)}`;
+  return `This invite expired${when}. Invites work for ${INVITE_DAYS} days. Ask ${who} to send it again.`;
 }
 
 export function inviteErrorText(e: InviteError): string {

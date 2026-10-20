@@ -47,7 +47,7 @@ function useMenuState() {
   const isAdmin = admin.data ?? null;
   const pending = useQuery({
     queryKey: [...scopeKey(scope), 'invite', 'pending'],
-    queryFn: async () => pendingInvites(readRecords(), session.serverId, await getUsers(api)),
+    queryFn: async () => pendingInvites(readRecords(), session.serverId, await getUsers(api), Date.now()),
     enabled: isAdmin === true,
     staleTime: 60 * 1000,
   });

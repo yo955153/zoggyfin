@@ -4,8 +4,9 @@
  * The short way: type a name, tap Send. The app makes the Jellyfin user with
  * a one-time password and opens the share sheet with the invite link. All
  * libraries, downloads and remote access are on by default; "Options"
- * changes them. The pending invites (users that never signed in) are below,
- * with Resend and Cancel invite.
+ * changes them. An invite works for 7 days (`INVITE_DAYS`). The invites are
+ * below: pending ones with their expiry, expired ones (the app deleted the
+ * user, cleanup.ts), each with Send again and Revoke (or Remove).
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams } from 'expo-router';
@@ -26,11 +27,12 @@ import { Group, makeSettingsStyles, SettingsRow, webSwitchColors } from '@/featu
 import { InviteQr } from '@/features/invite/invite-qr';
 import { addressChoices, addressWarning, chosenAddresses, LABEL_TEXT } from '@/invite/addresses';
 import { createInvitedUser, deleteUser, getLibraries, getUsers, setPasswordAsAdmin } from '@/invite/api';
+import { cleanExpiredInvites } from '@/invite/cleanup';
 import { inviteExtensions } from '@/invite/extensions';
-import { type Invite, inviteLink, inviteMessage, LIMITS, needsTunnel } from '@/invite/payload';
-import { DEFAULT_OPTIONS, makeOneTimePassword, usernameFor } from '@/invite/policy';
+import { type Invite, INVITE_DAYS, inviteDate, inviteLink, inviteMessage, LIMITS, needsTunnel } from '@/invite/payload';
+import { DEFAULT_OPTIONS, type InviteOptions, makeOneTimePassword, usernameFor } from '@/invite/policy';
 import { secureRandom } from '@/invite/random';
-import { addRecord, type InviteRecord, pendingInvites, pruneRecords, readRecords, removeRecord, writeRecords } from '@/invite/records';
+import { addRecord, type InviteEntry, inviteEntries, newRecord, pruneRecords, readRecords, removeRecord, writeRecords } from '@/invite/records';
 import { canCopy, copyText, shareInvite } from '@/invite/share';
 import { confirmDestructive } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
@@ -42,6 +44,13 @@ interface Sent {
   userName: string;
   link: string;
   message: string;
+  /** Epoch ms. */
+  expiresAt: number;
+}
+
+/** The time for invite records (in event handlers and queries, not in render). */
+function nowMs(): number {
+  return Date.now();
 }
 
 export function InviteScreen() {
@@ -72,16 +81,24 @@ export function InviteScreen() {
   const [sent, setSent] = useState<Sent | null>(null);
 
   const libraries = useQuery({ queryKey: [...scopeKey(scope), 'invite', 'libraries'], queryFn: () => getLibraries(api), enabled: showOptions });
-  const pendingKey = [...scopeKey(scope), 'invite', 'pending'];
-  const pending = useQuery({
-    queryKey: pendingKey,
-    queryFn: async (): Promise<InviteRecord[]> => {
+  const entriesKey = [...scopeKey(scope), 'invite', 'entries'];
+  const entries = useQuery({
+    queryKey: entriesKey,
+    queryFn: async (): Promise<InviteEntry[]> => {
+      // First the users of expired invites go (the link stops working on the server).
+      await cleanExpiredInvites(api, session.serverId);
       const users = await getUsers(api);
-      const records = readRecords();
-      writeRecords(pruneRecords(records, session.serverId, users));
-      return pendingInvites(records, session.serverId, users);
+      const now = nowMs();
+      writeRecords(pruneRecords(readRecords(), session.serverId, users, now));
+      return inviteEntries(readRecords(), session.serverId, users, now);
     },
   });
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: entriesKey });
+    // The count in the profile menu.
+    void qc.invalidateQueries({ queryKey: [...scopeKey(scope), 'invite', 'pending'] });
+  };
+  const pendingCount = (entries.data ?? []).filter((e) => e.state === 'pending').length;
 
   if (!server || server.id !== session.serverId) {
     return (
@@ -92,8 +109,8 @@ export function InviteScreen() {
     );
   }
 
-  const buildInvite = (userName: string, password: string): Invite => {
-    const inv: Invite = { serverId: server.id, serverName: server.name, addresses, userName, password, inviter: session.userName };
+  const buildInvite = (userName: string, password: string, expiresAt: number): Invite => {
+    const inv: Invite = { serverId: server.id, serverName: server.name, addresses, userName, password, inviter: session.userName, expiresAt };
     if (withExtensions && extensions.length) inv.extensions = extensions.slice(0, LIMITS.extensions);
     return inv;
   };
@@ -102,6 +119,12 @@ export function InviteScreen() {
     const r = await shareInvite(s.message, `Join ${server.name}`);
     if (r === 'copied') toast('The invite is copied. Paste it in a message.', { icon: 'checkmark' });
     else if (r === 'failed') toast('Could not open the share sheet. Use the QR code or copy the link.');
+  };
+
+  /** The link and the message of an invite that works until `expiresAt`. */
+  const sentFor = (userName: string, password: string, expiresAt: number): Sent => {
+    const link = inviteLink(buildInvite(userName, password, expiresAt));
+    return { userName, link, expiresAt, message: inviteMessage({ inviter: session.userName, serverName: server.name, expiresAt }, link) };
   };
 
   const send = async () => {
@@ -114,17 +137,14 @@ export function InviteScreen() {
     setBusy(true);
     try {
       const password = makeOneTimePassword(random);
-      const user = await createInvitedUser(api, userName, password, {
-        libraryIds: libs ? [...libs] : null,
-        allowDownloads,
-        allowRemote,
-      });
-      addRecord({ serverId: server.id, userId: user.Id as string, userName, createdAt: new Date().toISOString() });
-      const link = inviteLink(buildInvite(userName, password));
-      const s: Sent = { userName, link, message: inviteMessage({ inviter: session.userName, serverName: server.name }, link) };
+      const options: InviteOptions = { libraryIds: libs ? [...libs] : null, allowDownloads, allowRemote };
+      const user = await createInvitedUser(api, userName, password, options);
+      const record = newRecord({ serverId: server.id, userId: user.Id as string, userName, options }, nowMs());
+      addRecord(record);
+      const s = sentFor(userName, password, Date.parse(record.expiresAt as string));
       setSent(s);
       setName('');
-      void qc.invalidateQueries({ queryKey: pendingKey });
+      refresh();
       setBusy(false);
       void share(s);
     } catch (e) {
@@ -141,32 +161,49 @@ export function InviteScreen() {
     }
   };
 
-  const resend = async (r: InviteRecord) => {
+  /** A new link for 7 more days. The old link stops working (a new one-time password, or a new user after the cleanup). */
+  const sendAgain = async (e: InviteEntry) => {
+    const r = e.record;
     const random = secureRandom();
     if (!random) return toast('This app version cannot make a safe password.');
     try {
       const password = makeOneTimePassword(random);
-      // A new one-time password: the old link stops working.
-      await setPasswordAsAdmin(api, r.userId, password);
-      const link = inviteLink(buildInvite(r.userName, password));
-      const s: Sent = { userName: r.userName, link, message: inviteMessage({ inviter: session.userName, serverName: server.name }, link) };
+      const options = r.options ?? DEFAULT_OPTIONS;
+      let userId = r.userId;
+      if (r.expired) {
+        // The app deleted the user at the expiry: make it again, with the same name and options.
+        const user = await createInvitedUser(api, r.userName, password, options);
+        userId = user.Id as string;
+        removeRecord(server.id, r.userId);
+      } else {
+        await setPasswordAsAdmin(api, r.userId, password);
+      }
+      const record = newRecord({ serverId: server.id, userId, userName: r.userName, options }, nowMs());
+      addRecord(record);
+      const s = sentFor(r.userName, password, Date.parse(record.expiresAt as string));
       setSent(s);
+      refresh();
       await share(s);
-    } catch (e) {
-      toast(describeError(e).title);
+    } catch (err) {
+      const d = describeError(err);
+      toast(d.status === 400 ? `The server did not accept the name "${r.userName}". A user with this name exists already.` : d.title);
     }
   };
 
-  const cancel = async (r: InviteRecord) => {
-    if (!(await confirmDestructive(`Cancel the invite for ${r.userName}?`, `This deletes the user ${r.userName} from ${server.name}. The invite link stops working.`, 'Cancel invite'))) return;
+  /** Pending: deletes the user, so the link stops working. Expired: the user is gone already; the row goes. */
+  const revoke = async (e: InviteEntry) => {
+    const r = e.record;
+    if (e.state === 'pending') {
+      if (!(await confirmDestructive(`Revoke the invite for ${r.userName}?`, `This deletes the user ${r.userName} from ${server.name}. The invite link stops working.`, 'Revoke invite'))) return;
+    }
     try {
-      await deleteUser(api, r.userId);
+      if (!r.expired) await deleteUser(api, r.userId);
       removeRecord(server.id, r.userId);
       if (sent?.userName === r.userName) setSent(null);
-      void qc.invalidateQueries({ queryKey: pendingKey });
-      toast(`The invite for ${r.userName} is cancelled.`, { icon: 'checkmark' });
-    } catch (e) {
-      toast(describeError(e).title);
+      refresh();
+      if (e.state === 'pending') toast(`The invite for ${r.userName} is revoked.`, { icon: 'checkmark' });
+    } catch (err) {
+      toast(describeError(err).title);
     }
   };
 
@@ -268,12 +305,14 @@ export function InviteScreen() {
             </>
           ) : null}
 
-          <Group title="Pending invites" footer="People who did not sign in yet. Resend makes a new link; the old link stops working.">
-            {pending.isPending ? <Note text="Loading." /> : null}
-            {pending.isError ? <Note text="Could not load the users of this server." warn /> : null}
-            {pending.data && !pending.data.length ? <Note text="No pending invites." /> : null}
-            {(pending.data ?? []).map((r) => (
-              <PendingRow key={r.userId} record={r} onResend={() => void resend(r)} onCancel={() => void cancel(r)} />
+          <Group
+            title={pendingCount ? `Pending invites · ${pendingCount}` : 'Pending invites'}
+            footer={`People who did not sign in yet. An invite works for ${INVITE_DAYS} days. Send again makes a new link for ${INVITE_DAYS} more days; the old link stops working. When an invite expires, Zoggyfin deletes the account that was never used.`}>
+            {entries.isPending ? <Note text="Loading." /> : null}
+            {entries.isError ? <Note text="Could not load the users of this server." warn /> : null}
+            {entries.data && !entries.data.length ? <Note text="No pending invites." /> : null}
+            {(entries.data ?? []).map((e) => (
+              <InviteRow key={e.record.userId} entry={e} onSendAgain={() => void sendAgain(e)} onRevoke={() => void revoke(e)} />
             ))}
           </Group>
         </View>
@@ -311,7 +350,9 @@ function InviteForm({ name, setName, busy, error, onSend }: { name: string; setN
 function SentCard({ sent, serverName, onShare, onDone }: { sent: Sent; serverName: string; onShare: () => void; onDone: () => void }) {
   const s = useStyles(makeStyles);
   return (
-    <Group title={`Invite for ${sent.userName}`} footer="Show the QR code to a person in the same room. The link has a one-time password: send it only to this person.">
+    <Group
+      title={`Invite for ${sent.userName}`}
+      footer={`This link works until ${inviteDate(sent.expiresAt)}. Show the QR code to a person in the same room. The link has a one-time password: send it only to this person.`}>
       <View style={[s.pad, s.center]}>
         <InviteQr value={sent.link} size={scaled(220)} label={`QR code of the invite to ${serverName}`} />
         <View style={s.buttons}>
@@ -330,21 +371,34 @@ function SentCard({ sent, serverName, onShare, onDone }: { sent: Sent; serverNam
   );
 }
 
-function PendingRow({ record, onResend, onCancel }: { record: InviteRecord; onResend: () => void; onCancel: () => void }) {
+/** "Expires October 27, 2026" or "Expired October 27, 2026". */
+export function inviteRowText(e: Pick<InviteEntry, 'state' | 'expiresAt'>): string {
+  if (!Number.isFinite(e.expiresAt)) return e.state === 'expired' ? 'Expired' : '';
+  return `${e.state === 'expired' ? 'Expired' : 'Expires'} ${inviteDate(e.expiresAt)}`;
+}
+
+function InviteRow({ entry, onSendAgain, onRevoke }: { entry: InviteEntry; onSendAgain: () => void; onRevoke: () => void }) {
   const s = useStyles(makeStyles);
   const rs = useStyles(makeSettingsStyles);
-  const date = new Date(record.createdAt);
+  const name = entry.record.userName;
+  const expired = entry.state === 'expired';
   return (
     <View style={[s.pad, s.pendingRow, rs.rowBorder]}>
       <View style={s.flex}>
         <Text style={rs.label} numberOfLines={1}>
-          {record.userName}
+          {name}
         </Text>
-        <Text style={s.sub}>{`Invited ${Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString()}`}</Text>
+        <Text style={[s.sub, expired ? s.expired : null]}>{inviteRowText(entry)}</Text>
       </View>
-      <Button title="Resend" variant="smallTonal" onPress={onResend} accessibilityLabel={`Resend the invite for ${record.userName}`} />
-      <Touchable onPress={onCancel} hitSlop={8} radius={8} accessibilityRole="button" accessibilityLabel={`Cancel the invite for ${record.userName}`} style={s.cancel}>
-        <Text style={s.cancelText}>Cancel</Text>
+      <Button title="Send again" variant="smallTonal" onPress={onSendAgain} accessibilityLabel={`Send the invite for ${name} again`} />
+      <Touchable
+        onPress={onRevoke}
+        hitSlop={8}
+        radius={8}
+        accessibilityRole="button"
+        accessibilityLabel={expired ? `Remove the expired invite for ${name}` : `Revoke the invite for ${name}`}
+        style={s.cancel}>
+        <Text style={expired ? s.removeText : s.cancelText}>{expired ? 'Remove' : 'Revoke'}</Text>
       </Touchable>
     </View>
   );
@@ -431,6 +485,8 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   pendingRow: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: spacing.sm, minHeight: scaled(sizes.settingsRow) },
   cancel: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
   cancelText: { ...font(type.subheadline), color: c.danger },
+  removeText: { ...font(type.subheadline), color: c.text2 },
+  expired: { color: c.warning },
   markVpn: { paddingLeft: spacing.lg + scaled(iconSize.md) + spacing.md, paddingBottom: spacing.sm, borderBottomWidth: sizes.hairline, borderBottomColor: c.separator },
   link: { ...font(type.footnote), color: c.accent },
 }));

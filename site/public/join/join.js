@@ -20,12 +20,24 @@
     return;
   }
 
+  if (J.isExpired(invite, Date.now())) {
+    document.title = 'This invite expired';
+    $('title').textContent = 'This invite expired';
+    $('lede').textContent = J.expiryText(invite, Date.now());
+    return;
+  }
+
   var joinUrl = location.origin + location.pathname + '#' + payload;
   var platform = J.detectPlatform(navigator.userAgent, navigator.maxTouchPoints);
 
   document.title = 'Join ' + invite.server + ' on Zoggyfin';
   $('title').textContent = 'You are invited to ' + invite.server;
   $('lede').textContent = (invite.inviter ? invite.inviter + ' invited you to watch on ' + invite.server + '. ' : '') + 'You join as ' + invite.user + '.';
+  var expiry = J.expiryText(invite, Date.now());
+  if (expiry) {
+    $('expires').textContent = expiry;
+    $('expires').hidden = false;
+  }
   var tunnel = J.tunnelText(invite);
   if (tunnel) {
     $('tunnel').textContent = tunnel;

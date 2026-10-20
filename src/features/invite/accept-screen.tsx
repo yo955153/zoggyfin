@@ -31,7 +31,7 @@ import { canReadClipboard, readClipboard } from '@/invite/clipboard';
 import { offerExtensionsLater } from '@/invite/extensions';
 import { clearPendingInvite, loadPendingInvite, savePendingInvite, takeIncomingInvite, useIncomingInvite } from '@/invite/incoming';
 import { reachInvite } from '@/invite/join';
-import { decodeInvite, type Invite, inviteErrorText, needsTunnel, payloadFromText, savedAddresses } from '@/invite/payload';
+import { decodeInvite, type Invite, inviteDate, inviteErrorText, inviteExpired, inviteExpiredText, needsTunnel, payloadFromText, savedAddresses } from '@/invite/payload';
 import { pageIsHttps, probeSystemInfo } from '@/servers/connection';
 import { createStyles, type AppTheme, font, radius, scaled, sizes, spacing, type, useStyles } from '@/theme';
 
@@ -40,7 +40,7 @@ type Step =
   | { name: 'confirm' }
   | { name: 'joining' }
   | { name: 'unreachable' }
-  | { name: 'failed'; text: string }
+  | { name: 'failed'; text: string; title?: string }
   | { name: 'password'; joined: Joined };
 
 interface Joined {
@@ -57,11 +57,15 @@ interface ScreenState {
   step: Step;
 }
 
-/** The screen state for a payload: the confirm step, or the paste step with the reason. */
-function viewFor(p: string | null, fromPaste = false): ScreenState {
+/**
+ * The screen state for a payload: the confirm step, the paste step with the
+ * reason, or "expired" (the app does not send an expired invite's password).
+ */
+export function viewFor(p: string | null, fromPaste = false, now = Date.now()): ScreenState {
   if (!p) return { invite: null, payload: null, step: { name: 'paste', error: fromPaste ? 'This is not an invite link. Copy the full link from the message.' : undefined } };
   const r = decodeInvite(p);
   if (!r.ok) return { invite: null, payload: null, step: { name: 'paste', error: inviteErrorText(r.error) } };
+  if (inviteExpired(r.invite, now)) return { invite: r.invite, payload: p, step: { name: 'failed', text: inviteExpiredText(r.invite), title: 'This invite expired' } };
   return { invite: r.invite, payload: p, step: { name: 'confirm' } };
 }
 
@@ -83,6 +87,8 @@ export function AcceptInviteScreen() {
 
   const join = async () => {
     if (!invite || !payload) return;
+    // It can expire while the screen is open.
+    if (inviteExpired(invite, Date.now())) return setStep({ name: 'failed', text: inviteExpiredText(invite), title: 'This invite expired' });
     setStep({ name: 'joining' });
     // The invite waits on this device until the join ends, also after a restart.
     savePendingInvite(payload);
@@ -103,7 +109,7 @@ export function AcceptInviteScreen() {
         name: 'failed',
         text:
           d.kind === 'auth'
-            ? `This invite does not work any more. It was used or cancelled. Ask ${invite.inviter || 'the person who invited you'} for a new invite.`
+            ? `This invite does not work any more. It was used, revoked or it expired. Ask ${invite.inviter || 'the person who invited you'} for a new invite.`
             : `${d.title}. ${d.message}`,
       });
     }
@@ -136,7 +142,7 @@ export function AcceptInviteScreen() {
           {invite && step.name === 'unreachable' ? <UnreachableStep invite={invite} onRetry={() => void join()} onLater={notNow} /> : null}
           {step.name === 'failed' ? (
             <>
-              <Text style={s.title}>Could not join</Text>
+              <Text style={s.title}>{step.title ?? 'Could not join'}</Text>
               <Text style={s.body} accessibilityRole="alert">
                 {step.text}
               </Text>
@@ -205,6 +211,7 @@ function ConfirmStep({ invite, busy, onJoin, onCancel }: { invite: Invite; busy:
       <Text style={s.body}>
         {invite.inviter ? `${invite.inviter} invited you. ` : ''}
         {`You join as ${invite.userName}. Next, you set your own password.`}
+        {invite.expiresAt !== undefined ? ` This link works until ${inviteDate(invite.expiresAt)}.` : ''}
       </Text>
       {tunnel ? <Text style={s.card}>{tunnel}</Text> : null}
       <Button title={busy ? 'Joining' : 'Join'} onPress={onJoin} loading={busy} />

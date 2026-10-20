@@ -8,9 +8,11 @@
 import { type Href, router } from 'expo-router';
 import { useEffect } from 'react';
 
+import { getApi } from '@/api/client';
 import { useSession } from '@/auth/session-store';
 import { invoke, isDesktop } from '@/platform/desktop';
 
+import { cleanExpiredInvites } from './cleanup';
 import { inviteExtensions, takeExtensionOffer } from './extensions';
 import { setIncomingInvite } from './incoming';
 import { payloadFromText } from './payload';
@@ -32,8 +34,26 @@ async function takeLinks(): Promise<void> {
   }
 }
 
+/** Expired invites are cleaned up at most this often while the app runs, ms. */
+const CLEANUP_EVERY = 6 * 60 * 60 * 1000;
+
 export function useInviteLinks(): void {
-  const signedIn = !!useSession();
+  const session = useSession();
+  const signedIn = !!session;
+  const serverUrl = session?.serverUrl ?? null;
+  const token = session?.token ?? null;
+  const serverId = session?.serverId ?? null;
+  // An admin's app deletes the users of expired invites (cleanup.ts). It does nothing without an expired record.
+  useEffect(() => {
+    if (!serverUrl || !token || !serverId) return;
+    const run = () => void cleanExpiredInvites(getApi(serverUrl, token), serverId).catch(() => undefined);
+    const t = setTimeout(run, 5000);
+    const every = setInterval(run, CLEANUP_EVERY);
+    return () => {
+      clearTimeout(t);
+      clearInterval(every);
+    };
+  }, [serverUrl, token, serverId]);
   // After a join: offer the inviter's extensions on the extension system's confirm screen.
   useEffect(() => {
     if (!signedIn) return;

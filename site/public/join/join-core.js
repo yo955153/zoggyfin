@@ -66,7 +66,28 @@
     if (labels.every(function (l) { return l === 't' || l === 'v'; })) {
       tunnel = labels.every(function (l) { return l === 't'; }) ? 'tailscale' : 'vpn';
     }
-    return { server: str(data.sn, 100), user: str(data.u, 128), inviter: str(data.by, 100), tunnel: tunnel };
+    // The expiry (epoch seconds in the link), or null for an invite of an older app.
+    var expires = typeof data.e === 'number' && isFinite(data.e) && data.e > 0 ? data.e * 1000 : null;
+    return { server: str(data.sn, 100), user: str(data.u, 128), inviter: str(data.by, 100), tunnel: tunnel, expires: expires };
+  }
+
+  // True when the invite has an expiry and it is past.
+  function isExpired(invite, now) {
+    return !!invite && invite.expires !== null && invite.expires !== undefined && now >= invite.expires;
+  }
+
+  // A day such as "October 27, 2026" (the app writes the same).
+  function dateText(ms) {
+    return new Date(ms).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+
+  // The line under the invite: until when the link works, or why it does not.
+  function expiryText(invite, now) {
+    if (!invite || invite.expires === null || invite.expires === undefined) return '';
+    if (isExpired(invite, now)) {
+      return 'This invite expired on ' + dateText(invite.expires) + '. Invites work for 7 days. Ask ' + (invite.inviter || 'the person who invited you') + ' to send it again.';
+    }
+    return 'This link works until ' + dateText(invite.expires) + '.';
   }
 
   // 'ios' (iPhone and iPad, also iPadOS with a desktop user agent), 'android', 'mac' or 'other'.
@@ -117,6 +138,8 @@
     openUrl: openUrl,
     bannerContent: bannerContent,
     tunnelText: tunnelText,
+    isExpired: isExpired,
+    expiryText: expiryText,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.ZoggyfinJoin = api;

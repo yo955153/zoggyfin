@@ -4,6 +4,8 @@ import {
   decodeInvite,
   encodeInvite,
   type Invite,
+  inviteExpired,
+  inviteExpiredText,
   inviteLink,
   inviteMessage,
   LIMITS,
@@ -133,6 +135,39 @@ describe('links', () => {
   it('writes the message', () => {
     expect(inviteMessage(invite, 'L')).toBe('Sam invited you to watch on Family Media. Open this link to join: L');
     expect(inviteMessage({ ...invite, inviter: ' ' }, 'L')).toBe('Someone invited you to watch on Family Media. Open this link to join: L');
+  });
+});
+
+describe('the 7-day expiry', () => {
+  const expiresAt = Date.UTC(2026, 9, 27, 18, 0, 0);
+
+  it('round-trips the expiry in whole seconds', () => {
+    const r = decodeInvite(encodeInvite({ ...invite, expiresAt: expiresAt + 400 }));
+    expect(r).toEqual({ ok: true, invite: { ...invite, expiresAt } });
+  });
+
+  it('refuses an expiry that is not a time', () => {
+    for (const e of ['soon', 1.5, -1, 99, 5_000_000_000]) {
+      expect(decodeInvite(wire({ v: 1, sid: 'ab12', sn: 'S', a: [['https://m.example.com', 'i']], u: 'Jane', p: 'Abcdefghjkmnpqrs', by: 'Sam', e })).ok).toBe(false);
+    }
+  });
+
+  it('is expired at the expiry, not before; an invite with no expiry never is', () => {
+    expect(inviteExpired({ expiresAt }, expiresAt - 1)).toBe(false);
+    expect(inviteExpired({ expiresAt }, expiresAt)).toBe(true);
+    expect(inviteExpired({}, Number.MAX_SAFE_INTEGER)).toBe(false);
+  });
+
+  it('puts the expiry in the message, after the link', () => {
+    const link = inviteLink({ ...invite, expiresAt });
+    const m = inviteMessage({ ...invite, expiresAt }, link);
+    expect(m).toBe(`Sam invited you to watch on Family Media. Open this link to join: ${link}\nThis link works until October 27, 2026.`);
+    expect(payloadFromText(m)).toBe(link.split('#')[1]);
+  });
+
+  it('tells the person what to do with an expired invite', () => {
+    expect(inviteExpiredText({ inviter: 'Sam', expiresAt })).toBe('This invite expired on October 27, 2026. Invites work for 7 days. Ask Sam to send it again.');
+    expect(inviteExpiredText({ inviter: '', expiresAt })).toContain('Ask the person who invited you');
   });
 });
 

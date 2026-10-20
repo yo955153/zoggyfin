@@ -3,7 +3,9 @@ import { encodeInvite, type Invite } from '../payload';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const J = require('../../../site/public/join/join-core.js') as {
-  readInvite(p: string): { server: string; user: string; inviter: string; tunnel: 'tailscale' | 'vpn' | null } | null;
+  readInvite(p: string): { server: string; user: string; inviter: string; tunnel: 'tailscale' | 'vpn' | null; expires: number | null } | null;
+  isExpired(i: unknown, now: number): boolean;
+  expiryText(i: unknown, now: number): string;
   detectPlatform(ua: string, touch?: number): string;
   primaryAction(platform: string, config: Record<string, string>): { label: string; url: string; note: string } | null;
   openUrl(platform: string, payload: string, fallback: string): string;
@@ -29,10 +31,32 @@ const UA = {
 
 const config = { appStoreUrl: '', testFlightUrl: 'https://testflight.apple.com/join/x', androidUrl: '', macUrl: 'https://releases.example.com/z.dmg', webAppUrl: '' };
 
+describe('join page: the 7-day expiry', () => {
+  const expiresAt = Date.UTC(2026, 9, 27, 18, 0, 0);
+  const read = () => J.readInvite(encodeInvite({ ...invite, expiresAt }))!;
+
+  it('reads the expiry and tells until when the link works', () => {
+    expect(read().expires).toBe(expiresAt);
+    expect(J.isExpired(read(), expiresAt - 1)).toBe(false);
+    expect(J.expiryText(read(), expiresAt - 1)).toBe('This link works until October 27, 2026.');
+  });
+
+  it('says that an expired invite does not work, and who to ask', () => {
+    expect(J.isExpired(read(), expiresAt)).toBe(true);
+    expect(J.expiryText(read(), expiresAt + 1)).toBe('This invite expired on October 27, 2026. Invites work for 7 days. Ask Sam to send it again.');
+  });
+
+  it('has no expiry text for an invite of an older app', () => {
+    const old = J.readInvite(encodeInvite(invite));
+    expect(J.isExpired(old, Date.now())).toBe(false);
+    expect(J.expiryText(old, Date.now())).toBe('');
+  });
+});
+
 describe('join page: readInvite', () => {
   it('reads what the app writes, with no password', () => {
     const r = J.readInvite(encodeInvite(invite));
-    expect(r).toEqual({ server: 'Família Media', user: 'Jane Doe', inviter: 'Sam', tunnel: null });
+    expect(r).toEqual({ server: 'Família Media', user: 'Jane Doe', inviter: 'Sam', tunnel: null, expires: null });
     expect(JSON.stringify(r)).not.toContain(invite.password);
   });
   it('knows Tailscale-only and VPN-only invites', () => {
