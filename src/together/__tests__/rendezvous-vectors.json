@@ -1,0 +1,30 @@
+{
+  "a": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
+  "aPub": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
+  "b": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+  "bPub": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+  "shared": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742",
+  "session": "1a2b3c4d",
+  "info": "zgf-rendezvous-1",
+  "key": "cf83ac4032118556985ce59ee69f234f16ff0d168267d19e3fb06f05bab416b9",
+  "messages": [
+    {
+      "nonce": "000102030405060708090a0b",
+      "plain": "7b2274223a2277696669222c2273736964223a224449524543542d6162205a6f67677966696e222c2270617373776f7264223a22704073732077c3b6726420f09f9880227d",
+      "text": "{\"t\":\"wifi\",\"ssid\":\"DIRECT-ab Zoggyfin\",\"password\":\"p@ss wörd 😀\"}",
+      "sealed": "f36ce4dd149cbc798ec1bdbd3054ea29489b3eb29c1efd582571742080aadff645f8b073e2cc8c0ad400fa355bcf1bc447d0f2bdf0cc964e46014f80c3edd62dc6a375a43534adfd734962019d6449c0fba0e5bcd4"
+    },
+    {
+      "nonce": "ffffffffffffffffffffffff",
+      "plain": "7b2274223a2261646472222c22697073223a5b2231302e302e302e32225d2c22706f7274223a34393135327d",
+      "text": "{\"t\":\"addr\",\"ips\":[\"10.0.0.2\"],\"port\":49152}",
+      "sealed": "2026b9da56954e32e2fa45ed7055caec1abb7397c7db670027b68a2e34b27c85abbfd5bd3ec76c8aff53a85ce62f3ebf8b55665c189ecdf82b4d7ac0"
+    },
+    {
+      "nonce": "0c0b0a090807060504030201",
+      "plain": "",
+      "text": "",
+      "sealed": "ef03aee8b589497d807e980801f050c6"
+    }
+  ]
+}

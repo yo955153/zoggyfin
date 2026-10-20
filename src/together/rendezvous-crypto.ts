@@ -4,18 +4,33 @@
  * - Key agreement: X25519. Each side makes a new key pair for each rendezvous.
  * - Key derivation: HKDF-SHA256 of the X25519 shared secret. The salt is the
  *   8-hex session id (UTF-8), the info is "zgf-rendezvous-1", the output is 32 bytes.
- * - Sealed messages: XChaCha20-Poly1305 with a 24-byte random nonce. The
- *   plaintext is JSON (UTF-8). The box is base64url (no padding) of nonce || ciphertext.
+ * - Sealed messages: ChaCha20-Poly1305 (IETF) with a 12-byte random nonce. The
+ *   plaintext is JSON (UTF-8). The box is base64url (no padding) of
+ *   nonce || ciphertext || tag.
  *
- * The libraries are the audited @noble packages, pinned to 1.x because 1.x
- * ships CommonJS (jest-expo) and works in Metro with no transform.
+ * The primitives come from `rendezvous-cipher`: the audited @noble libraries
+ * on Android and the web, Apple CryptoKit on iOS (the iOS app uses only
+ * encryption from the operating system). All platforms give the same bytes
+ * (test vectors: __tests__/rendezvous-vectors.json).
  * The caller injects the randomness (a native secure source in the app).
  * The functions in this file never throw on bad input: they return null.
  */
-import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
-import { x25519 } from '@noble/curves/ed25519.js';
-import { hkdf } from '@noble/hashes/hkdf.js';
-import { sha256 } from '@noble/hashes/sha2.js';
+import { cipher as defaultCipher } from './rendezvous-cipher';
+import { NONCE_BYTES, type RendezvousCipher, TAG_BYTES } from './rendezvous-cipher-types';
+
+let cipher: RendezvousCipher = defaultCipher;
+
+/** Replaces the primitives (tests only). Gives back the old ones. */
+export function setCipherForTests(next: RendezvousCipher): RendezvousCipher {
+  const old = cipher;
+  cipher = next;
+  return old;
+}
+
+/** Where the primitives run: `noble` (JS) or `cryptokit` (iOS). */
+export function cipherImpl(): RendezvousCipher['impl'] {
+  return cipher.impl;
+}
 
 /** Gives n cryptographically secure random bytes. Never use Math.random for it. */
 export type Random = (n: number) => Uint8Array;
@@ -28,8 +43,6 @@ export interface KeyPair {
 }
 
 export const HKDF_INFO = 'zgf-rendezvous-1';
-const NONCE_BYTES = 24;
-const TAG_BYTES = 16;
 
 // ---------------------------------------------------------------------------
 // UTF-8 and base64url (no TextEncoder, TextDecoder or Buffer: Hermes does not
@@ -165,7 +178,9 @@ export function generateKeyPair(random: Random): KeyPair {
   const seed = randomBytes(random, 32);
   if (!seed) throw new Error('The random source did not give 32 bytes.');
   const priv = Uint8Array.from(seed);
-  return { priv, pub: toBase64Url(x25519.getPublicKey(priv)) };
+  const pub = cipher.publicKey(priv);
+  if (!pub || pub.length !== 32) throw new Error('No X25519 implementation.');
+  return { priv, pub: toBase64Url(pub) };
 }
 
 /** True for a base64url text of 32 bytes (an X25519 public key). */
@@ -180,13 +195,8 @@ export function isPublicKey(x: unknown): x is string {
 export function deriveKey(priv: Uint8Array, peerPub: string, session: string): Uint8Array | null {
   const peer = isPublicKey(peerPub) ? fromBase64Url(peerPub) : null;
   if (!peer || !(priv instanceof Uint8Array) || priv.length !== 32) return null;
-  try {
-    const shared = x25519.getSharedSecret(priv, peer);
-    if (shared.every((b) => b === 0)) return null;
-    return hkdf(sha256, shared, utf8Encode(session), utf8Encode(HKDF_INFO), 32);
-  } catch {
-    return null;
-  }
+  const key = cipher.sharedKey(priv, peer, utf8Encode(session), utf8Encode(HKDF_INFO));
+  return key && key.length === 32 ? key : null;
 }
 
 /**
@@ -204,15 +214,12 @@ export function seal(key: Uint8Array, value: unknown, random: Random): string {
   if (json === undefined) return '';
   const nonce = randomBytes(random, NONCE_BYTES);
   if (!nonce) return '';
-  try {
-    const sealed = xchacha20poly1305(key, nonce).encrypt(utf8Encode(json));
-    const out = new Uint8Array(NONCE_BYTES + sealed.length);
-    out.set(nonce, 0);
-    out.set(sealed, NONCE_BYTES);
-    return toBase64Url(out);
-  } catch {
-    return '';
-  }
+  const sealed = cipher.seal(key, nonce, utf8Encode(json));
+  if (!sealed) return '';
+  const out = new Uint8Array(NONCE_BYTES + sealed.length);
+  out.set(nonce, 0);
+  out.set(sealed, NONCE_BYTES);
+  return toBase64Url(out);
 }
 
 /** The JSON value in a box, or null on any failure (tamper, wrong key, bad base64url, bad UTF-8, bad JSON). */
@@ -220,8 +227,9 @@ export function open(key: Uint8Array, box: unknown): unknown | null {
   if (!(key instanceof Uint8Array) || key.length !== 32) return null;
   const bytes = fromBase64Url(box);
   if (!bytes || bytes.length < NONCE_BYTES + TAG_BYTES) return null;
+  const plain = cipher.open(key, bytes.slice(0, NONCE_BYTES), bytes.slice(NONCE_BYTES));
+  if (!plain) return null;
   try {
-    const plain = xchacha20poly1305(key, bytes.subarray(0, NONCE_BYTES)).decrypt(bytes.subarray(NONCE_BYTES));
     const text = utf8Decode(plain);
     if (text === null) return null;
     return JSON.parse(text) as unknown;

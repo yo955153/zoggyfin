@@ -10,6 +10,7 @@ import {
   utf8Encode,
   utf8Length,
 } from '../rendezvous-crypto';
+import { cipher } from '../rendezvous-cipher';
 
 /** A seeded test source (xorshift32). Tests only: the app uses a native secure source. */
 function seeded(seed: number): Random {
@@ -105,7 +106,7 @@ describe('rendezvous crypto', () => {
 
     it('gives null for a changed byte', () => {
       const bytes = fromBase64Url(seal(key, value, seeded(4)))!;
-      for (const i of [0, 23, 24, 30, bytes.length - 1]) {
+      for (const i of [0, 11, 12, 30, bytes.length - 1]) {
         const copy = Uint8Array.from(bytes);
         copy[i] ^= 0x01;
         expect(open(key, toBase64Url(copy))).toBeNull();
@@ -124,12 +125,11 @@ describe('rendezvous crypto', () => {
 
     it('gives null for a sealed text that is not JSON', () => {
       // `seal` cannot make this box, so make it with the cipher directly.
-      const { xchacha20poly1305 } = jest.requireActual('@noble/ciphers/chacha.js') as typeof import('@noble/ciphers/chacha.js');
-      const nonce = new Uint8Array(24);
-      const ct = xchacha20poly1305(key, nonce).encrypt(utf8Encode('{not json'));
-      const box = new Uint8Array(24 + ct.length);
+      const nonce = new Uint8Array(12);
+      const ct = cipher.seal(key, nonce, utf8Encode('{not json'))!;
+      const box = new Uint8Array(12 + ct.length);
       box.set(nonce);
-      box.set(ct, 24);
+      box.set(ct, 12);
       expect(open(key, toBase64Url(box))).toBeNull();
     });
 

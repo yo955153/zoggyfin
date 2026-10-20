@@ -38,6 +38,24 @@ public class ZoggyfinTogetherModule: Module {
       return Data(bytes).base64EncodedString()
     }
 
+    // MARK: Rendezvous crypto (CryptoKit only, see RendezvousCrypto.swift). Hex in and out.
+
+    Function("rvPublicKey") { (privHex: String) -> String in
+      RendezvousCrypto.publicKey(privHex: privHex)
+    }
+
+    Function("rvSharedKey") { (privHex: String, peerHex: String, saltHex: String, infoHex: String) -> String in
+      RendezvousCrypto.sharedKey(privHex: privHex, peerHex: peerHex, saltHex: saltHex, infoHex: infoHex)
+    }
+
+    Function("rvSeal") { (keyHex: String, nonceHex: String, plainHex: String) -> String in
+      RendezvousCrypto.seal(keyHex: keyHex, nonceHex: nonceHex, plainHex: plainHex)
+    }
+
+    Function("rvOpen") { (keyHex: String, nonceHex: String, sealedHex: String) -> String? in
+      RendezvousCrypto.open(keyHex: keyHex, nonceHex: nonceHex, sealedHex: sealedHex)
+    }
+
     // MARK: Host
 
     AsyncFunction("startServer") { (serviceName: String, txt: [String: String], promise: Promise) in

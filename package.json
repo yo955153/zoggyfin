@@ -84,13 +84,15 @@
     "desktop:release": "bash desktop/scripts/release.sh",
     "desktop:publish": "bash desktop/scripts/publish.sh",
     "desktop:version": "bash desktop/scripts/version.sh",
-    "site:deploy": "bash site/scripts/deploy.sh"
+    "site:deploy": "bash site/scripts/deploy.sh",
+    "test:crypto-swift": "bash scripts/rendezvous-vectors/run.sh"
   },
   "private": true,
   "license": "MPL-2.0",
   "jest": {
     "preset": "jest-expo",
     "moduleNameMapper": {
+      "^.*/rendezvous-cipher$": "<rootDir>/src/together/rendezvous-cipher.ts",
       "^@/assets/(.*)$": "<rootDir>/assets/$1",
       "^@/(.*)$": "<rootDir>/src/$1"
     },

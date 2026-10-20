@@ -346,12 +346,31 @@ are in `src/together/link-native-types.ts`.
   advertises a GATT service with an INFO characteristic (session, host, title, kind,
   platform, can make a hotspot, can join a Wi-Fi). The guest list merges sessions from the
   network and from Bluetooth ("Needs a quick Wi-Fi link"). On Join the two devices do an
-  X25519 key exchange (HKDF-SHA256, XChaCha20-Poly1305; the audited `@noble` libraries),
-  the host approves, the Android device makes a local-only hotspot and sends the SSID and
-  the password encrypted; the other device joins it (iOS `NEHotspotConfiguration`, macOS
-  CoreWLAN, Android `WifiNetworkSpecifier`) and connects to the host's address with the
-  session key. Known limit: the key exchange has no authentication, so a device in
+  X25519 key exchange (HKDF-SHA256, then ChaCha20-Poly1305 IETF with a 12-byte random
+  nonce; see "Rendezvous cryptography" below), the host approves, the Android device
+  makes a local-only hotspot and sends the SSID and the password encrypted; the other
+  device joins it (iOS `NEHotspotConfiguration`, macOS CoreWLAN, Android
+  `WifiNetworkSpecifier`) and connects to the host's address with the session key. Known limit: the key exchange has no authentication, so a device in
   Bluetooth range could read the Wi-Fi password with an active attack.
+- **Rendezvous cryptography and export rules**: all platforms use the same scheme:
+  X25519, HKDF-SHA256 (salt: the session id, info: `zgf-rendezvous-1`, 32 bytes) and
+  ChaCha20-Poly1305 (IETF, 12-byte nonce, 16-byte tag). The box is base64url of
+  nonce || ciphertext || tag. Each rendezvous has a new key pair and sends few messages,
+  so random 12-byte nonces cannot repeat in practice.
+  - iOS and iPadOS use only encryption from the operating system: Apple CryptoKit
+    (`Curve25519.KeyAgreement`, `HKDF<SHA256>`, `ChaChaPoly`) in
+    `modules/zoggyfin-native/ios/RendezvousCrypto.swift`, through
+    `src/together/rendezvous-cipher.ios.ts`. The iOS bundle has no JS cryptography. Why:
+    the App Store export rules exempt an app whose encryption comes only from the Apple
+    operating system. So `ITSAppUsesNonExemptEncryption` stays `false`, and the app needs
+    no export documentation. Do not add a JS or a third-party cipher to the iOS app.
+  - Android and the web page of the Mac app use the audited `@noble` libraries in JS
+    (`src/together/rendezvous-cipher.ts`). The Mac app is signed with Developer ID and
+    is not in the App Store, and its Swift bridge does not do the exchange.
+  - Test vectors: `src/together/__tests__/rendezvous-vectors.json` (the RFC 7748 keys and
+    fixed nonces). Jest checks them with `@noble`; `pnpm test:crypto-swift` compiles the
+    Swift file with `scripts/rendezvous-vectors/main.swift` and checks them with CryptoKit.
+  - The protocol version stays 1: no build with the old XChaCha20 scheme was released.
 
 ### Listen together (part 2)
 
