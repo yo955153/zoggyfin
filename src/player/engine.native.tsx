@@ -19,6 +19,16 @@ class NativeEngine implements VideoEngine {
   private subscriptions: { remove(): void }[] = [];
   private playing = false;
   /**
+   * The player is to play: the app asked for it, or the player plays (or
+   * stops) from outside the app, such as the lock screen. While it is false,
+   * `setRate` only keeps the rate.
+   */
+  private wantPlay = false;
+  /** The player waits for data (a stall stops it, but it is still to play). */
+  private loading = false;
+  /** The rate the session asked for. */
+  private rate = 1;
+  /**
    * True once the current source is ready. Android: a player made with no
    * source prepares an empty timeline, ExoPlayer ends it at once and
    * expo-video sends `playToEnd`, which arrives after the real source is set.
@@ -74,17 +84,26 @@ class NativeEngine implements VideoEngine {
       p.addListener('statusChange', ({ status, error }) => {
         const map: Record<string, EngineStatus> = { idle: 'idle', loading: 'loading', readyToPlay: 'ready', error: 'error' };
         if (status === 'readyToPlay') this.sourceReady = true;
+        this.loading = status === 'loading';
         if (status === 'readyToPlay' && this.pendingStart !== null) {
           const start = this.pendingStart;
           this.pendingStart = null;
           if (start > 0.5 || !this.pendingPlay) p.currentTime = start;
-          if (this.pendingPlay) p.play();
+          if (this.pendingPlay) this.startPlayer(p);
           this.pendingPlay = false;
         }
         this.emit({ type: 'status', status: map[status] ?? 'idle', error: error?.message });
       }),
       p.addListener('playingChange', ({ isPlaying }) => {
         this.playing = isPlaying;
+        if (isPlaying) {
+          // It plays (also from outside the app: the lock screen, a headset): give it the rate it kept.
+          this.wantPlay = true;
+          if (p.playbackRate !== this.rate) p.playbackRate = this.rate;
+        } else if (!this.loading) {
+          // A pause (also from outside the app). A stall is not one.
+          this.wantPlay = false;
+        }
         this.updateAutoPip();
         this.emit({ type: 'playing', playing: isPlaying });
       }),
@@ -99,6 +118,9 @@ class NativeEngine implements VideoEngine {
       p.addListener('mutedChange', ({ muted }) => this.emit({ type: 'muted', muted })),
     ];
     this.player = p;
+    // A new player starts at its default rate.
+    this.rate = 1;
+    this.loading = false;
     this.playerListeners.forEach((l) => l());
     return p;
   }
@@ -107,6 +129,7 @@ class NativeEngine implements VideoEngine {
     const p = this.ensurePlayer();
     this.pendingStart = source.startSeconds;
     this.pendingPlay = source.autoplay !== false;
+    this.wantPlay = this.pendingPlay;
     this.sourceReady = false;
     // Android's default is 20 s; iOS's 0 lets AVPlayer decide (it can read minutes ahead).
     p.bufferOptions = source.readAhead
@@ -132,6 +155,7 @@ class NativeEngine implements VideoEngine {
     this.subscriptions = [];
     this.player = null;
     this.playing = false;
+    this.wantPlay = false;
     this.updateAutoPip();
     this.playerListeners.forEach((l) => l());
     try {
@@ -153,10 +177,18 @@ class NativeEngine implements VideoEngine {
   currentPlayer = (): VideoPlayer | null => this.player;
 
   play(): void {
-    this.player?.play();
+    this.wantPlay = true;
+    if (this.player) this.startPlayer(this.player);
+  }
+
+  /** Plays, then gives the player the rate that `setRate` kept while it was paused. */
+  private startPlayer(p: VideoPlayer): void {
+    p.play();
+    if (p.playbackRate !== this.rate) p.playbackRate = this.rate;
   }
 
   pause(): void {
+    this.wantPlay = false;
     this.player?.pause();
   }
 
@@ -164,8 +196,19 @@ class NativeEngine implements VideoEngine {
     if (this.player) this.player.currentTime = Math.max(0, seconds);
   }
 
+  /**
+   * On iOS, expo-video sets `AVPlayer.rate` for `playbackRate`, and a rate
+   * above zero starts a paused AVPlayer. So a paused player only keeps the
+   * rate, and takes it on the next play. Else a pause, then a rate change (a
+   * watch-together guest ends a drift nudge when the group pauses) starts the
+   * player again, and the binding sends that start to the group as a play.
+   */
   setRate(rate: number): void {
-    if (this.player) this.player.playbackRate = rate;
+    this.rate = rate;
+    const p = this.player;
+    if (!p) return;
+    if (Platform.OS === 'ios' && !this.wantPlay) return;
+    p.playbackRate = rate;
   }
 
   setMuted(muted: boolean): void {

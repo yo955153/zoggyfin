@@ -3,14 +3,15 @@
  *
  * The port remembers what it asked for (play or pause). When the player
  * changes by itself while it is not buffering (lock screen, Picture in
- * Picture, a headset button), `onOutside` gets that change as a control, so
- * the session can apply it for the group.
+ * Picture, a headset button) and the change holds for `OUTSIDE_CONFIRM`,
+ * `onOutside` gets that change as a control, so the session can apply it for
+ * the group. A late engine report of the app's own command is not a change.
  */
 import type { UserControl } from '@/player/control-gate';
 import { videoSession } from '@/player/session';
 import { playerState, usePlayerStore } from '@/player/store';
 
-import type { PlayerPort } from './player-port';
+import { OUTSIDE_CONFIRM, type PlayerPort, realTimers, type Timers } from './player-port';
 
 /** Buffering must last this long before the group waits for it. */
 const BUFFERING_DEBOUNCE = 400;
@@ -27,12 +28,23 @@ function busy(status: string): boolean {
  * `endPauses`: the host's port. When the film ends, it sends a pause to
  * `onOutside`, so the group stops at the end. A guest's port only notes it.
  */
-export function bindVideoPort(onOutside?: (control: UserControl) => void, opts: { endPauses?: boolean } = {}): BoundPort {
+export function bindVideoPort(onOutside?: (control: UserControl) => void, opts: { endPauses?: boolean; timers?: Timers } = {}): BoundPort {
+  const timers = opts.timers ?? realTimers;
   const direct = videoSession().direct;
   let intent = playerState().playing;
   let buffering = busy(playerState().status);
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timer: unknown = null;
   const listeners = new Set<(b: boolean) => void>();
+  let confirm: unknown = null;
+
+  /** The player still differs from what the app asked: the change came from outside the app. */
+  const confirmOutside = () => {
+    confirm = null;
+    const s = playerState();
+    if (s.playing === intent || busy(s.status) || s.status === 'ended' || !s.now) return;
+    intent = s.playing;
+    onOutside?.({ action: s.playing ? 'play' : 'pause' });
+  };
 
   const setBuffering = (b: boolean) => {
     if (b === buffering) return;
@@ -43,9 +55,9 @@ export function bindVideoPort(onOutside?: (control: UserControl) => void, opts: 
   const unsub = usePlayerStore.subscribe((s, prev) => {
     if (s.status !== prev.status) {
       if (busy(s.status)) {
-        if (!timer) timer = setTimeout(() => ((timer = null), setBuffering(busy(playerState().status))), BUFFERING_DEBOUNCE);
+        if (!timer) timer = timers.setTimeout(() => ((timer = null), setBuffering(busy(playerState().status))), BUFFERING_DEBOUNCE);
       } else {
-        if (timer) clearTimeout(timer);
+        if (timer) timers.clearTimeout(timer);
         timer = null;
         setBuffering(false);
       }
@@ -55,10 +67,7 @@ export function bindVideoPort(onOutside?: (control: UserControl) => void, opts: 
       if (opts.endPauses) onOutside?.({ action: 'pause' });
       return;
     }
-    if (s.playing !== prev.playing && s.playing !== intent && !busy(s.status) && s.status !== 'ended' && s.now) {
-      intent = s.playing;
-      onOutside?.({ action: s.playing ? 'play' : 'pause' });
-    }
+    if (s.playing !== prev.playing && s.playing !== intent && !confirm) confirm = timers.setTimeout(confirmOutside, OUTSIDE_CONFIRM);
   });
 
   return {
@@ -84,7 +93,8 @@ export function bindVideoPort(onOutside?: (control: UserControl) => void, opts: 
     },
     dispose: () => {
       unsub();
-      if (timer) clearTimeout(timer);
+      if (timer) timers.clearTimeout(timer);
+      if (confirm) timers.clearTimeout(confirm);
       listeners.clear();
     },
   };

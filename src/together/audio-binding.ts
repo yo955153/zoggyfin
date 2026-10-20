@@ -19,6 +19,7 @@ import { useAudioStore } from '@/player/audio/store';
 import { playerState, usePlayerStore } from '@/player/store';
 
 import { SEEK_ONLY_DRIFT } from './drift';
+import { OUTSIDE_CONFIRM, realTimers, type Timers } from './player-port';
 import type { BoundPort } from './player-binding';
 import { MAX_SHARED_ENTRIES, type SharedEntry, type SharedItem, type SharedQueue } from './protocol';
 import type { QueueAction, RoomQueue } from './room';
@@ -29,12 +30,23 @@ function busy(status: string): boolean {
   return status === 'loading' || status === 'buffering';
 }
 
-export function bindAudioPort(onOutside?: (control: UserControl) => void): BoundPort {
+export function bindAudioPort(onOutside?: (control: UserControl) => void, opts: { timers?: Timers } = {}): BoundPort {
+  const timers = opts.timers ?? realTimers;
   const direct = audioSession().direct;
   let intent = playerState().playing;
   let buffering = busy(playerState().status);
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timer: unknown = null;
   const listeners = new Set<(b: boolean) => void>();
+  let confirm: unknown = null;
+
+  /** The player still differs from what the app asked: the change came from outside the app. */
+  const confirmOutside = () => {
+    confirm = null;
+    const s = playerState();
+    if (s.playing === intent || busy(s.status) || s.status === 'ended' || s.now?.kind !== 'audio') return;
+    intent = s.playing;
+    onOutside?.({ action: s.playing ? 'play' : 'pause' });
+  };
 
   const setBuffering = (b: boolean) => {
     if (b === buffering) return;
@@ -45,17 +57,14 @@ export function bindAudioPort(onOutside?: (control: UserControl) => void): Bound
   const unsub = usePlayerStore.subscribe((s, prev) => {
     if (s.status !== prev.status) {
       if (busy(s.status)) {
-        if (!timer) timer = setTimeout(() => ((timer = null), setBuffering(busy(playerState().status))), BUFFERING_DEBOUNCE);
+        if (!timer) timer = timers.setTimeout(() => ((timer = null), setBuffering(busy(playerState().status))), BUFFERING_DEBOUNCE);
       } else {
-        if (timer) clearTimeout(timer);
+        if (timer) timers.clearTimeout(timer);
         timer = null;
         setBuffering(false);
       }
     }
-    if (s.playing !== prev.playing && s.playing !== intent && !busy(s.status) && s.status !== 'ended' && s.now?.kind === 'audio') {
-      intent = s.playing;
-      onOutside?.({ action: s.playing ? 'play' : 'pause' });
-    }
+    if (s.playing !== prev.playing && s.playing !== intent && !confirm) confirm = timers.setTimeout(confirmOutside, OUTSIDE_CONFIRM);
   });
 
   return {
@@ -84,7 +93,8 @@ export function bindAudioPort(onOutside?: (control: UserControl) => void): Bound
     },
     dispose: () => {
       unsub();
-      if (timer) clearTimeout(timer);
+      if (timer) timers.clearTimeout(timer);
+      if (confirm) timers.clearTimeout(confirm);
       listeners.clear();
     },
   };

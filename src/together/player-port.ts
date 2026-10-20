@@ -27,6 +27,15 @@ export interface PlayerPort {
   drift?: DriftOptions;
 }
 
+/**
+ * A player that differs from what the app asked must still differ this long
+ * before the change counts as one from outside the app, ms. The engine
+ * reports each change late (libmpv through the Tauri bridge most of all), so
+ * a report can still say "playing" just after the app paused. Such a report
+ * is old: the next report agrees with the app again within this time.
+ */
+export const OUTSIDE_CONFIRM = 250;
+
 /** Timers, so tests can run on a fake clock. */
 export interface Timers {
   setTimeout(fn: () => void, ms: number): unknown;
