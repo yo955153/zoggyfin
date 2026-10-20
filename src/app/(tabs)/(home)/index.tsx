@@ -8,7 +8,7 @@ import { useApi } from '@/api/use-api';
 import { Avatar } from '@/components/avatar';
 import { Touchable } from '@/components/touchable';
 import { registerBuiltinHomeSections } from '@/features/home/builtin-sections';
-import { AccountSwitcher } from '@/features/servers/account-switcher';
+import { ProfileMenu } from '@/features/profile/profile-menu';
 import { OfflineBanner } from '@/features/offline/offline-banner';
 import { HomeTogetherSheet, homeTogether, NearbyHomeCard, TogetherHeaderButton } from '@/features/together/home-entry';
 import { useRootScreenOptions } from '@/lib/stack-options';
@@ -50,8 +50,8 @@ export default function HomeScreen() {
                 onLongPress={() => router.push('/(tabs)/(home)/settings')}
                 radius={sizes.avatarSmall / 2}
                 accessibilityRole="button"
-                accessibilityLabel="Accounts and settings"
-                accessibilityHint="Switch server or user"
+                accessibilityLabel="Profile menu"
+                accessibilityHint="Account, Together, Downloads, Settings and more"
                 hitSlop={8}>
                 <Avatar session={session} size={sizes.avatarSmall} />
               </Touchable>
@@ -72,7 +72,7 @@ export default function HomeScreen() {
           </View>
         ))}
       </ScrollView>
-      <AccountSwitcher visible={accounts} onClose={() => setAccounts(false)} />
+      <ProfileMenu visible={accounts} onClose={() => setAccounts(false)} />
       {homeTogether ? <HomeTogetherSheet /> : null}
     </>
   );
