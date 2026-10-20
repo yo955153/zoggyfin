@@ -7,7 +7,7 @@ import type { DiscoveryBackend, LocalInterface } from './backend-types';
 import { FAST_FAIL_MS, inferLanAccess, type LanAccess } from './lan-access';
 import { mergeServer } from './merge';
 import { parsePublicInfo, parseUdpAnswer } from './parse';
-import { SCAN_DEADLINE_MS, scanHosts } from './scan';
+import { scanHosts } from './scan';
 import { MIN_PREFIX, subnetHosts } from './subnet';
 import type { DiscoveredServer } from './types';
 
@@ -87,7 +87,7 @@ export async function runDiscovery(
     await scanHosts({
       hosts,
       signal: o.signal,
-      deadlineMs: o.deadlineMs ?? SCAN_DEADLINE_MS,
+      deadlineMs: o.deadlineMs,
       fetchJson: async (url, timeoutMs, signal) => {
         const t0 = now();
         try {

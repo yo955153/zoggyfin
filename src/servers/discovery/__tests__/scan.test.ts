@@ -1,4 +1,4 @@
-import { linkedSignal, scanHosts, type FetchJson } from '../scan';
+import { linkedSignal, SCAN_DEADLINE_MS, SCAN_TIMEOUT_MS, scanDeadlineFor, scanHosts, type FetchJson } from '../scan';
 
 const info = (id: string) => ({ ProductName: 'Jellyfin Server', Id: id, ServerName: id, Version: '10.11.0' });
 
@@ -83,5 +83,13 @@ describe('linkedSignal', () => {
     expect(b.signal.aborted).toBe(true);
     expect(b.expired()).toBe(false);
     b.done();
+  });
+});
+
+describe('scanDeadlineFor', () => {
+  it('gives every host of a /22 one try, and keeps 4 s for small subnets', () => {
+    expect(scanDeadlineFor(253)).toBe(SCAN_DEADLINE_MS);
+    expect(scanDeadlineFor(1022)).toBe(16 * SCAN_TIMEOUT_MS + 500);
+    expect(scanDeadlineFor(1022)).toBeGreaterThan(SCAN_DEADLINE_MS);
   });
 });

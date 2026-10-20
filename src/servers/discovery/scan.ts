@@ -12,6 +12,17 @@ export const SCAN_DEADLINE_MS = 4000;
 export const SCAN_CONCURRENCY = 64;
 
 /**
+ * The deadline for a list of hosts: at least SCAN_DEADLINE_MS, and long enough
+ * that every host gets one try when no host answers (each try waits for the
+ * timeout). A /22 has 1022 hosts: 16 rounds of 64, about 6.9 s. With only 4 s,
+ * a server far from the device on a /22 was never asked.
+ */
+export function scanDeadlineFor(hosts: number, concurrency = SCAN_CONCURRENCY, timeoutMs = SCAN_TIMEOUT_MS): number {
+  const rounds = Math.ceil(hosts / Math.max(1, concurrency));
+  return Math.max(SCAN_DEADLINE_MS, rounds * timeoutMs + 500);
+}
+
+/**
  * GETs a URL and gives the JSON body, or throws. It must give up after
  * `timeoutMs` and when `signal` aborts.
  */
@@ -62,7 +73,7 @@ export function linkedSignal(parent: AbortSignal, ms: number): { signal: AbortSi
 export async function scanHosts(o: ScanOptions): Promise<ScanResult> {
   const port = o.port ?? SCAN_PORT;
   const timeoutMs = o.timeoutMs ?? SCAN_TIMEOUT_MS;
-  const all = linkedSignal(o.signal, o.deadlineMs ?? SCAN_DEADLINE_MS);
+  const all = linkedSignal(o.signal, o.deadlineMs ?? scanDeadlineFor(o.hosts.length, o.concurrency, timeoutMs));
   let next = 0;
   let asked = 0;
   const worker = async () => {
