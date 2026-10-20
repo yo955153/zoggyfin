@@ -31,6 +31,7 @@ import { MAX_BITRATE, usePlaybackSettings } from '@/settings/playback';
 import { engine } from './engine';
 import { files } from './files';
 import { audioPlan, groupFor, isContainer, mediaKindOf, type MediaPlan, slimForDownload, sortFor, subtitleFiles, videoPlan } from './plan';
+import { askForDownloadNotifications } from './notification-permission';
 import { canResume, isWholeFile, resumeHint } from './resume';
 import { type DownloadEvent, dueForRetry, isActive, isFileMissing, pickToStart, reorder, transition } from './state-machine';
 import { downloadsState, dropCollection, dropRecord, patchRecord, putCollection, putRecord, useDownloadsStore } from './store';
@@ -151,6 +152,11 @@ class DownloadManager {
           const r = downloadsState().records[id];
           // Pause and cancel stop the task too; those are not failures.
           if (!r || r.state === 'paused' || r.state === 'cancelled') return;
+          // Cancel in the Android download notification: the same as Cancel in the app.
+          if (code === -1 && /cancel/i.test(message)) {
+            void this.cancel(id);
+            return;
+          }
           apply(id, { type: 'fail', error: errorText(message, code), now: Date.now() });
           this.tick();
         },
@@ -457,6 +463,8 @@ class DownloadManager {
   /** Downloads an item, or every item of a container (album, playlist, season, show). */
   async download(item: BaseItemDto): Promise<void> {
     if (!engine.supported || !item.Id) return;
+    // Android 13+: the first download asks for notifications (the download does not wait for the answer).
+    void askForDownloadNotifications();
     await this.init();
     try {
       const ctx = context();

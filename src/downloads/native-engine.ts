@@ -254,6 +254,9 @@ export function createNativeEngine(lib: NativeDownloader, fs: EngineFs): Downloa
         progressMinBytes: 256 * 1024,
         maxParallelDownloads: opts.maxParallel,
         isLogsEnabled: false,
+        // Android 14+ (user-initiated jobs): a progress notification with Cancel. Older Android: the foreground service notification (patched: progress and Cancel).
+        showNotificationsEnabled: true,
+        showCancelAction: true,
       });
     },
     start({ id, url, destination, headers, resume }) {
