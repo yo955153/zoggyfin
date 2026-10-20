@@ -1,0 +1,2637 @@
+{
+  "date": "2026-10-20T11:38:39.131Z",
+  "bitrateMbps": 8,
+  "steadyMs": 30000,
+  "node": "v25.4.0",
+  "runs": [
+    {
+      "label": "local N=1",
+      "n": 1,
+      "mode": "local",
+      "join": {
+        "allReadyMs": 331,
+        "ok": true,
+        "welcomeP50": 8.6,
+        "welcomeP95": 8.6,
+        "welcomeMax": 8.6,
+        "ctrlBytesOut": 1114,
+        "ctrlFramesOut": 7,
+        "membersBytesOut": 361,
+        "stateBytesOut": 0,
+        "firstMbP50": null,
+        "firstMbMax": null,
+        "startupP50": null,
+        "startupMax": null
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 113,
+          "inBps": 27,
+          "outMsgs": 1,
+          "inMsgs": 0.5,
+          "byType": {
+            "state": {
+              "outPerSec": 0.5,
+              "outBps": 68,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.5,
+              "inBps": 27,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 0.5,
+              "outBps": 45,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 90
+            }
+          }
+        },
+        "mediaMbps": 0,
+        "httpRequests": 0,
+        "httpPeak": 0,
+        "cpuPct": 1.4,
+        "elu": 6.3,
+        "loopP99": 4.3,
+        "rssMb": 58,
+        "shaperMaxDelay": 0,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 3.5,
+          "errP95": 3.5,
+          "errMax": 28.2,
+          "clockP95": 0,
+          "rttP50": 0.3,
+          "samples": 120
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 113
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 146,
+          "inBps": 27,
+          "outMsgs": 1.2,
+          "inMsgs": 0.5,
+          "byType": {
+            "state": {
+              "outPerSec": 0.7,
+              "outBps": 101,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 135
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.5,
+              "inBps": 27,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 0.5,
+              "outBps": 45,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 90
+            }
+          }
+        },
+        "seekToPlayMs": 53,
+        "seekOk": true,
+        "sync": {
+          "errP50": 32.9,
+          "errP95": 32.9,
+          "errMax": 32.9,
+          "clockP95": 0.1,
+          "rttP50": 0.3,
+          "samples": 33
+        },
+        "rebuffers": 0,
+        "corrections": {
+          "rate": 10,
+          "seek": 0
+        },
+        "mediaRequests": 0
+      }
+    },
+    {
+      "label": "local N=4",
+      "n": 4,
+      "mode": "local",
+      "join": {
+        "allReadyMs": 309,
+        "ok": true,
+        "welcomeP50": 3.2,
+        "welcomeP95": 3.3,
+        "welcomeMax": 3.3,
+        "ctrlBytesOut": 15682,
+        "ctrlFramesOut": 46,
+        "membersBytesOut": 12692,
+        "stateBytesOut": 0,
+        "firstMbP50": null,
+        "firstMbMax": null,
+        "startupP50": null,
+        "startupMax": null
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 448,
+          "inBps": 107,
+          "outMsgs": 4,
+          "inMsgs": 2,
+          "byType": {
+            "state": {
+              "outPerSec": 2,
+              "outBps": 271,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 2,
+              "inBps": 107,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 2,
+              "outBps": 177,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 88
+            }
+          }
+        },
+        "mediaMbps": 0,
+        "httpRequests": 0,
+        "httpPeak": 0,
+        "cpuPct": 1.2,
+        "elu": 12.1,
+        "loopP99": 4.8,
+        "rssMb": 42,
+        "shaperMaxDelay": 0,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 15.8,
+          "errP95": 22.3,
+          "errMax": 22.3,
+          "clockP95": 0.1,
+          "rttP50": 0.2,
+          "samples": 480
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 582,
+          "inBps": 107,
+          "outMsgs": 5,
+          "inMsgs": 2,
+          "byType": {
+            "state": {
+              "outPerSec": 3,
+              "outBps": 405,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 135
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 2,
+              "inBps": 107,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 2,
+              "outBps": 177,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "seekToPlayMs": 53,
+        "seekOk": true,
+        "sync": {
+          "errP50": 16.8,
+          "errP95": 44.1,
+          "errMax": 62.5,
+          "clockP95": 0.1,
+          "rttP50": 0.3,
+          "samples": 124
+        },
+        "rebuffers": 0,
+        "corrections": {
+          "rate": 45,
+          "seek": 0
+        },
+        "mediaRequests": 0
+      }
+    },
+    {
+      "label": "local N=8",
+      "n": 8,
+      "mode": "local",
+      "join": {
+        "allReadyMs": 315,
+        "ok": true,
+        "welcomeP50": 4,
+        "welcomeP95": 4.3,
+        "welcomeMax": 4.3,
+        "ctrlBytesOut": 96487,
+        "ctrlFramesOut": 140,
+        "membersBytesOut": 90512,
+        "stateBytesOut": 0,
+        "firstMbP50": null,
+        "firstMbMax": null,
+        "startupP50": null,
+        "startupMax": null
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 896,
+          "inBps": 213,
+          "outMsgs": 8,
+          "inMsgs": 4,
+          "byType": {
+            "state": {
+              "outPerSec": 4,
+              "outBps": 542,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 4,
+              "inBps": 213,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 4,
+              "outBps": 353,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 88
+            }
+          }
+        },
+        "mediaMbps": 0,
+        "httpRequests": 0,
+        "httpPeak": 0,
+        "cpuPct": 1.2,
+        "elu": 4.8,
+        "loopP99": 3,
+        "rssMb": 88,
+        "shaperMaxDelay": 0,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 18.1,
+          "errP95": 35.6,
+          "errMax": 35.6,
+          "clockP95": 0.1,
+          "rttP50": 0.3,
+          "samples": 960
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 1160,
+          "inBps": 213,
+          "outMsgs": 10,
+          "inMsgs": 4,
+          "byType": {
+            "state": {
+              "outPerSec": 6,
+              "outBps": 806,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 135
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 4,
+              "inBps": 213,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 4,
+              "outBps": 354,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "seekToPlayMs": 55,
+        "seekOk": true,
+        "sync": {
+          "errP50": 19.6,
+          "errP95": 36.9,
+          "errMax": 38.7,
+          "clockP95": 0.1,
+          "rttP50": 0.2,
+          "samples": 256
+        },
+        "rebuffers": 0,
+        "corrections": {
+          "rate": 50,
+          "seek": 0
+        },
+        "mediaRequests": 0
+      }
+    },
+    {
+      "label": "local N=16",
+      "n": 16,
+      "mode": "local",
+      "join": {
+        "allReadyMs": 314,
+        "ok": true,
+        "welcomeP50": 6.4,
+        "welcomeP95": 8,
+        "welcomeMax": 8,
+        "ctrlBytesOut": 700384,
+        "ctrlFramesOut": 472,
+        "membersBytesOut": 688402,
+        "stateBytesOut": 0,
+        "firstMbP50": null,
+        "firstMbMax": null,
+        "startupP50": null,
+        "startupMax": null
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 1788,
+          "inBps": 431,
+          "outMsgs": 16,
+          "inMsgs": 8,
+          "byType": {
+            "state": {
+              "outPerSec": 8,
+              "outBps": 1077,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 135
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 8,
+              "inBps": 431,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 8,
+              "outBps": 711,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "mediaMbps": 0,
+        "httpRequests": 0,
+        "httpPeak": 0,
+        "cpuPct": 1,
+        "elu": 5.4,
+        "loopP99": 3.1,
+        "rssMb": 89,
+        "shaperMaxDelay": 0,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 13.6,
+          "errP95": 36.8,
+          "errMax": 61.3,
+          "clockP95": 0.1,
+          "rttP50": 0.2,
+          "samples": 1920
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 2332,
+          "inBps": 428,
+          "outMsgs": 19.9,
+          "inMsgs": 8,
+          "byType": {
+            "state": {
+              "outPerSec": 12,
+              "outBps": 1620,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 135
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 8,
+              "inBps": 428,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 8,
+              "outBps": 711,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "seekToPlayMs": 54,
+        "seekOk": true,
+        "sync": {
+          "errP50": 6.2,
+          "errP95": 32.1,
+          "errMax": 58.3,
+          "clockP95": 0.1,
+          "rttP50": 0.2,
+          "samples": 508
+        },
+        "rebuffers": 0,
+        "corrections": {
+          "rate": 168,
+          "seek": 0
+        },
+        "mediaRequests": 0
+      }
+    },
+    {
+      "label": "local N=32",
+      "n": 32,
+      "mode": "local",
+      "join": {
+        "allReadyMs": 312,
+        "ok": true,
+        "welcomeP50": 7.6,
+        "welcomeP95": 10.7,
+        "welcomeMax": 10.8,
+        "ctrlBytesOut": 5412889,
+        "ctrlFramesOut": 1712,
+        "membersBytesOut": 5388931,
+        "stateBytesOut": 0,
+        "firstMbP50": null,
+        "firstMbMax": null,
+        "startupP50": null,
+        "startupMax": null
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 3593,
+          "inBps": 857,
+          "outMsgs": 32,
+          "inMsgs": 16,
+          "byType": {
+            "state": {
+              "outPerSec": 16,
+              "outBps": 2174,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 16,
+              "inBps": 857,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 16,
+              "outBps": 1419,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "mediaMbps": 0,
+        "httpRequests": 0,
+        "httpPeak": 0,
+        "cpuPct": 1.3,
+        "elu": 7,
+        "loopP99": 3.8,
+        "rssMb": 49,
+        "shaperMaxDelay": 0,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 28.1,
+          "errP95": 38.5,
+          "errMax": 62.8,
+          "clockP95": 0.1,
+          "rttP50": 0.2,
+          "samples": 3832
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 4621,
+          "inBps": 853,
+          "outMsgs": 39.9,
+          "inMsgs": 15.9,
+          "byType": {
+            "state": {
+              "outPerSec": 23.9,
+              "outBps": 3203,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 134
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 15.9,
+              "inBps": 853,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 15.9,
+              "outBps": 1418,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "seekToPlayMs": 53,
+        "seekOk": true,
+        "sync": {
+          "errP50": 10.6,
+          "errP95": 38.9,
+          "errMax": 60.3,
+          "clockP95": 0.1,
+          "rttP50": 0.2,
+          "samples": 1024
+        },
+        "rebuffers": 0,
+        "corrections": {
+          "rate": 240,
+          "seek": 0
+        },
+        "mediaRequests": 0
+      }
+    },
+    {
+      "label": "stream N=1",
+      "n": 1,
+      "mode": "stream",
+      "join": {
+        "allReadyMs": 51,
+        "ok": true,
+        "welcomeP50": 2.9,
+        "welcomeP95": 2.9,
+        "welcomeMax": 2.9,
+        "ctrlBytesOut": 947,
+        "ctrlFramesOut": 5,
+        "membersBytesOut": 365,
+        "stateBytesOut": 0,
+        "firstMbP50": 3,
+        "firstMbMax": 3,
+        "startupP50": 3,
+        "startupMax": 3
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 113,
+          "inBps": 27,
+          "outMsgs": 1,
+          "inMsgs": 0.5,
+          "byType": {
+            "state": {
+              "outPerSec": 0.5,
+              "outBps": 68,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.5,
+              "inBps": 27,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 0.5,
+              "outBps": 45,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 90
+            }
+          }
+        },
+        "mediaMbps": 0,
+        "httpRequests": 0,
+        "httpPeak": 1,
+        "cpuPct": 1.2,
+        "elu": 4.9,
+        "loopP99": 3.2,
+        "rssMb": 66,
+        "shaperMaxDelay": 0,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 1.2,
+          "errP95": 12.3,
+          "errMax": 48,
+          "clockP95": 0.1,
+          "rttP50": 0.3,
+          "samples": 119
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 113
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 146,
+          "inBps": 27,
+          "outMsgs": 1.2,
+          "inMsgs": 0.5,
+          "byType": {
+            "state": {
+              "outPerSec": 0.7,
+              "outBps": 101,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 135
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.5,
+              "inBps": 27,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 0.5,
+              "outBps": 45,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 91
+            }
+          }
+        },
+        "seekToPlayMs": 53,
+        "seekOk": true,
+        "sync": {
+          "errP50": 8.3,
+          "errP95": 8.4,
+          "errMax": 8.4,
+          "clockP95": 0.1,
+          "rttP50": 0.3,
+          "samples": 32
+        },
+        "rebuffers": 0,
+        "corrections": {
+          "rate": 11,
+          "seek": 0
+        },
+        "mediaRequests": 2
+      }
+    },
+    {
+      "label": "stream N=4",
+      "n": 4,
+      "mode": "stream",
+      "join": {
+        "allReadyMs": 51,
+        "ok": true,
+        "welcomeP50": 3.2,
+        "welcomeP95": 3.3,
+        "welcomeMax": 3.3,
+        "ctrlBytesOut": 15251,
+        "ctrlFramesOut": 38,
+        "membersBytesOut": 12932,
+        "stateBytesOut": 0,
+        "firstMbP50": 3,
+        "firstMbMax": 4,
+        "startupP50": 4,
+        "startupMax": 4
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 450,
+          "inBps": 107,
+          "outMsgs": 4,
+          "inMsgs": 2,
+          "byType": {
+            "state": {
+              "outPerSec": 2,
+              "outBps": 272,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 2,
+              "inBps": 107,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 2,
+              "outBps": 178,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "mediaMbps": 13.8,
+        "httpRequests": 0,
+        "httpPeak": 4,
+        "cpuPct": 1.4,
+        "elu": 4.3,
+        "loopP99": 2.8,
+        "rssMb": 151,
+        "shaperMaxDelay": 0,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 33.1,
+          "errP95": 38.4,
+          "errMax": 62.8,
+          "clockP95": 0.1,
+          "rttP50": 0.2,
+          "samples": 476
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 798,
+          "inBps": 113,
+          "outMsgs": 5.4,
+          "inMsgs": 2.1,
+          "byType": {
+            "state": {
+              "outPerSec": 3,
+              "outBps": 403,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 135
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 2,
+              "inBps": 107,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 2,
+              "outBps": 177,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.1,
+              "inBps": 6,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 0.4,
+              "outBps": 217,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 546
+            }
+          }
+        },
+        "seekToPlayMs": 54,
+        "seekOk": true,
+        "sync": {
+          "errP50": 23.9,
+          "errP95": 37.8,
+          "errMax": 37.8,
+          "clockP95": 0.1,
+          "rttP50": 0.3,
+          "samples": 128
+        },
+        "rebuffers": 1,
+        "corrections": {
+          "rate": 40,
+          "seek": 0
+        },
+        "mediaRequests": 7
+      }
+    },
+    {
+      "label": "stream N=8",
+      "n": 8,
+      "mode": "stream",
+      "join": {
+        "allReadyMs": 54,
+        "ok": true,
+        "welcomeP50": 3.6,
+        "welcomeP95": 4.4,
+        "welcomeMax": 4.4,
+        "ctrlBytesOut": 96663,
+        "ctrlFramesOut": 124,
+        "membersBytesOut": 92048,
+        "stateBytesOut": 0,
+        "firstMbP50": 4,
+        "firstMbMax": 5,
+        "startupP50": 5,
+        "startupMax": 7
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 898,
+          "inBps": 215,
+          "outMsgs": 8,
+          "inMsgs": 4,
+          "byType": {
+            "state": {
+              "outPerSec": 4,
+              "outBps": 542,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 4,
+              "inBps": 215,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 4,
+              "outBps": 356,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "mediaMbps": 220.7,
+        "httpRequests": 0,
+        "httpPeak": 8,
+        "cpuPct": 2.2,
+        "elu": 4.6,
+        "loopP99": 2.5,
+        "rssMb": 166,
+        "shaperMaxDelay": 0,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 15.5,
+          "errP95": 39.2,
+          "errMax": 39.2,
+          "clockP95": 0.1,
+          "rttP50": 0.3,
+          "samples": 952
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 1167,
+          "inBps": 215,
+          "outMsgs": 10,
+          "inMsgs": 4,
+          "byType": {
+            "state": {
+              "outPerSec": 6,
+              "outBps": 810,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 4,
+              "inBps": 215,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 4,
+              "outBps": 356,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "seekToPlayMs": 53,
+        "seekOk": true,
+        "sync": {
+          "errP50": 15.4,
+          "errP95": 38.7,
+          "errMax": 38.9,
+          "clockP95": 0.1,
+          "rttP50": 0.2,
+          "samples": 256
+        },
+        "rebuffers": 0,
+        "corrections": {
+          "rate": 38,
+          "seek": 0
+        },
+        "mediaRequests": 10
+      }
+    },
+    {
+      "label": "stream N=16",
+      "n": 16,
+      "mode": "stream",
+      "join": {
+        "allReadyMs": 52,
+        "ok": true,
+        "welcomeP50": 5.4,
+        "welcomeP95": 5.9,
+        "welcomeMax": 5.9,
+        "ctrlBytesOut": 707622,
+        "ctrlFramesOut": 440,
+        "membersBytesOut": 698349,
+        "stateBytesOut": 0,
+        "firstMbP50": 11,
+        "firstMbMax": 17,
+        "startupP50": 14,
+        "startupMax": 19
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 1791,
+          "inBps": 428,
+          "outMsgs": 16,
+          "inMsgs": 8,
+          "byType": {
+            "state": {
+              "outPerSec": 8,
+              "outBps": 1082,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 135
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 8,
+              "inBps": 428,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 8,
+              "outBps": 709,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "mediaMbps": 256.5,
+        "httpRequests": 0,
+        "httpPeak": 16,
+        "cpuPct": 2.9,
+        "elu": 3.9,
+        "loopP99": 2,
+        "rssMb": 181,
+        "shaperMaxDelay": 0,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 4.4,
+          "errP95": 28.3,
+          "errMax": 42.5,
+          "clockP95": 0.1,
+          "rttP50": 0.2,
+          "samples": 1904
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 2331,
+          "inBps": 426,
+          "outMsgs": 19.9,
+          "inMsgs": 8,
+          "byType": {
+            "state": {
+              "outPerSec": 12,
+              "outBps": 1622,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 8,
+              "inBps": 426,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 8,
+              "outBps": 710,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "seekToPlayMs": 53,
+        "seekOk": true,
+        "sync": {
+          "errP50": 7.8,
+          "errP95": 34.2,
+          "errMax": 55.6,
+          "clockP95": 0.1,
+          "rttP50": 0.2,
+          "samples": 512
+        },
+        "rebuffers": 0,
+        "corrections": {
+          "rate": 190,
+          "seek": 0
+        },
+        "mediaRequests": 19
+      }
+    },
+    {
+      "label": "stream N=32",
+      "n": 32,
+      "mode": "stream",
+      "join": {
+        "allReadyMs": 167,
+        "ok": true,
+        "welcomeP50": 12.1,
+        "welcomeP95": 19.2,
+        "welcomeMax": 23,
+        "ctrlBytesOut": 5483593,
+        "ctrlFramesOut": 1680,
+        "membersBytesOut": 5462309,
+        "stateBytesOut": 0,
+        "firstMbP50": 35,
+        "firstMbMax": 84,
+        "startupP50": 41,
+        "startupMax": 91
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 3595,
+          "inBps": 859,
+          "outMsgs": 32,
+          "inMsgs": 16,
+          "byType": {
+            "state": {
+              "outPerSec": 16,
+              "outBps": 2175,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 16,
+              "inBps": 859,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 16,
+              "outBps": 1420,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "mediaMbps": 949.5,
+        "httpRequests": 0,
+        "httpPeak": 32,
+        "cpuPct": 6.9,
+        "elu": 5.8,
+        "loopP99": 1.8,
+        "rssMb": 191,
+        "shaperMaxDelay": 0,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 18.3,
+          "errP95": 38.1,
+          "errMax": 44.5,
+          "clockP95": 0.2,
+          "rttP50": 0.2,
+          "samples": 3808
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 4651,
+          "inBps": 855,
+          "outMsgs": 39.9,
+          "inMsgs": 15.9,
+          "byType": {
+            "state": {
+              "outPerSec": 23.9,
+              "outBps": 3232,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 135
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 15.9,
+              "inBps": 855,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 15.9,
+              "outBps": 1419,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "seekToPlayMs": 54,
+        "seekOk": true,
+        "sync": {
+          "errP50": 8,
+          "errP95": 32.5,
+          "errMax": 58.2,
+          "clockP95": 0.1,
+          "rttP50": 0.2,
+          "samples": 1034
+        },
+        "rebuffers": 0,
+        "corrections": {
+          "rate": 239,
+          "seek": 0
+        },
+        "mediaRequests": 35
+      }
+    }
+  ],
+  "storm": {
+    "label": "local N=30 (join storm)",
+    "n": 30,
+    "mode": "local",
+    "joinOnly": true,
+    "join": {
+      "allReadyMs": 313,
+      "ok": true,
+      "welcomeP50": 6.7,
+      "welcomeP95": 9.8,
+      "welcomeMax": 10,
+      "ctrlBytesOut": 4466057,
+      "ctrlFramesOut": 1515,
+      "membersBytesOut": 4443674,
+      "stateBytesOut": 0,
+      "firstMbP50": null,
+      "firstMbMax": null,
+      "startupP50": null,
+      "startupMax": null
+    }
+  },
+  "throughput": [
+    {
+      "n": 1,
+      "mb": 32,
+      "totalMbps": 14594,
+      "perGuestMinMbps": 15551,
+      "perGuestMaxMbps": 15551,
+      "cpuPct": 103,
+      "rssMb": 112,
+      "seconds": 0
+    },
+    {
+      "n": 4,
+      "mb": 32,
+      "totalMbps": 38627,
+      "perGuestMinMbps": 10009,
+      "perGuestMaxMbps": 10529,
+      "cpuPct": 178.4,
+      "rssMb": 157,
+      "seconds": 0
+    },
+    {
+      "n": 8,
+      "mb": 32,
+      "totalMbps": 53541,
+      "perGuestMinMbps": 6823,
+      "perGuestMaxMbps": 7170,
+      "cpuPct": 256.5,
+      "rssMb": 161,
+      "seconds": 0
+    },
+    {
+      "n": 16,
+      "mb": 32,
+      "totalMbps": 54920,
+      "perGuestMinMbps": 3469,
+      "perGuestMaxMbps": 3706,
+      "cpuPct": 259.6,
+      "rssMb": 179,
+      "seconds": 0.1
+    },
+    {
+      "n": 32,
+      "mb": 32,
+      "totalMbps": 36811,
+      "perGuestMinMbps": 1156,
+      "perGuestMaxMbps": 1406,
+      "cpuPct": 207.6,
+      "rssMb": 222,
+      "seconds": 0.2
+    }
+  ],
+  "shaped": [
+    {
+      "label": "stream N=4 uplink=200Mbit/s",
+      "n": 4,
+      "mode": "stream",
+      "uplinkMbps": 200,
+      "join": {
+        "allReadyMs": 518,
+        "ok": true,
+        "welcomeP50": 3.4,
+        "welcomeP95": 5.3,
+        "welcomeMax": 5.3,
+        "ctrlBytesOut": 16521,
+        "ctrlFramesOut": 54,
+        "membersBytesOut": 12854,
+        "stateBytesOut": 0,
+        "firstMbP50": 375,
+        "firstMbMax": 383,
+        "startupP50": 467,
+        "startupMax": 476
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 449,
+          "inBps": 108,
+          "outMsgs": 4,
+          "inMsgs": 2,
+          "byType": {
+            "state": {
+              "outPerSec": 2,
+              "outBps": 272,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 2,
+              "inBps": 108,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 2,
+              "outBps": 178,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "mediaMbps": 62.8,
+        "httpRequests": 0,
+        "httpPeak": 4,
+        "cpuPct": 2.8,
+        "elu": 4.1,
+        "loopP99": 1.9,
+        "rssMb": 155,
+        "shaperMaxDelay": 65,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 21.9,
+          "errP95": 123.8,
+          "errMax": 149,
+          "clockP95": 24.2,
+          "rttP50": 22.5,
+          "samples": 476
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 1012,
+          "inBps": 119,
+          "outMsgs": 5.8,
+          "inMsgs": 2.2,
+          "byType": {
+            "state": {
+              "outPerSec": 3,
+              "outBps": 403,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 135
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 2,
+              "inBps": 107,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 2,
+              "outBps": 177,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.2,
+              "inBps": 12,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 0.8,
+              "outBps": 432,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 542
+            }
+          }
+        },
+        "seekToPlayMs": 52,
+        "seekOk": true,
+        "sync": {
+          "errP50": 7.1,
+          "errP95": 38.6,
+          "errMax": 65.9,
+          "clockP95": 0.1,
+          "rttP50": 0.3,
+          "samples": 129
+        },
+        "rebuffers": 2,
+        "corrections": {
+          "rate": 111,
+          "seek": 0
+        },
+        "mediaRequests": 8
+      }
+    },
+    {
+      "label": "stream N=8 uplink=200Mbit/s",
+      "n": 8,
+      "mode": "stream",
+      "uplinkMbps": 200,
+      "join": {
+        "allReadyMs": 1033,
+        "ok": true,
+        "welcomeP50": 17,
+        "welcomeP95": 41.8,
+        "welcomeMax": 41.8,
+        "ctrlBytesOut": 101568,
+        "ctrlFramesOut": 180,
+        "membersBytesOut": 92214,
+        "stateBytesOut": 0,
+        "firstMbP50": 773,
+        "firstMbMax": 792,
+        "startupP50": 970,
+        "startupMax": 978
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 898,
+          "inBps": 214,
+          "outMsgs": 8,
+          "inMsgs": 4,
+          "byType": {
+            "state": {
+              "outPerSec": 4,
+              "outBps": 543,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 4,
+              "inBps": 214,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 4,
+              "outBps": 354,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "mediaMbps": 131,
+        "httpRequests": 0,
+        "httpPeak": 8,
+        "cpuPct": 3.8,
+        "elu": 5.1,
+        "loopP99": 1.9,
+        "rssMb": 159,
+        "shaperMaxDelay": 116,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 79,
+          "errP95": 151.8,
+          "errMax": 186.7,
+          "clockP95": 49,
+          "rttP50": 94,
+          "samples": 952
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 6905,
+          "inBps": 253,
+          "outMsgs": 15.9,
+          "inMsgs": 4.7,
+          "byType": {
+            "state": {
+              "outPerSec": 6.4,
+              "outBps": 847,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 133
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 4,
+              "inBps": 213,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 4,
+              "outBps": 353,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.7,
+              "inBps": 41,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 5.6,
+              "outBps": 5704,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 1025
+            }
+          }
+        },
+        "seekToPlayMs": 105,
+        "seekOk": true,
+        "sync": {
+          "errP50": 19,
+          "errP95": 48.5,
+          "errMax": 59.6,
+          "clockP95": 0.1,
+          "rttP50": 0.5,
+          "samples": 248
+        },
+        "rebuffers": 7,
+        "corrections": {
+          "rate": 120,
+          "seek": 0
+        },
+        "mediaRequests": 16
+      }
+    },
+    {
+      "label": "stream N=16 uplink=200Mbit/s",
+      "n": 16,
+      "mode": "stream",
+      "uplinkMbps": 200,
+      "join": {
+        "allReadyMs": 2460,
+        "ok": true,
+        "welcomeP50": 83.6,
+        "welcomeP95": 236.7,
+        "welcomeMax": 236.7,
+        "ctrlBytesOut": 721595,
+        "ctrlFramesOut": 584,
+        "membersBytesOut": 699582,
+        "stateBytesOut": 1888,
+        "firstMbP50": 1764,
+        "firstMbMax": 1777,
+        "startupP50": 2217,
+        "startupMax": 2257
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 1799,
+          "inBps": 429,
+          "outMsgs": 16,
+          "inMsgs": 8,
+          "byType": {
+            "state": {
+              "outPerSec": 8,
+              "outBps": 1087,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 8,
+              "inBps": 429,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 8,
+              "outBps": 712,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "mediaMbps": 185,
+        "httpRequests": 0,
+        "httpPeak": 16,
+        "cpuPct": 4.9,
+        "elu": 6.3,
+        "loopP99": 2,
+        "rssMb": 144,
+        "shaperMaxDelay": 257,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 99.2,
+          "errP95": 108,
+          "errMax": 179.7,
+          "clockP95": 101.7,
+          "rttP50": 195.7,
+          "samples": 1909
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 49449,
+          "inBps": 520,
+          "outMsgs": 44.2,
+          "inMsgs": 9.6,
+          "byType": {
+            "state": {
+              "outPerSec": 12.5,
+              "outBps": 1674,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 134
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 8.1,
+              "inBps": 434,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 8.1,
+              "outBps": 721,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 1.5,
+              "inBps": 86,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 23.6,
+              "outBps": 47054,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 1996
+            }
+          }
+        },
+        "seekToPlayMs": 1704,
+        "seekOk": true,
+        "sync": {
+          "errP50": 81.9,
+          "errP95": 152.5,
+          "errMax": 162.4,
+          "clockP95": 99.4,
+          "rttP50": 190.1,
+          "samples": 490
+        },
+        "rebuffers": 16,
+        "corrections": {
+          "rate": 365,
+          "seek": 0
+        },
+        "mediaRequests": 32
+      }
+    },
+    {
+      "label": "stream N=4 uplink=100Mbit/s",
+      "n": 4,
+      "mode": "stream",
+      "uplinkMbps": 100,
+      "join": {
+        "allReadyMs": 933,
+        "ok": true,
+        "welcomeP50": 6.2,
+        "welcomeP95": 11.8,
+        "welcomeMax": 11.8,
+        "ctrlBytesOut": 17634,
+        "ctrlFramesOut": 66,
+        "membersBytesOut": 12932,
+        "stateBytesOut": 0,
+        "firstMbP50": 698,
+        "firstMbMax": 714,
+        "startupP50": 879,
+        "startupMax": 895
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 451,
+          "inBps": 109,
+          "outMsgs": 4,
+          "inMsgs": 2,
+          "byType": {
+            "state": {
+              "outPerSec": 2,
+              "outBps": 272,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 2,
+              "inBps": 109,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 2,
+              "outBps": 179,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 90
+            }
+          }
+        },
+        "mediaMbps": 64.9,
+        "httpRequests": 0,
+        "httpPeak": 4,
+        "cpuPct": 2.4,
+        "elu": 6.2,
+        "loopP99": 2.9,
+        "rssMb": 155,
+        "shaperMaxDelay": 114,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 46.4,
+          "errP95": 135.7,
+          "errMax": 180.4,
+          "clockP95": 46.3,
+          "rttP50": 90.6,
+          "samples": 476
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 113
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 1232,
+          "inBps": 126,
+          "outMsgs": 6.2,
+          "inMsgs": 2.3,
+          "byType": {
+            "state": {
+              "outPerSec": 3,
+              "outBps": 402,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 134
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 2,
+              "inBps": 108,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 2,
+              "outBps": 179,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 90
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.3,
+              "inBps": 17,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 1.2,
+              "outBps": 651,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 545
+            }
+          }
+        },
+        "seekToPlayMs": 51,
+        "seekOk": true,
+        "sync": {
+          "errP50": 16.5,
+          "errP95": 46.3,
+          "errMax": 46.3,
+          "clockP95": 0.1,
+          "rttP50": 0.4,
+          "samples": 128
+        },
+        "rebuffers": 3,
+        "corrections": {
+          "rate": 61,
+          "seek": 0
+        },
+        "mediaRequests": 8
+      }
+    },
+    {
+      "label": "stream N=8 uplink=100Mbit/s",
+      "n": 8,
+      "mode": "stream",
+      "uplinkMbps": 100,
+      "join": {
+        "allReadyMs": 1977,
+        "ok": true,
+        "welcomeP50": 32.8,
+        "welcomeP95": 61.1,
+        "welcomeMax": 61.1,
+        "ctrlBytesOut": 102519,
+        "ctrlFramesOut": 188,
+        "membersBytesOut": 92220,
+        "stateBytesOut": 928,
+        "firstMbP50": 1496,
+        "firstMbMax": 1533,
+        "startupP50": 1873,
+        "startupMax": 1908
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 899,
+          "inBps": 215,
+          "outMsgs": 8,
+          "inMsgs": 4,
+          "byType": {
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 4,
+              "inBps": 215,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 4,
+              "outBps": 355,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            },
+            "state": {
+              "outPerSec": 4,
+              "outBps": 544,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            }
+          }
+        },
+        "mediaMbps": 95.9,
+        "httpRequests": 0,
+        "httpPeak": 8,
+        "cpuPct": 3.5,
+        "elu": 4.3,
+        "loopP99": 1.9,
+        "rssMb": 157,
+        "shaperMaxDelay": 220,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 104.9,
+          "errP95": 131.2,
+          "errMax": 155.6,
+          "clockP95": 98.8,
+          "rttP50": 192.6,
+          "samples": 954
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 7287,
+          "inBps": 265,
+          "outMsgs": 16.1,
+          "inMsgs": 4.9,
+          "byType": {
+            "state": {
+              "outPerSec": 6,
+              "outBps": 795,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 133
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 4.1,
+              "inBps": 221,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 4.1,
+              "outBps": 367,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.7,
+              "inBps": 44,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 6,
+              "outBps": 6126,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 1024
+            }
+          }
+        },
+        "seekToPlayMs": 1388,
+        "seekOk": true,
+        "sync": {
+          "errP50": 113.2,
+          "errP95": 156.4,
+          "errMax": 161.3,
+          "clockP95": 98.7,
+          "rttP50": 194,
+          "samples": 254
+        },
+        "rebuffers": 8,
+        "corrections": {
+          "rate": 107,
+          "seek": 0
+        },
+        "mediaRequests": 16
+      }
+    },
+    {
+      "label": "stream N=16 uplink=100Mbit/s",
+      "n": 16,
+      "mode": "stream",
+      "uplinkMbps": 100,
+      "join": {
+        "allReadyMs": 4028,
+        "ok": true,
+        "welcomeP50": 86.4,
+        "welcomeP95": 210.4,
+        "welcomeMax": 210.4,
+        "ctrlBytesOut": 726774,
+        "ctrlFramesOut": 616,
+        "membersBytesOut": 701470,
+        "stateBytesOut": 3776,
+        "firstMbP50": 3027,
+        "firstMbMax": 3052,
+        "startupP50": 3784,
+        "startupMax": 3810
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 32002,
+          "inBps": 461,
+          "outMsgs": 32.7,
+          "inMsgs": 8.5,
+          "byType": {
+            "state": {
+              "outPerSec": 10.1,
+              "outBps": 1382,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 7.6,
+              "inBps": 407,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 7.6,
+              "outBps": 675,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.9,
+              "inBps": 55,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 14.9,
+              "outBps": 29945,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 2005
+            }
+          }
+        },
+        "mediaMbps": 92.3,
+        "httpRequests": 0,
+        "httpPeak": 16,
+        "cpuPct": 1.8,
+        "elu": 3,
+        "loopP99": 1.7,
+        "rssMb": 120,
+        "shaperMaxDelay": 575,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 195.4,
+          "errP95": 233.6,
+          "errMax": 259.9,
+          "clockP95": 197.1,
+          "rttP50": 380.9,
+          "samples": 1030
+        },
+        "rebuffers": 14,
+        "stalledMs": 47838,
+        "guestUpBps": 29,
+        "guestDownBps": 2002
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 88496,
+          "inBps": 580,
+          "outMsgs": 64.3,
+          "inMsgs": 10.6,
+          "byType": {
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 7.9,
+              "inBps": 423,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 7.9,
+              "outBps": 703,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            },
+            "state": {
+              "outPerSec": 13.4,
+              "outBps": 1798,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 134
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 2.7,
+              "inBps": 157,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 43,
+              "outBps": 85996,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 2001
+            }
+          }
+        },
+        "seekToPlayMs": 3818,
+        "seekOk": true,
+        "sync": {
+          "errP50": 160.5,
+          "errP95": 231.9,
+          "errMax": 253.7,
+          "clockP95": 200.5,
+          "rttP50": 384.8,
+          "samples": 265
+        },
+        "rebuffers": 32,
+        "corrections": {
+          "rate": 800,
+          "seek": 0
+        },
+        "mediaRequests": 32
+      }
+    },
+    {
+      "label": "stream N=4 uplink=40Mbit/s",
+      "n": 4,
+      "mode": "stream",
+      "uplinkMbps": 40,
+      "join": {
+        "allReadyMs": 2181,
+        "ok": true,
+        "welcomeP50": 10.6,
+        "welcomeP95": 15,
+        "welcomeMax": 15,
+        "ctrlBytesOut": 18407,
+        "ctrlFramesOut": 74,
+        "membersBytesOut": 12909,
+        "stateBytesOut": 472,
+        "firstMbP50": 1657,
+        "firstMbMax": 1705,
+        "startupP50": 2088,
+        "startupMax": 2137
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 450,
+          "inBps": 107,
+          "outMsgs": 4,
+          "inMsgs": 2,
+          "byType": {
+            "state": {
+              "outPerSec": 2,
+              "outBps": 272,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 2,
+              "inBps": 107,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 2,
+              "outBps": 178,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "mediaMbps": 39.1,
+        "httpRequests": 0,
+        "httpPeak": 4,
+        "cpuPct": 2.1,
+        "elu": 6.5,
+        "loopP99": 3,
+        "rssMb": 76,
+        "shaperMaxDelay": 277,
+        "hostDriftMs": 0,
+        "sync": {
+          "errP50": 123.4,
+          "errP95": 149.8,
+          "errMax": 149.8,
+          "clockP95": 117.3,
+          "rttP50": 232.5,
+          "samples": 477
+        },
+        "rebuffers": 0,
+        "stalledMs": 0,
+        "guestUpBps": 27,
+        "guestDownBps": 112
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 1363,
+          "inBps": 121,
+          "outMsgs": 6.3,
+          "inMsgs": 2.2,
+          "byType": {
+            "state": {
+              "outPerSec": 3,
+              "outBps": 395,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 133
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 1.9,
+              "inBps": 99,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 1.9,
+              "outBps": 165,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.4,
+              "inBps": 22,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 1.5,
+              "outBps": 804,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 543
+            }
+          }
+        },
+        "seekToPlayMs": 1602,
+        "seekOk": true,
+        "sync": {
+          "errP50": 97.3,
+          "errP95": 205.9,
+          "errMax": 205.9,
+          "clockP95": 115.7,
+          "rttP50": 229.4,
+          "samples": 125
+        },
+        "rebuffers": 4,
+        "corrections": {
+          "rate": 25,
+          "seek": 0
+        },
+        "mediaRequests": 8
+      }
+    },
+    {
+      "label": "stream N=8 uplink=40Mbit/s",
+      "n": 8,
+      "mode": "stream",
+      "uplinkMbps": 40,
+      "join": {
+        "allReadyMs": 4784,
+        "ok": true,
+        "welcomeP50": 28.3,
+        "welcomeP95": 75.6,
+        "welcomeMax": 75.6,
+        "ctrlBytesOut": 104909,
+        "ctrlFramesOut": 212,
+        "membersBytesOut": 92230,
+        "stateBytesOut": 1888,
+        "firstMbP50": 3308,
+        "firstMbMax": 3741,
+        "startupP50": 4161,
+        "startupMax": 4666
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 2688,
+          "inBps": 226,
+          "outMsgs": 10.7,
+          "inMsgs": 4.2,
+          "byType": {
+            "state": {
+              "outPerSec": 5.1,
+              "outBps": 689,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 4,
+              "inBps": 215,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 4,
+              "outBps": 356,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 0.2,
+              "inBps": 12,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 1.6,
+              "outBps": 1643,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 1027
+            }
+          }
+        },
+        "mediaMbps": 38.7,
+        "httpRequests": 0,
+        "httpPeak": 8,
+        "cpuPct": 2.9,
+        "elu": 7.9,
+        "loopP99": 2.9,
+        "rssMb": 58,
+        "shaperMaxDelay": 509,
+        "hostDriftMs": null,
+        "sync": {
+          "errP50": 235,
+          "errP95": 262.7,
+          "errMax": 282.5,
+          "clockP95": 235.2,
+          "rttP50": 456.9,
+          "samples": 390
+        },
+        "rebuffers": 4,
+        "stalledMs": 8132,
+        "guestUpBps": 28,
+        "guestDownBps": 336
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 12634,
+          "inBps": 294,
+          "outMsgs": 21.4,
+          "inMsgs": 5.3,
+          "byType": {
+            "state": {
+              "outPerSec": 6.2,
+              "outBps": 829,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 133
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 1.4,
+              "inBps": 82,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 11.2,
+              "outBps": 11452,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 1024
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 3.9,
+              "inBps": 212,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 3.9,
+              "outBps": 353,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "seekToPlayMs": 4314,
+        "seekOk": true,
+        "sync": {
+          "errP50": 238.7,
+          "errP95": 306.9,
+          "errMax": 329.5,
+          "clockP95": 232,
+          "rttP50": 451.8,
+          "samples": 129
+        },
+        "rebuffers": 16,
+        "corrections": {
+          "rate": 197,
+          "seek": 0
+        },
+        "mediaRequests": 16
+      }
+    },
+    {
+      "label": "stream N=16 uplink=40Mbit/s",
+      "n": 16,
+      "mode": "stream",
+      "uplinkMbps": 40,
+      "join": {
+        "allReadyMs": 9070,
+        "ok": true,
+        "welcomeP50": 78.5,
+        "welcomeP95": 219,
+        "welcomeMax": 219,
+        "ctrlBytesOut": 730833,
+        "ctrlFramesOut": 680,
+        "membersBytesOut": 698936,
+        "stateBytesOut": 7552,
+        "firstMbP50": 6860,
+        "firstMbMax": 7091,
+        "startupP50": 8559,
+        "startupMax": 8834
+      },
+      "steady": {
+        "ctrl": {
+          "outBps": 87253,
+          "inBps": 586,
+          "outMsgs": 61.3,
+          "inMsgs": 10.7,
+          "byType": {
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 2.7,
+              "inBps": 156,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 42.7,
+              "outBps": 85089,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 1995
+            },
+            "state": {
+              "outPerSec": 10.7,
+              "outBps": 1450,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 136
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 8,
+              "inBps": 430,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 8,
+              "outBps": 714,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            }
+          }
+        },
+        "mediaMbps": 36.1,
+        "httpRequests": 0,
+        "httpPeak": 16,
+        "cpuPct": 3.1,
+        "elu": 7.6,
+        "loopP99": 2.9,
+        "rssMb": 38,
+        "shaperMaxDelay": 1434,
+        "hostDriftMs": null,
+        "sync": {
+          "errP50": 415.3,
+          "errP95": 467.5,
+          "errMax": 491.6,
+          "clockP95": 458.3,
+          "rttP50": 911,
+          "samples": 81
+        },
+        "rebuffers": 48,
+        "stalledMs": 278162,
+        "guestUpBps": 37,
+        "guestDownBps": 4920
+      },
+      "commands": {
+        "ctrl": {
+          "outBps": 53839,
+          "inBps": 529,
+          "outMsgs": 45.3,
+          "inMsgs": 9.7,
+          "byType": {
+            "state": {
+              "outPerSec": 11.3,
+              "outBps": 1486,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 131
+            },
+            "ping": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 8.1,
+              "inBps": 434,
+              "avgOut": 0
+            },
+            "pong": {
+              "outPerSec": 8.1,
+              "outBps": 720,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 89
+            },
+            "buffering": {
+              "outPerSec": 0,
+              "outBps": 0,
+              "inPerSec": 1.6,
+              "inBps": 95,
+              "avgOut": 0
+            },
+            "members": {
+              "outPerSec": 25.9,
+              "outBps": 51633,
+              "inPerSec": 0,
+              "inBps": 0,
+              "avgOut": 1995
+            }
+          }
+        },
+        "seekToPlayMs": 9656,
+        "seekOk": true,
+        "sync": {
+          "errP50": 442.7,
+          "errP95": 500.9,
+          "errMax": 500.9,
+          "clockP95": 461,
+          "rttP50": 915.9,
+          "samples": 25
+        },
+        "rebuffers": 16,
+        "corrections": {
+          "rate": 282,
+          "seek": 0
+        },
+        "mediaRequests": 32
+      }
+    }
+  ],
+  "micro": [
+    {
+      "message": "ping",
+      "n": "-",
+      "bytes": 55,
+      "encodeDecodeUs": 0.4
+    },
+    {
+      "message": "pong",
+      "n": "-",
+      "bytes": 99,
+      "encodeDecodeUs": 0.6
+    },
+    {
+      "message": "state",
+      "n": "-",
+      "bytes": 136,
+      "encodeDecodeUs": 1.1
+    },
+    {
+      "message": "members",
+      "n": 1,
+      "bytes": 225,
+      "encodeDecodeUs": 1.5
+    },
+    {
+      "message": "members",
+      "n": 4,
+      "bytes": 716,
+      "encodeDecodeUs": 2.1
+    },
+    {
+      "message": "members",
+      "n": 8,
+      "bytes": 1370,
+      "encodeDecodeUs": 3
+    },
+    {
+      "message": "members",
+      "n": 16,
+      "bytes": 2690,
+      "encodeDecodeUs": 6.1
+    },
+    {
+      "message": "members",
+      "n": 32,
+      "bytes": 5338,
+      "encodeDecodeUs": 12.5
+    }
+  ],
+  "swiftThroughput": [
+    {
+      "n": 1,
+      "mb": 32,
+      "totalMbps": 21798,
+      "perGuestMinMbps": 22641,
+      "perGuestMaxMbps": 22641,
+      "cpuPct": 78.3,
+      "rssMb": 10,
+      "seconds": 0
+    },
+    {
+      "n": 4,
+      "mb": 32,
+      "totalMbps": 34029,
+      "perGuestMinMbps": 8871,
+      "perGuestMaxMbps": 9170,
+      "cpuPct": 107.5,
+      "rssMb": 20,
+      "seconds": 0
+    },
+    {
+      "n": 8,
+      "mb": 32,
+      "totalMbps": 52145,
+      "perGuestMinMbps": 6720,
+      "perGuestMaxMbps": 6888,
+      "cpuPct": 170.6,
+      "rssMb": 68,
+      "seconds": 0
+    },
+    {
+      "n": 16,
+      "mb": 32,
+      "totalMbps": 53635,
+      "perGuestMinMbps": 3425,
+      "perGuestMaxMbps": 3446,
+      "cpuPct": 172.3,
+      "rssMb": 220,
+      "seconds": 0.1
+    },
+    {
+      "n": 32,
+      "mb": 32,
+      "totalMbps": 37612,
+      "perGuestMinMbps": 1181,
+      "perGuestMaxMbps": 1203,
+      "cpuPct": 145.7,
+      "rssMb": 366,
+      "seconds": 0.2
+    }
+  ]
+}

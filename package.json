@@ -85,7 +85,8 @@
     "desktop:publish": "bash desktop/scripts/publish.sh",
     "desktop:version": "bash desktop/scripts/version.sh",
     "site:deploy": "bash site/scripts/deploy.sh",
-    "test:crypto-swift": "bash scripts/rendezvous-vectors/run.sh"
+    "test:crypto-swift": "bash scripts/rendezvous-vectors/run.sh",
+    "bench:together": "bash scripts/together-bench/run.sh"
   },
   "private": true,
   "license": "MPL-2.0",
