@@ -819,6 +819,8 @@ class ZoggyfinTogetherModule : Module() {
    * seeks opens a new connection and leaves the old one, so the oldest is the one to go.
    */
   private fun limitHttp(remote: InetAddress?) {
+    // This device's own clients (loopback) are not guests.
+    if (remote == null || remote.isLoopbackAddress) return
     val live = httpSockets.entries.filter { !it.key.isClosed }.sortedBy { it.value }
     val mine = live.filter { it.key.inetAddress == remote }
     for (e in mine.take(maxOf(0, mine.size - (MAX_HTTP_PER_GUEST - 1)))) closeQuietly(e.key)

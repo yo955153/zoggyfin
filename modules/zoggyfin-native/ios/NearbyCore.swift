@@ -182,6 +182,8 @@ public final class NearbyCore {
   /// guest past `maxHTTPPerGuest`, and the oldest of all past `maxHTTPTotal`. A player that
   /// seeks opens a new connection and leaves the old one, so the oldest is the one to go.
   private func limitHTTP(for remote: String) {
+    // This device's own clients (loopback) are not guests.
+    guard !(remote.hasPrefix("127.") || remote == "::1") else { return }
     let live = http.values.filter { !$0.isClosed }
     let mine = live.filter { $0.remote == remote }.sorted { $0.serial < $1.serial }
     for c in mine.prefix(max(0, mine.count - (maxHTTPPerGuest - 1))) { c.cancel() }
