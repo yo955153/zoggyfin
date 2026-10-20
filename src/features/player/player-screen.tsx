@@ -374,7 +374,8 @@ export function PlayerScreen() {
       <StatusBar hidden={!visible} animated style="light" />
       <Animated.View style={[styles.root, frameStyle]} onPointerMove={onPointerMove}>
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          <VideoSurface fill={fill} style={StyleSheet.absoluteFill} />
+          {/* Audio plays now (this screen is about to close): no video surface, so no old frame shows. */}
+          {now?.kind === 'audio' ? null : <VideoSurface fill={fill} style={StyleSheet.absoluteFill} />}
         </View>
 
         <GestureDetector gesture={gestures}>

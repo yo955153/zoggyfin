@@ -57,6 +57,9 @@ pub struct LayerIvars {
     dirty: Box<AtomicBool>,
     /// Draw even without a new frame: after a resize or before the first frame.
     force: AtomicBool,
+    /// Nothing is loaded (libmpv is idle): draw black. After a `stop` libmpv sends no new
+    /// frame, so without this the layer keeps the last frame of the old video.
+    blank: AtomicBool,
 }
 
 define_class!(
@@ -92,6 +95,8 @@ define_class!(
                 // SAFETY: called on the layer's drawing thread, the only thread that renders.
                 let flags = unsafe { mpv_render_context_update(render) };
                 if flags & MPV_RENDER_UPDATE_FRAME != 0 {
+                    // A new frame: a video plays again.
+                    iv.blank.store(false, Ordering::Release);
                     return Bool::YES;
                 }
             }
@@ -113,7 +118,7 @@ define_class!(
                 glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &mut fbo);
                 let mut vp = [0i32; 4];
                 glGetIntegerv(GL_VIEWPORT, vp.as_mut_ptr());
-                if render.is_null() || vp[2] <= 0 || vp[3] <= 0 {
+                if render.is_null() || vp[2] <= 0 || vp[3] <= 0 || iv.blank.load(Ordering::Acquire) {
                     glClearColor(0.0, 0.0, 0.0, 1.0);
                     glClear(GL_COLOR_BUFFER_BIT);
                 } else {
@@ -187,6 +192,7 @@ impl MpvLayer {
             render: AtomicPtr::new(std::ptr::null_mut()),
             dirty: Box::new(AtomicBool::new(false)),
             force: AtomicBool::new(true),
+            blank: AtomicBool::new(true),
         });
         // SAFETY: plain NSObject init through the superclass.
         unsafe { msg_send![super(this), init] }
@@ -235,6 +241,14 @@ impl VideoView {
         self.layer.setAsynchronous(visible);
         self.layer.ivars().force.store(true, Ordering::Release);
         self.layer.setNeedsDisplay();
+    }
+
+    /// Any thread: libmpv became idle (`true`: draw black now) or loads a file (`false`: draw
+    /// what libmpv has, black until the first frame). The layer draws again at once.
+    pub fn set_idle(&self, idle: bool) {
+        let iv = self.layer.ivars();
+        iv.blank.store(idle, Ordering::Release);
+        iv.force.store(true, Ordering::Release);
     }
 
     /// Main thread only: after the window moved to a screen with another scale.

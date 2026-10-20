@@ -47,6 +47,8 @@ const OBSERVED: &[(&str, i32)] = &[
     ("track-list", MPV_FORMAT_NONE),
     ("video-codec", MPV_FORMAT_STRING),
     ("hwdec-current", MPV_FORMAT_STRING),
+    // True when nothing is loaded: the video surface then shows black, not the last frame.
+    ("idle-active", MPV_FORMAT_FLAG),
 ];
 
 impl Mpv {

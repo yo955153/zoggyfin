@@ -12,6 +12,7 @@ import { guestKeyOf, mediaKey, ONLY_HOST_PICKS_TEXT, pickOf, requestOfPick, rout
 const mockCalls: string[] = [];
 jest.mock('expo-router', () => ({ router: { navigate: (to: string) => mockCalls.push(`navigate ${to}`) } }));
 jest.mock('@/lib/toast', () => ({ toast: (text: string) => mockCalls.push(`toast ${text}`) }));
+jest.mock('@/auth/session-store', () => ({ useSessionStore: { getState: () => ({ session: null }) } }));
 jest.mock('@/player/session', () => ({
   videoSession: () => ({ play: async (r: { item: BaseItemDto; autoplay?: boolean }) => void mockCalls.push(`video ${r.item.Id} autoplay=${String(r.autoplay)}`), stop: async () => undefined }),
 }));

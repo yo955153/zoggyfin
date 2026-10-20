@@ -20,7 +20,7 @@ import type { BaseItemDto } from '@/api/types';
 import { useSessionStore } from '@/auth/session-store';
 import { toast } from '@/lib/toast';
 import { features } from '@/platform/tv';
-import { isAudioItem, type PlayRequest } from '@/player';
+import { isAudioItem, type PlayRequest, stopVideoForAudio } from '@/player';
 import { type PlayRoute, playRouter } from '@/player/play-router';
 import { slimItem } from '@/player/audio/item';
 import { isLongFormList } from '@/player/audio/long-form';
@@ -464,7 +464,7 @@ class SyncPlayController {
       toast('Some items of the group queue are not on this server.');
       return;
     }
-    if (playerState().now?.kind === 'video') await videoSession().stop();
+    await stopVideoForAudio();
     const entries = t.entries.map((e, i) => ({ key: e.playlistItemId, item: slimItem(items[i] as BaseItemDto), user: false }));
     const queue = { entries, index: t.entryIndex, original: entries.map((e) => e.key), shuffle: t.shuffle, repeat: t.repeat, source: null };
     this.audio = true;

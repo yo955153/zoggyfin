@@ -23,14 +23,14 @@ import { randomId } from '@/lib/id';
 import { checkServer, useOnlineStore } from '@/lib/online';
 import { toast } from '@/lib/toast';
 import { features } from '@/platform/tv';
-import { isAudioItem, playHere, type PlayRequest } from '@/player';
+import { isAudioItem, playHere, type PlayRequest, stopVideoForAudio } from '@/player';
 import type { AudioItem } from '@/player/audio/item';
 import { audioSession } from '@/player/audio/session';
 import { audioState } from '@/player/audio/store';
 import { controlGate, queueGate, type UserControl } from '@/player/control-gate';
 import { videoSession } from '@/player/session';
 import { type PlayRoute, playRouter } from '@/player/play-router';
-import { type NowPlaying, playerState, usePlayerStore } from '@/player/store';
+import { type NowPlaying, playerState, setPlayerState, usePlayerStore } from '@/player/store';
 import { networkSource } from '@/servers/network-source';
 import { readJson, writeJson } from '@/storage/json';
 import { storage } from '@/storage/kv';
@@ -135,9 +135,10 @@ function hex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Leaves the full-screen player, when it shows. */
+/** Leaves the full-screen player, when it shows. Once only: a second call before the route goes does nothing. */
 function leavePlayer(): void {
   if (playerState().presentation !== 'full') return;
+  setPlayerState({ presentation: 'hidden' });
   if (router.canGoBack()) router.back();
   else router.replace(useSessionStore.getState().session ? '/' : '/sign-in');
 }
@@ -653,8 +654,7 @@ class NearbyController {
     // A new queue for the music that plays: the next queue message names the guest. Else the `media` message does.
     if (audio && this.room?.kind === 'audio' && this.room.hasMedia) this.room.markQueuePick(memberId);
     else this.pendingPick = { memberId, name };
-    // From video to music: the video player closes first.
-    if (audio && playerState().presentation === 'full' && playerState().now?.kind === 'video') leavePlayer();
+    // From video to music, `playHere` closes the video player first (stopVideoForAudio).
     toast(`${shortName(name)} picked ${pick.item.name || 'something'}`, { icon: 'person.2.fill' });
     playHere(audio ? request : { ...request, autoplay: false });
   }
@@ -1366,10 +1366,7 @@ class NearbyController {
       else if (s && server.reachable && s.serverId === activeServerId) anyServer = true;
       return src?.uri ?? null;
     };
-    if (playerState().now?.kind === 'video') {
-      if (playerState().presentation === 'full') leavePlayer();
-      await videoSession().stop();
-    }
+    await stopVideoForAudio();
     if (token !== this.loadToken || this.follower !== f) return;
     queueGate.set('The host plays the queue in this session.');
     await audioSession().loadShared(fromSharedQueue(q), q.longForm, source, this.startPosition(), { autoplay: reload && this.groupPlaying() });

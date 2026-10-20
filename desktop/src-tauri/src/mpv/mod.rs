@@ -47,15 +47,26 @@ pub fn start<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 pub fn attach<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) -> Result<(), String> {
     let state = app.state::<MpvState>();
     let mpv = state.mpv()?;
-    let target = window.clone();
-    mpv.clone().run_events(move |event| emit_to_web(&target, &event));
     #[cfg(target_os = "macos")]
-    {
+    let view = {
         let ns_window = window.ns_window().map_err(|e| e.to_string())?;
-        let view = view_macos::VideoView::attach(ns_window, mpv).ok_or("the video view could not attach")?;
+        let view =
+            Arc::new(view_macos::VideoView::attach(ns_window, mpv.clone()).ok_or("the video view could not attach")?);
         view.set_visible(false);
-        *state.view.lock().unwrap() = Some(Arc::new(view));
-    }
+        *state.view.lock().unwrap() = Some(view.clone());
+        view
+    };
+    let target = window.clone();
+    mpv.clone().run_events(move |event| {
+        // The surface follows libmpv's idle state: black when nothing plays, never an old frame.
+        #[cfg(target_os = "macos")]
+        if event.get("name").and_then(Value::as_str) == Some("idle-active") {
+            if let Some(idle) = event.get("value").and_then(Value::as_bool) {
+                view.set_idle(idle);
+            }
+        }
+        emit_to_web(&target, &event);
+    });
     Ok(())
 }
 

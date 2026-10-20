@@ -7,7 +7,7 @@
 import { router } from 'expo-router';
 
 import type { BaseItemDto } from '@/api/types';
-
+import { useSessionStore } from '@/auth/session-store';
 import { toast } from '@/lib/toast';
 
 import { audioSession } from './audio/session';
@@ -57,13 +57,31 @@ export const activePlayback = {
 };
 
 /**
+ * Audio takes over from video: the video stops, and its full-screen player
+ * closes first. Else the video player stays under the music player (both are
+ * modal routes): its surface keeps the last frame (libmpv on the Mac does not
+ * draw again after a stop), and Back shows an empty video player.
+ */
+export async function stopVideoForAudio(): Promise<void> {
+  const st = playerState();
+  if (st.now?.kind !== 'video') return;
+  if (st.presentation === 'full') {
+    // Once only: a second call (or the together code's own leave) before the route goes does nothing.
+    setPlayerState({ presentation: 'hidden' });
+    if (router.canGoBack()) router.back();
+    else router.replace(useSessionStore.getState().session ? '/' : '/sign-in');
+  }
+  await videoSession().stop();
+}
+
+/**
  * Plays a request on this device, with no together routing. The together
  * host uses it for a guest's pick; screens use `usePlayer().play`.
  */
 export function playHere(request: PlayRequest): void {
   if (isAudioItem(request.item)) {
     void (async () => {
-      if (playerState().now?.kind === 'video') await videoSession().stop();
+      await stopVideoForAudio();
       await audioSession().play(request);
     })();
     return;
