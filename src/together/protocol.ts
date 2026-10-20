@@ -318,7 +318,12 @@ export interface JoinContext {
    */
   key?: string;
   memberId?: string;
+  /** The guest's device key for this session (device-key.ts): a block holds after a restart. */
+  device?: string;
 }
+
+/** The longest device key a host takes. */
+const MAX_DEVICE = 64;
 
 export function encodeJoinContext(ctx: Omit<JoinContext, 'v'>): string {
   return JSON.stringify({ v: PROTOCOL_VERSION, ...ctx });
@@ -329,7 +334,15 @@ export function decodeJoinContext(text: string | null | undefined): JoinContext 
   try {
     const x: unknown = JSON.parse(text);
     if (isObj(x) && x.v === PROTOCOL_VERSION && str(x.name) && bool(x.have) && (x.key === undefined || str(x.key)) && (x.memberId === undefined || str(x.memberId))) {
-      return { v: PROTOCOL_VERSION, name: x.name, have: x.have, ...(str(x.key) ? { key: x.key } : {}), ...(str(x.memberId) ? { memberId: x.memberId } : {}) };
+      const device = str(x.device) && x.device.length > 0 && x.device.length <= MAX_DEVICE ? x.device : null;
+      return {
+        v: PROTOCOL_VERSION,
+        name: x.name,
+        have: x.have,
+        ...(str(x.key) ? { key: x.key } : {}),
+        ...(str(x.memberId) ? { memberId: x.memberId } : {}),
+        ...(device ? { device } : {}),
+      };
     }
   } catch {
     // Not ours.

@@ -5,8 +5,9 @@
  * link refuses at once, with a reason the guest shows. Pure: a clock in,
  * decisions out.
  *
- * Devices are known by the member id that each guest sends (stable for the
- * session), or by the socket's peer id when it sends none. Never by name.
+ * Devices are known by the device key that each guest sends (one for each
+ * session, kept in secure storage: device-key.ts), else by its member id
+ * (new on each launch), else by the socket's peer id. Never by name.
  */
 
 /** Most guests in one session. */
@@ -55,8 +56,9 @@ export interface GateFacts {
   pending: readonly PendingRequest[];
 }
 
-/** The device key of a join request: its member id, else its peer id. */
-export function deviceKey(peerId: string, memberId?: string | null): string {
+/** The device key of a join request: its device key, else its member id, else its peer id. */
+export function deviceKey(peerId: string, memberId?: string | null, device?: string | null): string {
+  if (device) return `d:${device}`;
   return memberId ? `m:${memberId}` : `p:${peerId}`;
 }
 

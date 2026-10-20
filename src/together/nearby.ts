@@ -35,6 +35,7 @@ import { storage } from '@/storage/kv';
 
 import { bindAudioPort, fromSharedQueue, hostQueue, sharedAudioItem, waitForGapless } from './audio-binding';
 import { fileBitrateMbps, hostPath, streamingFromHost, streamWarning, type TransportPath } from './budget';
+import { sessionDeviceKey } from './device-key';
 import { positionAt } from './drift';
 import { Follower } from './follower';
 import { keyMatches, joinLink, newSessionKey, type JoinPayload, parseJoinLink, parseShortCode, pickCodeAddress, shortCode, shortSession } from './join-code';
@@ -176,6 +177,8 @@ class NearbyController {
   /** The host shares a video file that guests can stream. */
   private streamable = false;
   private lastWarning: string | null = null;
+  /** Host: the device key of each member's join (by member id), for "Remove and block". */
+  private memberDevices = new Map<string, string>();
 
   // ---- Helpers ----------------------------------------------------------------------
 
@@ -495,7 +498,7 @@ class NearbyController {
       this.link?.respond(peerId, false);
       return;
     }
-    const req = { inviteId: peerId, peerId, name: ctx.name, have: ctx.have, code, device: deviceKey(peerId, ctx.memberId), at: this.now() };
+    const req = { inviteId: peerId, peerId, name: ctx.name, have: ctx.have, code, device: deviceKey(peerId, ctx.memberId, ctx.device), at: this.now() };
     setTogether({ requests: [...togetherState().requests.filter((r) => r.peerId !== peerId), req] });
     toast(`${req.name} wants to join you`, { icon: 'person.2.fill', action: { label: 'View', onPress: () => openTogetherSheet(this.session?.kind === 'audio' ? 'music' : 'player', null) } });
   }
@@ -521,7 +524,7 @@ class NearbyController {
   private admit(peerId: string, ctx: JoinContext, withKey: boolean): 'ok' | 'ask' | { refuse: string } {
     const g = this.gate;
     if (!g || !this.room) return withKey ? 'ok' : 'ask';
-    const device = deviceKey(peerId, ctx.memberId);
+    const device = deviceKey(peerId, ctx.memberId, ctx.device);
     if (withKey) {
       const back = g.screenReturn(device);
       if (back === null) return 'ok';
@@ -571,7 +574,8 @@ class NearbyController {
     const g = this.gate;
     if (!room || !g) return;
     const peer = room.expel(memberId, block ? REFUSAL_TEXT['removed-blocked'] : REFUSAL_TEXT.removed);
-    g.remove(peer && peer === memberId ? deviceKey(peer) : deviceKey('', memberId), block);
+    // The key the member's join had (its device key when it sent one), else the same rule as `deviceKey`.
+    g.remove(this.memberDevices.get(memberId) ?? (peer && peer === memberId ? deviceKey(peer) : deviceKey('', memberId)), block);
     if (peer) setTimeout(() => this.link?.drop(peer), 300);
     this.publishHost();
   }
@@ -580,6 +584,7 @@ class NearbyController {
     if (this.expiryTimer) clearInterval(this.expiryTimer);
     this.expiryTimer = null;
     this.gate = null;
+    this.memberDevices.clear();
   }
 
   /** Refuses the requests that waited too long. */
@@ -663,28 +668,50 @@ class NearbyController {
     this.joinAdvert = null;
     if (togetherState().mode !== 'nearby') setTogether({ mode: 'nearby', role: 'guest', hosts: [], notice: null, phase: IDLE });
     if (togetherState().phase.name !== 'browsing') this.dispatch({ type: 'BROWSE' });
-    this.tryAddresses(addrs, port, key, hostName);
+    this.tryAddresses(addrs, port, key, hostName, payload ? payload.session : `k:${short!.keyPrefix}`);
     return true;
   }
 
-  /** Tries each address of a code in turn. */
-  private tryAddresses(addrs: string[], port: number, key: string, hostName: string): void {
+  /** Tries each address of a code in turn. `salt`: for the device key (see `joinContext`). */
+  private tryAddresses(addrs: string[], port: number, key: string, hostName: string, salt: string | null = null): void {
     const [first, ...rest] = addrs;
     if (!first) {
       this.dispatch({ type: 'DISCONNECTED', peerId: togetherState().phase.name === 'requesting' ? (togetherState().phase as { hostPeerId: string }).hostPeerId : '' });
       setTogether({ notice: 'Could not reach the host. Check that both devices are on the same Wi-Fi.' });
       return;
     }
-    const peer = this.startJoin({ host: first, port }, hostName, { key });
-    this.codeFallback = rest.length ? { peer, rest, port, key, hostName } : null;
+    const peer = this.startJoin({ host: first, port }, hostName, { key, salt });
+    this.codeFallback = rest.length ? { peer, rest, port, key, hostName, salt } : null;
   }
 
-  private codeFallback: { peer: string; rest: string[]; port: number; key: string; hostName: string } | null = null;
+  private codeFallback: { peer: string; rest: string[]; port: number; key: string; hostName: string; salt: string | null } | null = null;
 
-  private startJoin(target: HostTarget, hostName: string, extra: { key?: string }): string {
+  /**
+   * The join context. `salt`: the session's short id (or a code's key prefix) for the device
+   * key (device-key.ts), so the host's block holds after this app restarts.
+   */
+  private joinContext(have: boolean, salt: string | null, key?: string): JoinContext {
+    let device: string | null = null;
+    if (salt) {
+      try {
+        device = sessionDeviceKey(salt, () => hex(this.random(16)));
+      } catch {
+        device = null;
+      }
+    }
+    return { v: 1, name: displayName(), have, memberId: this.memberId, ...(key ? { key } : {}), ...(device ? { device } : {}) };
+  }
+
+  /** The salt of the device key for the session this device is in now. */
+  private sessionSalt(): string | null {
+    return this.session ? shortSession(this.session.id) : null;
+  }
+
+  private startJoin(target: HostTarget, hostName: string, extra: { key?: string; salt?: string | null }): string {
     const link = this.ensureLink()!;
     const have = this.joinAdvert ? localRecord(this.joinAdvert.itemId, this.joinAdvert.serverId) !== null : false;
-    const ctx: JoinContext = { v: 1, name: displayName(), have, memberId: this.memberId, ...(extra.key ? { key: extra.key } : {}) };
+    const salt = extra.salt ?? (this.joinAdvert ? shortSession(this.joinAdvert.sessionId) : null);
+    const ctx = this.joinContext(have, salt, extra.key);
     const peer = link.join(target, ctx);
     this.hostTarget = target;
     if ('host' in target) this.lastAddress = target;
@@ -695,7 +722,11 @@ class NearbyController {
 
   private onPeerUp(peerId: string, ctx: JoinContext | null): void {
     this.ev('peer up', { peerId, host: !!this.room, name: ctx?.name });
-    if (this.room) return; // The room gets the guest's hello.
+    if (this.room) {
+      // The room gets the guest's hello. Keep the device key of the member, for a block.
+      if (ctx) this.memberDevices.set(ctx.memberId || peerId, deviceKey(peerId, ctx.memberId, ctx.device));
+      return;
+    }
     void ctx;
     const phase = togetherState().phase;
     if (phase.name === 'reconnecting') {
@@ -720,7 +751,7 @@ class NearbyController {
       const fb = this.codeFallback;
       if (fb && fb.peer === peerId && !e.declined) {
         this.dispatch({ type: 'DISCONNECTED', peerId });
-        this.tryAddresses(fb.rest, fb.port, fb.key, fb.hostName);
+        this.tryAddresses(fb.rest, fb.port, fb.key, fb.hostName, fb.salt);
         return;
       }
       this.dispatch({ type: 'DISCONNECTED', peerId });
@@ -1071,7 +1102,7 @@ class NearbyController {
     // Retry, follow a new host or wait: try the last address (a code join or Bluetooth); the browser handles the rest.
     if (!r.trying && this.lastAddress && decision.kind !== 'follow') {
       r.trying = true;
-      this.hostPeer = this.ensureLink()!.join(this.lastAddress, { v: 1, name: displayName(), have: false, memberId: this.memberId, key: s.key });
+      this.hostPeer = this.ensureLink()!.join(this.lastAddress, this.joinContext(false, this.sessionSalt(), s.key));
     }
     this.scheduleRetry();
   }
@@ -1083,7 +1114,7 @@ class NearbyController {
     if (!r || !s || r.trying || advert.sessionId !== s.id || (advert.epoch ?? 0) < s.epoch) return;
     r.trying = true;
     this.hostTarget = { serviceId };
-    this.hostPeer = this.ensureLink()!.join({ serviceId }, { v: 1, name: displayName(), have: false, memberId: this.memberId, key: s.key });
+    this.hostPeer = this.ensureLink()!.join({ serviceId }, this.joinContext(false, this.sessionSalt(), s.key));
   }
 
   private relinked(peerId: string): void {
@@ -1409,7 +1440,7 @@ class NearbyController {
           if (this.reconnect) {
             if (this.lastAddress) {
               this.reconnect.trying = true;
-              this.hostPeer = this.ensureLink()!.join(this.lastAddress, { v: 1, name: displayName(), have: false, memberId: this.memberId, key: e.rejoinKey });
+              this.hostPeer = this.ensureLink()!.join(this.lastAddress, this.joinContext(false, this.sessionSalt(), e.rejoinKey));
             }
             this.bleHandle(peerId, { type: 'CONNECTED' });
             break;
