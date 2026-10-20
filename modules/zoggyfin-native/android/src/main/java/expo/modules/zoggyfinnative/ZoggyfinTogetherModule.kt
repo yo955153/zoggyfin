@@ -66,6 +66,10 @@ private const val HTTP_IDLE_TIMEOUT_MS = 30_000
 private const val MAX_HTTP_PER_GUEST = 3
 /** HTTP connections in all at most. */
 private const val MAX_HTTP_TOTAL = 32
+/** A control socket whose unsent frames pass this many bytes is closed: the guest does not read. */
+private const val MAX_PENDING_BYTES = 1_048_576L
+/** About the size of a pong frame, for the count of unsent bytes. */
+private const val PONG_SIZE = 128L
 /** The IP TOS of a control socket: DSCP EF (46), which Wi-Fi maps to the WMM voice queue. */
 private const val CONTROL_TRAFFIC_CLASS = 0xB8
 /** A paced response sends this many seconds of media at once (the player's start buffer), then `PACE_FACTOR` x the bitrate. */
@@ -681,6 +685,8 @@ class ZoggyfinTogetherModule : Module() {
     @Volatile private var open = false
     private val closed = AtomicBoolean(false)
     private val writer = Executors.newSingleThreadExecutor(namedThreads("zgf-together-write"))
+    /** The bytes that wait for the writer thread. */
+    private val pending = AtomicLong(0)
 
     fun isClosed() = closed.get()
 
@@ -703,13 +709,13 @@ class ZoggyfinTogetherModule : Module() {
       if (closed.get() || !open) return false
       val bytes = text.toByteArray(Charsets.UTF_8)
       if (bytes.isEmpty() || bytes.size > MAX_FRAME) return false
-      return write { frameOf(bytes) }
+      return write(4L + bytes.size) { frameOf(bytes) }
     }
 
     /** Sends a text that the writer thread makes right before it writes (a pong's send time). */
     fun sendLate(make: () -> String): Boolean {
       if (closed.get() || !open) return false
-      return write { frameOf(make().toByteArray(Charsets.UTF_8)) }
+      return write(PONG_SIZE) { frameOf(make().toByteArray(Charsets.UTF_8)) }
     }
 
     private fun frameOf(bytes: ByteArray): ByteArray {
@@ -723,8 +729,18 @@ class ZoggyfinTogetherModule : Module() {
       return frame
     }
 
-    private fun write(frame: () -> ByteArray): Boolean {
+    /**
+     * Queues a frame of about `size` bytes for the writer thread. A guest that does not read
+     * (a slow or stuck device) would grow the queue with no end: past MAX_PENDING_BYTES the
+     * socket closes. The guest then reconnects with the session key, or stays away.
+     */
+    private fun write(size: Long, frame: () -> ByteArray): Boolean {
       val s = socket ?: return false
+      if (pending.addAndGet(size) > MAX_PENDING_BYTES) {
+        pending.addAndGet(-size)
+        close("The other device does not read fast enough.")
+        return false
+      }
       return try {
         writer.execute {
           try {
@@ -733,10 +749,13 @@ class ZoggyfinTogetherModule : Module() {
             out.flush()
           } catch (e: IOException) {
             close(e.message ?: "Could not send.")
+          } finally {
+            pending.addAndGet(-size)
           }
         }
         true
       } catch (e: RejectedExecutionException) {
+        pending.addAndGet(-size)
         false
       }
     }

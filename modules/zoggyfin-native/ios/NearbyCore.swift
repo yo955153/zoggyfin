@@ -48,9 +48,14 @@ let controlFrameContext: NWConnection.ContentContext = {
 /// gets the shared files. Guest: a browser, control sockets to a service or
 /// to an address, and a loopback relay for the players.
 ///
-/// Every state change runs on one serial queue.
+/// Every state change runs on one serial queue. The HTTP connections do their file reads on
+/// their own queues (MediaServer.swift), so the control frames never wait behind media.
+/// No call from JavaScript waits for the queue.
 public final class NearbyCore {
-  private let queue = DispatchQueue(label: "zoggyfin.nearby")
+  private let queue = DispatchQueue(label: "zoggyfin.nearby", qos: .userInitiated, autoreleaseFrequency: .workItem)
+  /// The ids of the open control sockets, for `send` from any thread (changed on `queue`).
+  private let openLock = NSLock()
+  private var openIds = Set<String>()
   private weak var sink: NearbyEventSink?
   private var listener: NWListener?
   private var serviceName = ""
@@ -164,12 +169,13 @@ public final class NearbyCore {
         let id = UUID().uuidString
         let s = FrameSocket(id: id, connection: conn, inbound: true, owner: self, queue: self.queue)
         self.sockets[id] = s
+        self.markOpen(id, true)
         self.emit("onSocketOpen", ["socketId": id, "inbound": true])
         s.startReading(initial: data.dropFirst(4))
       } else {
         self.httpSerial += 1
-        let h = HTTPConnection(connection: conn, initial: data, files: self.files, queue: self.queue, remote: Self.remoteHost(conn), serial: self.httpSerial) { [weak self] c in
-          self?.http.removeValue(forKey: ObjectIdentifier(c))
+        let h = HTTPConnection(connection: conn, initial: data, files: self.files, remote: Self.remoteHost(conn), serial: self.httpSerial) { [weak self] c in
+          self?.queue.async { self?.http.removeValue(forKey: ObjectIdentifier(c)) }
         }
         self.limitHTTP(for: h.remote)
         self.http[ObjectIdentifier(h)] = h
@@ -298,12 +304,28 @@ public final class NearbyCore {
 
   // MARK: Both
 
+  /// True when the socket is open now; the frame goes out on the queue (the caller does not wait).
   public func send(socketId: String, text: String) -> Bool {
-    queue.sync {
-      guard let s = sockets[socketId], s.isOpen else { return false }
-      s.send(Data(text.utf8))
-      return true
+    guard isOpen(socketId) else { return false }
+    let body = Data(text.utf8)
+    queue.async {
+      guard let s = self.sockets[socketId], s.isOpen else { return }
+      s.send(body)
     }
+    return true
+  }
+
+  private func isOpen(_ id: String) -> Bool {
+    openLock.lock()
+    defer { openLock.unlock() }
+    return openIds.contains(id)
+  }
+
+  /// On `queue`.
+  private func markOpen(_ id: String, _ open: Bool) {
+    openLock.lock()
+    if open { openIds.insert(id) } else { openIds.remove(id) }
+    openLock.unlock()
   }
 
   /// Sends one text to several sockets (a broadcast) in one call.
@@ -319,7 +341,7 @@ public final class NearbyCore {
   /// Host: a pong to a ping. The text is built here and `t2` is stamped right before the frame
   /// goes to the connection, after any wait in JavaScript or in the Mac app's bridge.
   public func sendPong(socketId: String, id: Double, t0: Double, t1: Double) -> Bool {
-    guard id.isFinite, t0.isFinite, t1.isFinite else { return false }
+    guard id.isFinite, t0.isFinite, t1.isFinite, isOpen(socketId) else { return false }
     queue.async {
       guard let s = self.sockets[socketId], s.isOpen else { return }
       let text = "{\"v\":1,\"t\":\"pong\",\"id\":\(Int64(id)),\"t0\":\(t0),\"t1\":\(t1),\"t2\":\(nearbyMonotonicMs())}"
@@ -386,6 +408,7 @@ public final class NearbyCore {
   // MARK: Socket callbacks (on `queue`)
 
   fileprivate func opened(_ s: FrameSocket) {
+    markOpen(s.id, true)
     emit("onSocketOpen", ["socketId": s.id, "inbound": s.inbound])
   }
 
@@ -394,6 +417,7 @@ public final class NearbyCore {
   }
 
   fileprivate func closed(_ s: FrameSocket, reason: String?) {
+    markOpen(s.id, false)
     guard sockets.removeValue(forKey: s.id) != nil else { return }
     var body: [String: Any] = ["socketId": s.id]
     body["reason"] = reason ?? NSNull()

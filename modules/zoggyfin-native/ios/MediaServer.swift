@@ -8,37 +8,53 @@ import Network
 /// The files that the session port serves over HTTP. A URL path holds a
 /// random token, so only guests that got the path from the host can read a file.
 final class SharedFiles {
+  /// The owner's queue changes the files; each HTTP connection reads them on its own queue.
+  private let lock = NSLock()
   private var files: [String: (path: String, mime: String)] = [:]
   /// The bitrate of a shared file (bytes per second), for the pace of its responses.
   private var rates: [String: Double] = [:]
-  private(set) var bytesServed: Int = 0
-  private(set) var requests: Int = 0
+  private var served = 0
+  private var count = 0
 
-  // All calls on the queue of the owner (NearbyCore).
+  var bytesServed: Int { locked { served } }
+  var requests: Int { locked { count } }
+
+  private func locked<T>(_ body: () -> T) -> T {
+    lock.lock()
+    defer { lock.unlock() }
+    return body()
+  }
+
   func share(urlPath: String, filePath: String, mimeType: String) {
-    files[urlPath] = (filePath, mimeType)
+    locked { files[urlPath] = (filePath, mimeType) }
   }
 
   func setPace(urlPath: String, bytesPerSecond: Double) {
-    if bytesPerSecond > 0 { rates[urlPath] = bytesPerSecond } else { rates.removeValue(forKey: urlPath) }
+    locked {
+      if bytesPerSecond > 0 { rates[urlPath] = bytesPerSecond } else { rates.removeValue(forKey: urlPath) }
+    }
   }
 
   func removeAll() {
-    files.removeAll()
-    rates.removeAll()
+    locked {
+      files.removeAll()
+      rates.removeAll()
+    }
   }
 
   func file(for path: String) -> (path: String, mime: String, rate: Double?)? {
-    guard let f = files[path] else { return nil }
-    return (f.path, f.mime, rates[path])
+    locked {
+      guard let f = files[path] else { return nil }
+      return (f.path, f.mime, rates[path])
+    }
   }
 
   func count(bytes: Int) {
-    bytesServed += bytes
+    locked { served += bytes }
   }
 
   func countRequest() {
-    requests += 1
+    locked { count += 1 }
   }
 }
 
@@ -46,14 +62,32 @@ final class SharedFiles {
 /// AVPlayer, ExoPlayer and libmpv. Serves requests one after the other
 /// (keep-alive). The connection is already started; `initial` holds the
 /// bytes that were read to tell HTTP from a control socket.
+///
+/// Each connection works on its own serial queue (`io`): the file reads and
+/// the pace waits never hold the queue of the control sockets. The
+/// connection's callbacks come on the owner's queue and go on to `io` at once.
 final class HTTPConnection {
   private let connection: NWConnection
   private let files: SharedFiles
-  private let queue: DispatchQueue
+  /// This connection's queue. Its work items drain their autorelease pools.
+  private let io = DispatchQueue(label: "zoggyfin.nearby.http", qos: .userInitiated, autoreleaseFrequency: .workItem)
   private let onClose: (HTTPConnection) -> Void
   private var buffer: Data
   private var handle: FileHandle?
-  private var closed = false
+  private let closedLock = NSLock()
+  private var closedFlag = false
+  private var closed: Bool {
+    get {
+      closedLock.lock()
+      defer { closedLock.unlock() }
+      return closedFlag
+    }
+    set {
+      closedLock.lock()
+      closedFlag = newValue
+      closedLock.unlock()
+    }
+  }
   private static let chunk = 256 * 1024
   /// A paced response sends this many seconds of media at once (the player's start buffer).
   static let paceBurstSeconds = 10.0
@@ -69,11 +103,11 @@ final class HTTPConnection {
   static let idleTimeout = 30.0
   private var idle: DispatchWorkItem?
 
-  init(connection: NWConnection, initial: Data, files: SharedFiles, queue: DispatchQueue, remote: String = "", serial: Int = 0, onClose: @escaping (HTTPConnection) -> Void) {
+  /// `onClose` runs on this connection's queue.
+  init(connection: NWConnection, initial: Data, files: SharedFiles, remote: String = "", serial: Int = 0, onClose: @escaping (HTTPConnection) -> Void) {
     self.connection = connection
     self.buffer = initial
     self.files = files
-    self.queue = queue
     self.remote = remote
     self.serial = serial
     self.onClose = onClose
@@ -85,12 +119,12 @@ final class HTTPConnection {
     connection.stateUpdateHandler = { [weak self] state in
       switch state {
       case .failed, .cancelled:
-        self?.finish()
+        self?.io.async { self?.finish() }
       default:
         break
       }
     }
-    readRequest()
+    io.async { self.readRequest() }
   }
 
   func cancel() {
@@ -123,15 +157,17 @@ final class HTTPConnection {
     // No request for a while: close, so an idle player does not keep a slot.
     let w = DispatchWorkItem { [weak self] in self?.connection.cancel() }
     idle = w
-    queue.asyncAfter(deadline: .now() + Self.idleTimeout, execute: w)
+    io.asyncAfter(deadline: .now() + Self.idleTimeout, execute: w)
     connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, complete, error in
       guard let self else { return }
-      if let data, !data.isEmpty { self.buffer.append(data) }
-      if error != nil || (complete && (data?.isEmpty ?? true)) {
-        self.connection.cancel()
-        return
+      self.io.async {
+        if let data, !data.isEmpty { self.buffer.append(data) }
+        if error != nil || (complete && (data?.isEmpty ?? true)) {
+          self.connection.cancel()
+          return
+        }
+        self.readRequest()
       }
-      self.readRequest()
     }
   }
 
@@ -206,7 +242,7 @@ final class HTTPConnection {
     guard let h = handle else { return }
     let n = Int(min(Int64(Self.chunk), remaining))
     if let wait = paceWait(next: n), wait > 0 {
-      queue.asyncAfter(deadline: .now() + wait) { [weak self] in
+      io.asyncAfter(deadline: .now() + wait) { [weak self] in
         guard let self, !self.closed else { return }
         self.pump(remaining: remaining)
       }
@@ -214,7 +250,9 @@ final class HTTPConnection {
     }
     let data: Data
     do {
-      data = try h.read(upToCount: n) ?? Data()
+      // FileHandle gives an autoreleased buffer: without a pool here, every chunk of every
+      // stream stayed in memory until the queue's thread ended (about 33 MB per stream).
+      data = try autoreleasepool { try h.read(upToCount: n) ?? Data() }
     } catch {
       connection.cancel()
       return
@@ -229,9 +267,11 @@ final class HTTPConnection {
         self.connection.cancel()
         return
       }
-      self.files.count(bytes: data.count)
-      self.pace?.sent += Int64(data.count)
-      self.pump(remaining: remaining - Int64(data.count))
+      self.io.async {
+        self.files.count(bytes: data.count)
+        self.pace?.sent += Int64(data.count)
+        self.pump(remaining: remaining - Int64(data.count))
+      }
     })
   }
 
@@ -254,7 +294,7 @@ final class HTTPConnection {
         self?.connection.cancel()
         return
       }
-      then()
+      self?.io.async(execute: then)
     })
   }
 
@@ -288,7 +328,7 @@ final class HTTPConnection {
 /// http://127.0.0.1:<port>/<path> like any web file. A player cannot open a
 /// Bonjour name, and an AWDL address has a scope that a URL cannot hold.
 final class MediaRelay {
-  private let queue = DispatchQueue(label: "zoggyfin.media-relay")
+  private let queue = DispatchQueue(label: "zoggyfin.media-relay", qos: .userInitiated, autoreleaseFrequency: .workItem)
   private var listener: NWListener?
   private var target: NWEndpoint?
   private var pipes: [ObjectIdentifier: Pipe] = [:]
