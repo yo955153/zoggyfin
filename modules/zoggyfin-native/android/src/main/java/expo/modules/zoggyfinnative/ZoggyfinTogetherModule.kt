@@ -193,6 +193,11 @@ class ZoggyfinTogetherModule : Module() {
       io.execute { startServerNow(serviceName, txt, promise) }
     }
 
+    /** Opens the session port with no advert ("Only with my code"): nobody nearby sees it, not even for a moment. */
+    AsyncFunction("startServerUnlisted") { serviceName: String, promise: Promise ->
+      io.execute { startServerNow(serviceName, emptyMap(), promise, advertise = false) }
+    }
+
     Function("stopAdvertising") {
       state.execute { unregisterAdvert() }
     }
@@ -467,9 +472,9 @@ class ZoggyfinTogetherModule : Module() {
 
   // MARK: Host: server and advert
 
-  private fun startServerNow(name: String, txt: Map<String, String>, promise: Promise) {
+  private fun startServerNow(name: String, txt: Map<String, String>, promise: Promise, advertise: Boolean = true) {
     val nsd = nsd()
-    if (nsd == null) {
+    if (nsd == null && advertise) {
       promise.reject("ERR_SERVER", "Network service discovery is not available.", null)
       return
     }
@@ -490,6 +495,12 @@ class ZoggyfinTogetherModule : Module() {
       }
     } catch (e: Exception) {
       promise.reject("ERR_SERVER", "Could not open the session port: ${e.message}", e)
+      return
+    }
+    if (!advertise || nsd == null) {
+      // An advert of an earlier session on this port goes too.
+      state.execute { unregisterAdvert() }
+      promise.resolve(mapOf("port" to port, "service" to name))
       return
     }
 

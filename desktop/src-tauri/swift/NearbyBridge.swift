@@ -187,6 +187,14 @@ private final class NearbyBridge: NearbyEventSink {
         }
       }
       return .later
+    case "startServerUnlisted":
+      core.startServer(name: try a.string(0), txt: [:], advertise: false) { result in
+        switch result {
+        case .success(let r): self.reply(id, ["port": r.port, "service": r.service])
+        case .failure(let error): self.fail(id, error.localizedDescription)
+        }
+      }
+      return .later
     case "stopAdvertising":
       core.stopAdvertising()
     case "shareFile":

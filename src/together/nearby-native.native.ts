@@ -26,6 +26,7 @@ function wrap(m: Module): NearbyLinkNative {
     monotonicNow: () => m.monotonicNow(),
     randomBytes: (n) => m.randomBytes(n),
     startServer: (name, txt) => m.startServer(name, txt),
+    startServerUnlisted: opt('startServerUnlisted')?.bind(m),
     stopAdvertising: () => m.stopAdvertising(),
     shareFile: (path, file, mime) => m.shareFile(path, file, mime),
     setPace: opt('setPace')?.bind(m),

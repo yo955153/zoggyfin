@@ -69,6 +69,17 @@ public class ZoggyfinTogetherModule: Module {
       }
     }
 
+    AsyncFunction("startServerUnlisted") { (serviceName: String, promise: Promise) in
+      self.core.startServer(name: serviceName, txt: [:], advertise: false) { result in
+        switch result {
+        case .success(let r):
+          promise.resolve(["port": r.port, "service": r.service])
+        case .failure(let error):
+          promise.reject("ERR_NEARBY_SERVER", error.localizedDescription)
+        }
+      }
+    }
+
     Function("stopAdvertising") { self.core.stopAdvertising() }
 
     Function("shareFile") { (urlPath: String, filePath: String, mimeType: String) in

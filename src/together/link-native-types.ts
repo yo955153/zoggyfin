@@ -120,6 +120,12 @@ export interface NearbyLinkNative {
   // Host
   /** Opens the session port and advertises it. Resolves with the port and the instance name. */
   startServer(serviceName: string, txt: Record<string, string>): Promise<{ port: number; service: string }>;
+  /**
+   * Opens the session port with no advert at all ("Only with my code"):
+   * guests join with the code. Optional: an older build has only
+   * `startServer`, and the caller stops its advert at once.
+   */
+  startServerUnlisted?(serviceName: string): Promise<{ port: number; service: string }>;
   /** Stops the advert; the port and the open sockets stay. */
   stopAdvertising(): void;
   /** Adds a file at a URL path ("/<token>/track-3.m4a"). The path is the secret. */

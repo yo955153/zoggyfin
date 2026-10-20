@@ -334,12 +334,14 @@ class NearbyController {
     this.serviceName = `zgf-${hex(this.random(4))}`;
     const advert = encodeAdvert({ sessionId, hostName: displayName(), itemId: advertItemId, itemName: title, serverId: advertServerId, kind: opts.kind, epoch });
     try {
-      const server = await n.startServer(this.serviceName, advert);
+      // "Only with my code": the port opens with no advert, so nobody nearby sees the session, not even for a moment.
+      const unlisted = this.nextFindable === 'code';
+      const server = unlisted && n.startServerUnlisted ? await n.startServerUnlisted(this.serviceName) : await n.startServer(this.serviceName, advert);
       this.serverPort = server.port;
       this.serviceName = server.service;
-      // "Only with my code": the port stays open, nobody can find it.
       setTogether({ findable: this.nextFindable, locked: false });
-      if (this.nextFindable === 'code') n.stopAdvertising();
+      // An older build has no unlisted start: stop its advert at once.
+      if (unlisted && !n.startServerUnlisted) n.stopAdvertising();
     } catch (e) {
       opts.port.dispose();
       this.session = null;

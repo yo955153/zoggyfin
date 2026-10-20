@@ -79,15 +79,18 @@ public final class NearbyCore {
 
   // MARK: Host
 
-  /// Opens the session port and advertises it. Completes with the port and the instance name.
-  public func startServer(name: String, txt: [String: String], completion: @escaping (Result<(port: Int, service: String), Error>) -> Void) {
+  /// Opens the session port and advertises it (with `advertise: false`, no advert at all:
+  /// "Only with my code"). Completes with the port and the instance name.
+  public func startServer(name: String, txt: [String: String], advertise: Bool = true, completion: @escaping (Result<(port: Int, service: String), Error>) -> Void) {
     queue.async {
       self.stopServerNow()
       do {
         let l = try NWListener(using: nearbyParameters())
         self.serviceName = name
         self.txt = txt
-        l.service = NWListener.Service(name: name, type: nearbyServiceType, domain: nil, txtRecord: NWTXTRecord(txt).data)
+        if advertise {
+          l.service = NWListener.Service(name: name, type: nearbyServiceType, domain: nil, txtRecord: NWTXTRecord(txt).data)
+        }
         var done = false
         l.stateUpdateHandler = { [weak self] state in
           switch state {
