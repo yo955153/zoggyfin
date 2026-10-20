@@ -4,6 +4,13 @@ Each section is the notes of one release. `pnpm desktop:publish` puts the sectio
 version into `latest.json` (the update card shows it) and into the GitHub release.
 Write one short line per item.
 
+## 0.1.6 (2026-10-20)
+
+- Together: the nearby list shows what a room plays now, and when the host picks something
+- No old video frame stays on screen when music starts after a video
+- The profile button opens a menu with Together, Downloads, Extensions, Settings and more
+- A server room shows no wrong number of people while someone joins or leaves
+
 ## 0.1.5 (2026-10-20)
 
 - Together: start a session, then pick anything in the app, and it plays for everyone
