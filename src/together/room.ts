@@ -5,7 +5,14 @@
  *
  * A play starts `startLead` ms in the future, so every device can start at
  * the same moment. While any member buffers, the group waits (the host
- * pauses) and plays again when everyone is ready.
+ * pauses) and plays again when everyone is ready. A member that joins or
+ * comes back while the group plays catches up instead: the group does not
+ * wait for it.
+ *
+ * Members: a guest that sent `deltas` gets the whole list in its welcome,
+ * then only the changes (`memberDelta`), at most one in `MEMBERS_EVERY` ms.
+ * An older guest gets the whole list, at the same pace. Buffering is not
+ * part of the list that goes out (it changes often, and only the host needs it).
  */
 import { positionAt } from './drift';
 import type { Anchor, ControlAction, MediaKind, Member, Message, SharedItem, SharedQueue, StreamRef } from './protocol';
@@ -33,6 +40,9 @@ export function isQueueAction(c: ControlAction): c is QueueAction {
 /** A member that is away is removed after this long, ms. */
 export const AWAY_LIMIT = 120_000;
 
+/** Member changes within this long go out as one message, ms. */
+export const MEMBERS_EVERY = 250;
+
 export interface RoomDeps {
   send(message: Message, to?: string[]): void;
   /** Host monotonic clock, ms. */
@@ -51,8 +61,10 @@ export interface RoomDeps {
 interface RoomMember extends Member {
   peerId: string | null;
   awayTimer: unknown;
-  /** A member that came back while the group plays: it catches up, the group does not wait for it. */
+  /** A member that joined or came back while the group plays: it catches up, the group does not wait for it. */
   catchingUp?: boolean;
+  /** The guest takes `memberDelta` (else full `members` lists). */
+  deltas?: boolean;
 }
 
 export interface RoomOptions {
@@ -86,6 +98,10 @@ export class HostRoom {
   private readonly members = new Map<string, RoomMember>();
   private readonly peerToMember = new Map<string, string>();
   private unsubQueue: (() => void)[] = [];
+  /** The members as the guests know them (the last list or delta that went out), by id. */
+  private sentMembers = new Map<string, string>();
+  private sentOnlyHostControls: boolean | null = null;
+  private membersTimer: unknown = null;
   readonly kind: MediaKind;
   readonly key: string | null;
   readonly epoch: number;
@@ -132,8 +148,14 @@ export class HostRoom {
     this.heartbeat = deps.timers.setInterval(() => this.beat(), opts.heartbeatMs ?? 2000);
   }
 
+  /** Every member, with its buffering state (for the host's own UI). */
   get memberList(): Member[] {
-    return [...this.members.values()].map(({ peerId: _p, awayTimer: _t, catchingUp: _c, ...m }) => m);
+    return [...this.members.values()].map(({ peerId: _p, awayTimer: _t, catchingUp: _c, deltas: _d, ...m }) => m);
+  }
+
+  /** The members as they go to the guests: no buffering. */
+  private get wireMembers(): Member[] {
+    return this.memberList.map(({ buffering: _b, ...m }) => m);
   }
 
   /** The member id of a socket, or null. */
@@ -172,8 +194,9 @@ export class HostRoom {
           away: false,
           peerId,
           awayTimer: null,
-          // Nobody pauses on a drop: a member that comes back while the group plays catches up.
-          catchingUp: !!old && this.wantPlaying,
+          // Nobody pauses for a member that joins or comes back while the group plays: it catches up.
+          catchingUp: this.wantPlaying,
+          deltas: message.deltas ?? false,
         });
         this.peerToMember.set(peerId, id);
         this.deps.send(
@@ -190,11 +213,12 @@ export class HostRoom {
             ...(this.key ? { key: this.key } : {}),
             epoch: this.epoch,
             ...(this.hostId ? { hostId: this.hostId } : {}),
+            ...(message.deltas ? { members: this.wireMembers } : {}),
           },
           [peerId],
         );
         this.broadcastMembers();
-        // A new member loads the media: the group waits for it.
+        // A new member loads the media. A paused group waits for it on the next play; a playing group goes on.
         this.updateWaiting();
         return;
       }
@@ -344,6 +368,8 @@ export class HostRoom {
 
   dispose(): void {
     this.cancelStart();
+    if (this.membersTimer !== null) this.deps.timers.clearTimeout(this.membersTimer);
+    this.membersTimer = null;
     this.deps.timers.clearInterval(this.heartbeat);
     this.unsubBuffering();
     this.unsubQueue.forEach((u) => u());
@@ -432,8 +458,32 @@ export class HostRoom {
     this.deps.onChange?.();
   }
 
+  /** A member changed: the guests hear of it with the other changes of the next `MEMBERS_EVERY` ms. */
   private broadcastMembers(): void {
-    if (this.peers.length) this.deps.send({ t: 'members', members: this.memberList, onlyHostControls: this.onlyHostControls }, this.peers);
+    if (this.membersTimer === null) {
+      this.membersTimer = this.deps.timers.setTimeout(() => {
+        this.membersTimer = null;
+        this.flushMembers();
+      }, MEMBERS_EVERY);
+    }
     this.deps.onChange?.();
+  }
+
+  /** Sends what changed since the last list or delta: a delta to the guests that take one, the whole list to the others. */
+  private flushMembers(): void {
+    const wire = this.wireMembers;
+    const now = new Map(wire.map((m) => [m.id, JSON.stringify(m)] as const));
+    const upsert = wire.filter((m) => this.sentMembers.get(m.id) !== now.get(m.id));
+    const gone = [...this.sentMembers.keys()].filter((id) => !now.has(id));
+    const flag = this.sentOnlyHostControls !== this.onlyHostControls;
+    this.sentMembers = now;
+    this.sentOnlyHostControls = this.onlyHostControls;
+    if (!upsert.length && !gone.length && !flag) return;
+    const connected = [...this.members.values()].filter((m) => m.peerId !== null);
+    const delta = connected.filter((m) => m.deltas).map((m) => m.peerId!);
+    const full = connected.filter((m) => !m.deltas).map((m) => m.peerId!);
+    if (delta.length) this.deps.send({ t: 'memberDelta', upsert, gone, onlyHostControls: this.onlyHostControls }, delta);
+    // An older guest needs `buffering` in each member.
+    if (full.length) this.deps.send({ t: 'members', members: wire.map((m) => ({ ...m, buffering: false })), onlyHostControls: this.onlyHostControls }, full);
   }
 }

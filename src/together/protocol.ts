@@ -80,7 +80,11 @@ export interface Member {
   name: string;
   /** The member plays its own downloaded copy (else it streams from the host). */
   local: boolean;
-  buffering: boolean;
+  /**
+   * The member loads or stalls. Only the host knows it: the members that go
+   * to the guests leave it out (a list for an older guest says false).
+   */
+  buffering?: boolean;
   /** Host clock (ms) of the first join, for the host election (earliest first). */
   joinedAt?: number;
   /** The member has all the media of the session (its own downloads): it can become the host. */
@@ -117,6 +121,8 @@ export type Message =
       canHost?: boolean;
       /** The guest can make a Wi-Fi network (Android). */
       maker?: boolean;
+      /** The guest understands `memberDelta` and `welcome.members` (else it gets full `members` lists). */
+      deltas?: boolean;
     }
   /** Host to a guest that joined. */
   | {
@@ -139,6 +145,8 @@ export type Message =
       epoch?: number;
       /** The host's member id (stable across reconnects). */
       hostId?: string;
+      /** The members now (for a guest that sent `deltas`; later changes come as `memberDelta`). */
+      members?: Member[];
     }
   /** Clock sync: the guest sends t0 (its clock); the host answers with t1 (receive) and t2 (send), host clock. */
   | { t: 'ping'; id: number; t0: number }
@@ -159,8 +167,14 @@ export type Message =
       /** The guest streams from the item's Jellyfin server, not from the host. */
       server?: boolean;
     }
-  /** Host to all. */
+  /** Host to the guests that did not send `deltas`: the whole list. */
   | { t: 'members'; members: Member[]; onlyHostControls: boolean }
+  /**
+   * Host to the guests that sent `deltas`: the members that are new or
+   * changed (`upsert`, by id) and the ids that left (`gone`). The host sends
+   * at most one in 250 ms. Applying one twice changes nothing.
+   */
+  | { t: 'memberDelta'; upsert: Member[]; gone: string[]; onlyHostControls: boolean }
   /** Host to a guest: you may not control playback. */
   | { t: 'denied'; reason: string }
   /** Host to a guest: the host removed you (or removed and blocked you). Do not reconnect. */
@@ -192,7 +206,7 @@ const optBool = (x: unknown) => x === undefined || bool(x);
 const isRepeat = (x: unknown): x is 'off' | 'all' | 'one' => x === 'off' || x === 'all' || x === 'one';
 
 function isMember(x: unknown): x is Member {
-  return isObj(x) && str(x.id) && str(x.name) && bool(x.local) && bool(x.buffering) && optNum(x.joinedAt) && optBool(x.canHost) && optBool(x.away) && optBool(x.maker) && optBool(x.server);
+  return isObj(x) && str(x.id) && str(x.name) && bool(x.local) && optBool(x.buffering) && optNum(x.joinedAt) && optBool(x.canHost) && optBool(x.away) && optBool(x.maker) && optBool(x.server);
 }
 
 function isFullItem(x: unknown): x is SharedItem {
@@ -210,7 +224,7 @@ export function isQueue(x: unknown): x is SharedQueue {
 function valid(x: Record<string, unknown>): boolean {
   switch (x.t) {
     case 'hello':
-      return str(x.name) && Array.isArray(x.have) && x.have.every(str) && optStr(x.memberId) && optBool(x.canHost) && optBool(x.maker);
+      return str(x.name) && Array.isArray(x.have) && x.have.every(str) && optStr(x.memberId) && optBool(x.canHost) && optBool(x.maker) && optBool(x.deltas);
     case 'welcome':
       return (
         str(x.sessionId) &&
@@ -224,7 +238,8 @@ function valid(x: Record<string, unknown>): boolean {
         optStr(x.track) &&
         optStr(x.key) &&
         optNum(x.epoch) &&
-        optStr(x.hostId)
+        optStr(x.hostId) &&
+        (x.members === undefined || (Array.isArray(x.members) && x.members.every(isMember)))
       );
     case 'ping':
       return num(x.id) && num(x.t0);
@@ -259,6 +274,8 @@ function valid(x: Record<string, unknown>): boolean {
       return bool(x.buffering) && bool(x.local) && optBool(x.canHost) && optBool(x.server);
     case 'members':
       return Array.isArray(x.members) && x.members.every(isMember) && bool(x.onlyHostControls);
+    case 'memberDelta':
+      return Array.isArray(x.upsert) && x.upsert.every(isMember) && Array.isArray(x.gone) && x.gone.every(str) && bool(x.onlyHostControls);
     case 'denied':
     case 'removed':
       return str(x.reason);

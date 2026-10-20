@@ -91,7 +91,7 @@ export class Follower {
   /** Sends hello and starts the clock sync. */
   start(name: string, have: string[], extra: { memberId?: string; canHost?: boolean; maker?: boolean } = {}): void {
     this.hello = { name, have, extra };
-    this.deps.send({ t: 'hello', name, have, ...extra });
+    this.deps.send({ t: 'hello', name, have, ...extra, deltas: true });
     for (let i = 0; i < BURST; i++) this.timers.push(this.deps.timers.setTimeout(() => this.ping(), i * BURST_GAP));
     this.schedulePing();
     this.timers.push(this.deps.timers.setInterval(() => this.anchors.follow(false), TICK));
@@ -142,7 +142,7 @@ export class Follower {
     this.seq = -1;
     this.pending.clear();
     if (newHost) this.clock = new ClockSync();
-    if (this.hello) this.deps.send({ t: 'hello', name: this.hello.name, have: this.hello.have, ...this.hello.extra, ...extra });
+    if (this.hello) this.deps.send({ t: 'hello', name: this.hello.name, have: this.hello.have, ...this.hello.extra, ...extra, deltas: true });
     // The player plays already: tell the host at once, so the group does not wait for this device.
     if (this.player) this.deps.send({ ...this.bufferingMessage(this.player.isBuffering()), ...(extra?.canHost !== undefined ? { canHost: extra.canHost } : {}) } as Message);
     for (let i = 0; i < BURST; i++) this.timers.push(this.deps.timers.setTimeout(() => this.ping(), i * BURST_GAP));
@@ -193,6 +193,7 @@ export class Follower {
           this.queue = message.queue;
           this.deps.onQueue?.(message.queue);
         }
+        if (message.members) this.setMembers(message.members);
         this.anchors.setAnchor(message.anchor, message.track ?? null);
         this.deps.onChange?.();
         return;
@@ -211,17 +212,30 @@ export class Follower {
         this.deps.onChange?.();
         return;
       case 'members':
-        this.allMembers = message.members;
-        this.members = message.members.filter((m) => m.id !== this.selfId);
+        this.setMembers(message.members);
         this.onlyHostControls = message.onlyHostControls;
         this.deps.onChange?.();
         return;
+      case 'memberDelta': {
+        const gone = new Set(message.gone);
+        const byId = new Map(this.allMembers.filter((m) => !gone.has(m.id)).map((m) => [m.id, m] as const));
+        for (const m of message.upsert) byId.set(m.id, m);
+        this.setMembers([...byId.values()]);
+        this.onlyHostControls = message.onlyHostControls;
+        this.deps.onChange?.();
+        return;
+      }
       case 'denied':
         this.deps.onDenied?.(message.reason);
         return;
       default:
         return;
     }
+  }
+
+  private setMembers(list: Member[]): void {
+    this.allMembers = list;
+    this.members = list.filter((m) => m.id !== this.selfId);
   }
 
   /** A control from this guest's own player UI. False when the host does not allow it. */

@@ -7,7 +7,7 @@ import { FakePlayer, VirtualClock } from '../test-utils/sim';
 const item = { id: 'item1', name: 'Film', type: 'Movie' };
 
 /** A host and one guest with different clocks and an asymmetric link (15 ms down, 25 ms up). */
-function setup(opts: { guestLatency?: number; guestSpeedError?: number; onlyHostControls?: boolean } = {}) {
+function setup(opts: { guestLatency?: number; guestSpeedError?: number; onlyHostControls?: boolean; hostPaused?: boolean } = {}) {
   const clock = new VirtualClock();
   const hostNow = () => clock.t + 100_000;
   const guestNow = () => clock.t + 3_000;
@@ -16,7 +16,7 @@ function setup(opts: { guestLatency?: number; guestSpeedError?: number; onlyHost
   const wire = (m: Message) => decode(encode(m))!;
   const denied: string[] = [];
   let follower: Follower;
-  hostPlayer.play();
+  if (!opts.hostPaused) hostPlayer.play();
   clock.advance(5000);
   const room = new HostRoom(
     {
@@ -41,19 +41,16 @@ function setup(opts: { guestLatency?: number; guestSpeedError?: number; onlyHost
 const gap = (a: FakePlayer, b: FakePlayer) => Math.abs(a.position() - b.position());
 
 describe('nearby session (simulated)', () => {
-  it('waits for a new guest, then starts both together', () => {
+  it('a new guest catches up while the group plays: nobody waits for it', () => {
     const { clock, room, follower, hostPlayer, guestPlayer } = setup();
-    // The guest is loading: the group waits.
-    expect(room.state.waiting).toBe(true);
-    expect(hostPlayer.isPlaying()).toBe(false);
+    // The guest is loading, but the group plays on.
+    expect(room.state.waiting).toBe(false);
+    expect(hostPlayer.isPlaying()).toBe(true);
     expect(room.memberList).toMatchObject([{ id: 'g', name: 'iPad', local: false, buffering: true, away: false }]);
-    const pausedAt = hostPlayer.position();
-    expect(pausedAt).toBeGreaterThan(4.9);
 
     follower.attach(guestPlayer, false);
     clock.advance(1000);
     expect(room.state.waiting).toBe(false);
-    expect(hostPlayer.isPlaying()).toBe(true);
     expect(guestPlayer.isPlaying()).toBe(true);
     clock.advance(10_000);
     expect(gap(hostPlayer, guestPlayer)).toBeLessThan(0.06);
@@ -61,6 +58,22 @@ describe('nearby session (simulated)', () => {
     // True offset is 97 000 ms; the asymmetric link adds (15 - 25) / 2 = -5 ms.
     expect(Math.abs(est.offset - 97_000)).toBeLessThanOrEqual(5);
     expect(est.rtt).toBe(40);
+  });
+
+  it('a paused group waits for a new guest when it plays, then starts both together', () => {
+    const { clock, room, follower, hostPlayer, guestPlayer } = setup({ hostPaused: true });
+    room.apply({ action: 'play' });
+    clock.advance(100);
+    // The guest still loads: the group waits for it.
+    expect(room.state.waiting).toBe(true);
+    expect(hostPlayer.isPlaying()).toBe(false);
+    follower.attach(guestPlayer, false);
+    clock.advance(1000);
+    expect(room.state.waiting).toBe(false);
+    expect(hostPlayer.isPlaying()).toBe(true);
+    expect(guestPlayer.isPlaying()).toBe(true);
+    clock.advance(5000);
+    expect(gap(hostPlayer, guestPlayer)).toBeLessThan(0.06);
   });
 
   it('corrects a player that runs 1 % fast with rate nudges and no seek', () => {
@@ -124,7 +137,8 @@ describe('nearby session (simulated)', () => {
     follower.attach(guestPlayer, false);
     clock.advance(1000);
     room.setOnlyHostControls(true);
-    clock.advance(100);
+    // Member and policy changes go out after at most MEMBERS_EVERY (250 ms).
+    clock.advance(300);
     expect(follower.onlyHostControls).toBe(true);
     expect(follower.request({ action: 'pause' })).toBe(false);
     expect(denied).toEqual(['Only the host controls playback.']);
@@ -149,7 +163,9 @@ describe('nearby session (simulated)', () => {
   });
 
   it('removes a guest that leaves and stops waiting for it', () => {
-    const { clock, room, follower, hostPlayer } = setup();
+    const { clock, room, follower, hostPlayer } = setup({ hostPaused: true });
+    room.apply({ action: 'play' });
+    clock.advance(100);
     expect(room.state.waiting).toBe(true);
     follower.leave();
     clock.advance(100);
