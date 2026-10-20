@@ -1,3 +1,4 @@
+import { AnchorFollower } from '../anchor-follower';
 import { Follower } from '../follower';
 import { decode, encode, type Message } from '../protocol';
 import { HostRoom } from '../room';
@@ -45,7 +46,7 @@ describe('nearby session (simulated)', () => {
     // The guest is loading: the group waits.
     expect(room.state.waiting).toBe(true);
     expect(hostPlayer.isPlaying()).toBe(false);
-    expect(room.memberList).toEqual([{ id: 'g', name: 'iPad', local: false, buffering: true }]);
+    expect(room.memberList).toMatchObject([{ id: 'g', name: 'iPad', local: false, buffering: true, away: false }]);
     const pausedAt = hostPlayer.position();
     expect(pausedAt).toBeGreaterThan(4.9);
 
@@ -156,5 +157,19 @@ describe('nearby session (simulated)', () => {
     expect(room.state.waiting).toBe(false);
     clock.advance(500);
     expect(hostPlayer.isPlaying()).toBe(true);
+  });
+});
+
+describe('AnchorFollower attach', () => {
+  it('lets a reloaded player take its real play state, then plays it with the group', () => {
+    const clock = new VirtualClock();
+    const p = new FakePlayer(clock);
+    const resync = jest.fn();
+    const port = Object.assign(p, { resync });
+    const f = new AnchorFollower({ now: () => clock.t, remoteNow: () => clock.t, timers: clock });
+    f.setAnchor({ playing: true, rate: 1, hostTime: clock.t, position: 5 });
+    f.attach(port);
+    expect(resync).toHaveBeenCalledTimes(1);
+    expect(p.isPlaying()).toBe(true);
   });
 });

@@ -8,6 +8,16 @@
     <true/>
   </dict>
   <key>NSLocalNetworkUsageDescription</key>
-  <string>Zoggyfin connects to your Jellyfin server on the local network.</string>
+  <string>Zoggyfin connects to your Jellyfin server on the local network and finds nearby devices to watch and listen together.</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_zgf-together._tcp</string>
+  </array>
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>Zoggyfin uses Bluetooth to find nearby people who watch or listen together with you, also with no Wi-Fi.</string>
+  <key>NSLocationUsageDescription</key>
+  <string>Zoggyfin needs Location access only to join the Wi-Fi of a nearby Android phone. macOS gives Wi-Fi names only to apps with this permission.</string>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Zoggyfin needs Location access only to join the Wi-Fi of a nearby Android phone. macOS gives Wi-Fi names only to apps with this permission.</string>
 </dict>
 </plist>

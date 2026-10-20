@@ -6,6 +6,7 @@ import { Icon } from '@/components/icon';
 import { Touchable } from '@/components/touchable';
 import { TogetherSheetHost } from '@/features/together/together-sheet';
 import { useOffline, useOnlineStore } from '@/lib/online';
+import { nearbySupported } from '@/together/nearby';
 import { openTogetherSheet } from '@/together/store';
 import { useOfflineEntries } from './use-offline-entries';
 import { createStyles, type AppTheme, font, iconSize, radius, scaled, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
@@ -27,7 +28,8 @@ export function OfflineBanner({ flush, entries: withEntries }: { flush?: boolean
   const showDownloads = withEntries && entries.downloads;
   const showJoin = withEntries && entries.joinNearby;
   // The sheet host stays mounted while the sheet is open, even if the banner hides.
-  const host = showJoin ? <TogetherSheetHost where="join" /> : null;
+  // Home (`entries`) always has it where nearby exists: a join link opens the sheet there.
+  const host = showJoin || (withEntries && nearbySupported) ? <TogetherSheetHost where="join" /> : null;
   if (!offline || dismissedAt === count) return host;
   return (
     <View style={[s.wrap, { marginHorizontal: flush ? 0 : l.gutter }]}>

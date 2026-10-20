@@ -26,6 +26,7 @@ type DesktopWindow = Window & {
     download(event: DownloadEvent): void;
     remote(command: RemoteCommand): void;
     update(event: AppUpdateEvent): void;
+    nearby(event: NearbyEvent): void;
   };
   /** Set by the desktop app before the page loads when libmpv started. */
   __ZOGGYFIN_MPV__?: boolean;
@@ -115,6 +116,17 @@ const updateListeners = new Set<(e: AppUpdateEvent) => void>();
 export function onUpdateEvent(listener: (e: AppUpdateEvent) => void): () => void {
   updateListeners.add(listener);
   return () => updateListeners.delete(listener);
+}
+
+/** An event of the nearby transport (`desktop/src-tauri/src/nearby.rs`); see `src/together/link-desktop.ts`. */
+export type NearbyEvent = { event: string; body: Record<string, unknown> };
+
+const nearbyListeners = new Set<(e: NearbyEvent) => void>();
+
+/** Nearby transport events. Returns the unsubscribe function. */
+export function onNearbyEvent(listener: (e: NearbyEvent) => void): () => void {
+  nearbyListeners.add(listener);
+  return () => nearbyListeners.delete(listener);
 }
 
 const menuListeners = new Set<(command: string) => void>();
@@ -281,6 +293,7 @@ if (isDesktop && typeof window !== 'undefined') {
     download: (event) => downloadListeners.forEach((l) => l(event)),
     remote: (command) => remoteListeners.forEach((l) => l(command)),
     update: (event) => updateListeners.forEach((l) => l(event)),
+    nearby: (event) => nearbyListeners.forEach((l) => l(event)),
   };
   installChrome();
   // A page reload leaves libmpv as it was: stop what played before.

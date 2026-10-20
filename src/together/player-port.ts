@@ -5,6 +5,7 @@
  * Calls on the port change the player directly. They never go back through
  * the control gate, so a remote command does not echo.
  */
+import type { DriftOptions } from './drift';
 
 export interface PlayerPort {
   /** Seconds. */
@@ -18,6 +19,12 @@ export interface PlayerPort {
   setRate(rate: number): void;
   /** Called with true / false when buffering starts or stops. */
   onBuffering(listener: (buffering: boolean) => void): () => void;
+  /** Audio: the key of the queue entry that plays now. Video players leave it out. */
+  track?(): string | null;
+  /** The player was reloaded: take its real play state again (the follower calls it on attach). */
+  resync?(): void;
+  /** How to correct drift on this player, when the default does not suit it. */
+  drift?: DriftOptions;
 }
 
 /** Timers, so tests can run on a fake clock. */

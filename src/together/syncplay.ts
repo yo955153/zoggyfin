@@ -9,6 +9,7 @@
  */
 import type { Api } from '@jellyfin/sdk';
 import { router } from 'expo-router';
+import { getLibraryApi } from '@jellyfin/sdk/lib/utils/api/library-api';
 import { getSyncPlayApi } from '@jellyfin/sdk/lib/utils/api/sync-play-api';
 import { getSystemApi } from '@jellyfin/sdk/lib/utils/api/system-api';
 
@@ -19,25 +20,39 @@ import type { BaseItemDto } from '@/api/types';
 import { useSessionStore } from '@/auth/session-store';
 import { toast } from '@/lib/toast';
 import { features } from '@/platform/tv';
-import { controlGate, type UserControl } from '@/player/control-gate';
+import { isAudioItem } from '@/player';
+import { slimItem } from '@/player/audio/item';
+import { isLongFormList } from '@/player/audio/long-form';
+import { audioSession } from '@/player/audio/session';
+import { audioState } from '@/player/audio/store';
+import { controlGate, queueGate, type UserControl } from '@/player/control-gate';
 import { videoSession } from '@/player/session';
 import { playerState } from '@/player/store';
 
 import { AnchorFollower } from './anchor-follower';
 import { ClockSync, isoToMs } from './clock';
 import { IDLE } from './machine';
+import { bindAudioPort } from './audio-binding';
 import { bindVideoPort, type BoundPort, whenPlayerReady } from './player-binding';
 import { realTimers } from './player-port';
 import { setSyncPlayView, setTogether, togetherState } from './store';
 import { syncLog } from './sync-log';
-import { commandEffect, groupView, type QueueTarget, queueTarget, secondsToTicks } from './syncplay-logic';
+import { commandEffect, groupView, type QueueTarget, queueTarget, sameQueue, secondsToTicks, syncPlayRepeat } from './syncplay-logic';
 
 export const syncPlaySupported: boolean = features.watchTogether;
 
 const VIDEO_TYPES = new Set(['Movie', 'Episode', 'Video', 'MusicVideo']);
 
 export function canSyncPlay(item: BaseItemDto | null | undefined): boolean {
-  return syncPlaySupported && !!item && VIDEO_TYPES.has(item.Type ?? '');
+  return syncPlaySupported && !!item && (VIDEO_TYPES.has(item.Type ?? '') || isAudioItem(item));
+}
+
+/** Loads the group queue's items, in the queue's order (an item can be in it twice). */
+async function itemsByIds(api: Api, userId: string, ids: string[]): Promise<BaseItemDto[]> {
+  const unique = [...new Set(ids)];
+  const { data } = await getLibraryApi(api).getItems({ userId, ids: unique, fields: ['MediaSources', 'Chapters'], enableUserData: true });
+  const byId = new Map((data.Items ?? []).map((i) => [i.Id, i] as const));
+  return ids.map((id) => byId.get(id)).filter((i): i is BaseItemDto => !!i);
 }
 
 interface WsMessage {
@@ -65,6 +80,9 @@ class SyncPlayController {
   private timers: ReturnType<typeof setInterval>[] = [];
   private loading: string | null = null;
   private groupId: string | null = null;
+  /** The group plays audio: the audio player follows the group queue (entry keys are SyncPlay's playlist item ids). */
+  private audio = false;
+  private unsubTrack: (() => void) | null = null;
 
   private api(): Api | null {
     const s = useSessionStore.getState().session;
@@ -127,15 +145,62 @@ class SyncPlayController {
     this.teardown();
   }
 
-  /** Puts an item at the head of the group queue: everyone loads it. */
+  /** Puts an item at the head of the group queue: everyone loads it. Audio: the album, playlist or the queue that plays. */
   async playInGroup(item: BaseItemDto): Promise<void> {
     const api = this.api();
     if (!api || !item.Id) return;
+    if (isAudioItem(item)) {
+      await this.playAudioInGroup(item);
+      return;
+    }
     const st = playerState();
     const start = st.now?.item.Id === item.Id ? st.position : (item.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000;
     await getSyncPlayApi(api).syncPlaySetNewQueue({
       playRequestDto: { PlayingQueue: [item.Id], PlayingItemPosition: 0, StartPositionTicks: secondsToTicks(start) },
     });
+  }
+
+  /** The audio queue that plays now (when `item` is in it or is null), else the item's tracks. */
+  private async playAudioInGroup(item: BaseItemDto | null): Promise<void> {
+    const api = this.api();
+    const s = useSessionStore.getState().session;
+    if (!api || !s) return;
+    const q = audioState().queue;
+    const playing = playerState().now?.kind === 'audio' && q.entries.length > 0;
+    let ids: string[];
+    let index = 0;
+    let start = 0;
+    if (playing && (!item || item.Type === 'Audio' ? q.entries.some((e) => e.item.Id === item?.Id) || !item : item.Id === q.source?.id)) {
+      ids = q.entries.map((e) => e.item.Id);
+      index = Math.max(0, q.index);
+      start = playerState().position;
+    } else if (item) {
+      const tracks = item.Type === 'Audio' || item.Type === 'AudioBook' ? [item] : await jf.getAudioTracks(api, s.userId, item);
+      ids = tracks.map((t) => t.Id).filter((x): x is string => !!x);
+    } else {
+      return;
+    }
+    if (!ids.length) {
+      toast('Nothing to play here yet.');
+      return;
+    }
+    await getSyncPlayApi(api).syncPlaySetNewQueue({
+      playRequestDto: { PlayingQueue: ids.slice(0, 500), PlayingItemPosition: Math.min(index, 499), StartPositionTicks: secondsToTicks(start) },
+    });
+  }
+
+  /** "Listen together" from the music player: the queue that plays now. */
+  async createForAudio(): Promise<void> {
+    const api = this.api();
+    const s = useSessionStore.getState().session;
+    if (!api || !s) return;
+    this.listen(api);
+    try {
+      await getSyncPlayApi(api).syncPlayCreateGroup({ newGroupRequestDto: { GroupName: `${s.userName}'s group` } });
+      await this.playAudioInGroup(null);
+    } catch (e) {
+      setSyncPlayView({ error: describeError(e).title });
+    }
   }
 
   async next(): Promise<void> {
@@ -220,7 +285,7 @@ class SyncPlayController {
       return;
     }
     if (effect.kind !== 'anchor') return;
-    this.follower.setAnchor(effect.anchor);
+    this.follower.setAnchor(effect.anchor, this.audio ? (effect.track ?? this.target?.playlistItemId ?? null) : null);
     if (effect.reportReady) void this.reportReadyWhenLoaded();
   }
 
@@ -269,8 +334,13 @@ class SyncPlayController {
   // ---- Media -------------------------------------------------------------------
 
   private async onQueue(t: QueueTarget | null): Promise<void> {
+    const prev = this.target;
     this.target = t;
     if (!t) return;
+    if (this.audio && this.port && sameQueue(prev, t)) {
+      await this.followAudioTrack(t);
+      return;
+    }
     const st = playerState();
     if (st.now?.item.Id === t.itemId && this.port) {
       await this.reportReadyWhenLoaded();
@@ -284,6 +354,11 @@ class SyncPlayController {
     try {
       await this.report('buffering');
       const item = await jf.getItem(api, s.userId, t.itemId);
+      if (isAudioItem(item)) {
+        await this.loadAudioQueue(api, s.userId, t);
+        return;
+      }
+      if (this.audio) this.leaveAudio();
       // While it loads, the group waits: the server holds a play until this device is ready.
       void videoSession().play({ item, startPositionTicks: secondsToTicks(t.startSeconds), autoplay: false });
       router.navigate('/player');
@@ -302,9 +377,61 @@ class SyncPlayController {
     }
   }
 
+  /** The group plays an audio queue: the audio player plays it with SyncPlay's entry ids. */
+  private async loadAudioQueue(api: Api, userId: string, t: QueueTarget): Promise<void> {
+    const items = await itemsByIds(api, userId, t.entries.map((e) => e.itemId));
+    if (items.length !== t.entries.length) {
+      toast('Some items of the group queue are not on this server.');
+      return;
+    }
+    if (playerState().now?.kind === 'video') await videoSession().stop();
+    const entries = t.entries.map((e, i) => ({ key: e.playlistItemId, item: slimItem(items[i] as BaseItemDto), user: false }));
+    const queue = { entries, index: t.entryIndex, original: entries.map((e) => e.key), shuffle: t.shuffle, repeat: t.repeat, source: null };
+    this.audio = true;
+    queueGate.set('The group plays the queue. Use Next, Previous or the queue rows.');
+    // No shared files: each track comes from this device's download or the server.
+    await audioSession().loadShared(queue, isLongFormList(items, null), () => null, t.startSeconds, { reports: true });
+    router.navigate('/now-playing');
+    const ok = await whenPlayerReady(30_000);
+    if (!ok) {
+      toast('The group queue could not be played here.');
+      return;
+    }
+    this.bindPlayer();
+    this.unsubTrack?.();
+    // A gapless change at the end of a track: ask the group for the next entry (the server takes the first request).
+    this.unsubTrack = audioSession().onTrackChange((key) => {
+      const target = this.target;
+      if (!target || key === target.playlistItemId) return;
+      const at = target.entries.findIndex((e) => e.playlistItemId === target.playlistItemId);
+      if (target.entries[at + 1]?.playlistItemId === key) void this.next();
+    });
+    await this.report('ready');
+  }
+
+  /** The same group queue, another entry: wait for the gapless change, or move now. */
+  private async followAudioTrack(t: QueueTarget): Promise<void> {
+    const current = audioSession().direct.track();
+    if (current !== t.playlistItemId) {
+      await this.report('buffering');
+      await audioSession().moveShared(t.playlistItemId, t.startSeconds);
+      await whenPlayerReady(30_000);
+    }
+    if (this.port) this.follower.attach(this.port);
+    await this.report('ready');
+  }
+
+  private leaveAudio(): void {
+    this.audio = false;
+    this.unsubTrack?.();
+    this.unsubTrack = null;
+    queueGate.set(null);
+    audioSession().leaveShared();
+  }
+
   private bindPlayer(): void {
     this.port?.dispose();
-    this.port = bindVideoPort((c) => void this.control(c));
+    this.port = this.audio ? bindAudioPort((c) => void this.control(c)) : bindVideoPort((c) => void this.control(c));
     this.port.onBuffering((b) => void this.report(b ? 'buffering' : 'ready'));
     this.follower.attach(this.port);
     const port = this.port;
@@ -357,6 +484,21 @@ class SyncPlayController {
         case 'rate':
           toast('SyncPlay groups play at normal speed.');
           return;
+        case 'next':
+          await this.next();
+          return;
+        case 'previous':
+          await this.previous();
+          return;
+        case 'jump':
+          await sp.syncPlaySetPlaylistItem({ setPlaylistItemRequestDto: { PlaylistItemId: c.key } });
+          return;
+        case 'shuffle':
+          await sp.syncPlaySetShuffleMode({ setShuffleModeRequestDto: { Mode: c.on ? 'Shuffle' : 'Sorted' } });
+          return;
+        case 'repeat':
+          await sp.syncPlaySetRepeatMode({ setRepeatModeRequestDto: { Mode: syncPlayRepeat(c.mode) } });
+          return;
       }
     } catch (e) {
       toast(describeError(e).title);
@@ -376,6 +518,7 @@ class SyncPlayController {
     this.port = null;
     this.target = null;
     this.groupId = null;
+    if (this.audio) this.leaveAudio();
     controlGate.set(null);
     this.unsub?.();
     this.unsub = null;

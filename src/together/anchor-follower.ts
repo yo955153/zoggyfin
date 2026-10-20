@@ -25,11 +25,19 @@ export interface AnchorFollowerDeps {
   remoteNow(): number | null;
   timers: Timers;
   onSample?(sample: SyncSample): void;
+  /**
+   * Audio: the player is on another queue entry than the group. The caller
+   * moves the player (or waits for the gapless change); until then the
+   * follower does not correct.
+   */
+  onTrackMismatch?(track: string, anchor: Anchor): void;
 }
 
 export class AnchorFollower {
   private corrector: DriftCorrector;
   private anchor: Anchor | null = null;
+  /** Audio: the queue entry that the anchor applies to. */
+  private track: string | null = null;
   private player: PlayerPort | null = null;
   private startTimer: unknown = null;
   private appliedRate = 1;
@@ -38,16 +46,28 @@ export class AnchorFollower {
 
   constructor(
     private readonly deps: AnchorFollowerDeps,
-    drift: DriftOptions = DEFAULT_DRIFT,
+    private readonly drift: DriftOptions = DEFAULT_DRIFT,
   ) {
     this.corrector = new DriftCorrector(drift);
+  }
+
+  /** The seek lead the corrector uses now, seconds. */
+  get seekLead(): number {
+    return this.corrector.seekLead;
   }
 
   get current(): Anchor | null {
     return this.anchor;
   }
 
+  get currentTrack(): string | null {
+    return this.track;
+  }
+
   attach(player: PlayerPort): void {
+    // A player with its own drift profile gets a corrector for it.
+    if (player !== this.player) this.corrector = new DriftCorrector(player.drift ?? this.drift);
+    player.resync?.();
     this.player = player;
     this.appliedRate = this.anchor?.rate ?? 1;
     this.follow(true);
@@ -59,11 +79,17 @@ export class AnchorFollower {
   }
 
   /** A new group state. Jumps (play/pause, rate, a position change) apply at once. */
-  setAnchor(anchor: Anchor): void {
+  setAnchor(anchor: Anchor, track?: string | null): void {
     const prev = this.anchor;
+    const prevTrack = this.track;
     this.anchor = anchor;
+    if (track !== undefined) this.track = track;
     const jumped =
-      !prev || prev.playing !== anchor.playing || prev.rate !== anchor.rate || Math.abs(positionAt(prev, anchor.hostTime) - anchor.position) > 0.5;
+      !prev ||
+      prevTrack !== this.track ||
+      prev.playing !== anchor.playing ||
+      prev.rate !== anchor.rate ||
+      Math.abs(positionAt(prev, anchor.hostTime) - anchor.position) > 0.5;
     if (jumped) this.cancelStart();
     this.follow(jumped);
   }
@@ -74,6 +100,12 @@ export class AnchorFollower {
     const a = this.anchor;
     const remoteNow = this.deps.remoteNow();
     if (!p || !a || remoteNow === null) return;
+    const playerTrack = p.track?.() ?? null;
+    if (this.track && playerTrack && playerTrack !== this.track) {
+      this.cancelStart();
+      this.deps.onTrackMismatch?.(this.track, a);
+      return;
+    }
     const now = this.deps.now();
     if (!a.playing) {
       this.cancelStart();
@@ -104,7 +136,7 @@ export class AnchorFollower {
     const expected = positionAt(a, remoteNow);
     if (!p.isPlaying()) {
       this.setRate(a.rate);
-      if (Math.abs(p.position() - expected) > 0.1) p.seek(expected + 0.1 * a.rate);
+      if (Math.abs(p.position() - expected) > 0.1) p.seek(expected + (p.drift?.nudge === false ? this.corrector.seekLead : 0.1) * a.rate);
       p.play();
       this.corrector.noteSeek(now);
       this.sample(expected, p.position(), 'start');

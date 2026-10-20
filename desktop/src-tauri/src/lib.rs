@@ -17,6 +17,7 @@ mod links;
 mod media_macos;
 mod menu;
 mod mpv;
+mod nearby;
 #[cfg(target_os = "macos")]
 mod update;
 
@@ -110,6 +111,7 @@ pub fn run() {
             now_playing_update,
             now_playing_clear,
             links::desktop_take_links,
+            nearby::nearby_call,
             discovery::discovery_udp,
             discovery::discovery_interfaces,
             discovery::discovery_lan_probe,

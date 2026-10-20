@@ -124,6 +124,11 @@ export const ANDROID_SYMBOLS = {
   'person.2.fill': 'group',
   'person.2.slash': 'group_off',
   'lock.fill': 'lock',
+  /** Nearby sessions: Bluetooth (SF Symbols has no Bluetooth glyph). */
+  'dot.radiowaves.left.and.right': 'bluetooth',
+  personalhotspot: 'wifi_tethering',
+  camera: 'photo_camera',
+  keyboard: 'keyboard',
 } as const satisfies Record<string, AndroidSymbol>;
 
 export type IconName = keyof typeof ANDROID_SYMBOLS;

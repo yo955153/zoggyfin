@@ -1,5 +1,5 @@
 import { positionAt } from '../drift';
-import { commandEffect, groupStateLabel, groupView, queueTarget, secondsToTicks, ticksToSeconds } from '../syncplay-logic';
+import { commandEffect, groupStateLabel, groupView, queueTarget, sameQueue, secondsToTicks, syncPlayRepeat, ticksToSeconds } from '../syncplay-logic';
 
 const when = '2026-10-19T12:00:00.000Z';
 const whenMs = Date.UTC(2026, 9, 19, 12);
@@ -23,6 +23,24 @@ describe('commandEffect', () => {
   });
 });
 
+describe('audio queues', () => {
+  it('keeps the entry of a command as the track', () => {
+    expect(commandEffect({ Command: 'Unpause', When: when, PositionTicks: 0, PlaylistItemId: 'p2' })).toMatchObject({ track: 'p2' });
+  });
+
+  it('reads the play modes and tells a track change from a new queue', () => {
+    const a = queueTarget({ Playlist: [{ ItemId: 'a', PlaylistItemId: 'pa' }, { ItemId: 'b', PlaylistItemId: 'pb' }], PlayingItemIndex: 0, ShuffleMode: 'Shuffle', RepeatMode: 'RepeatOne', Reason: 'NewPlaylist' })!;
+    expect(a).toMatchObject({ shuffle: true, repeat: 'one', reason: 'NewPlaylist' });
+    const b = queueTarget({ Playlist: [{ ItemId: 'a', PlaylistItemId: 'pa' }, { ItemId: 'b', PlaylistItemId: 'pb' }], PlayingItemIndex: 1, Reason: 'NextItem' })!;
+    expect(sameQueue(a, b)).toBe(true);
+    const c = queueTarget({ Playlist: [{ ItemId: 'b', PlaylistItemId: 'pb' }], PlayingItemIndex: 0 })!;
+    expect(sameQueue(b, c)).toBe(false);
+    expect(sameQueue(null, c)).toBe(false);
+    expect(syncPlayRepeat('all')).toBe('RepeatAll');
+    expect(syncPlayRepeat('off')).toBe('RepeatNone');
+  });
+});
+
 describe('queueTarget', () => {
   it('finds the playing item', () => {
     expect(
@@ -35,7 +53,22 @@ describe('queueTarget', () => {
         StartPositionTicks: 50_000_000,
         IsPlaying: true,
       }),
-    ).toEqual({ itemId: 'b', playlistItemId: 'pb', startSeconds: 5, isPlaying: true, queue: ['a', 'b'], index: 1 });
+    ).toEqual({
+      itemId: 'b',
+      playlistItemId: 'pb',
+      startSeconds: 5,
+      isPlaying: true,
+      queue: ['a', 'b'],
+      index: 1,
+      entries: [
+        { itemId: 'a', playlistItemId: 'pa' },
+        { itemId: 'b', playlistItemId: 'pb' },
+      ],
+      entryIndex: 1,
+      shuffle: false,
+      repeat: 'off',
+      reason: null,
+    });
   });
 
   it('returns null for an empty queue', () => {

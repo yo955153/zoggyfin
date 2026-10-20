@@ -12,6 +12,7 @@
  * appends and only removes items after the current one.
  */
 import { type AudioPlaylist, createAudioPlaylist, setAudioModeAsync } from 'expo-audio';
+import { Platform } from 'react-native';
 
 export interface EngineTrack {
   /** The queue entry key. */
@@ -51,8 +52,30 @@ export class AudioEngine {
   private lockControls: LockScreenControls | null = null;
   private modeSet = false;
   private rate = 1;
+  /** When the last status came (ms, performance clock), and whether it played. */
+  private statusAt = 0;
+  private statusPlaying = false;
   /** Ignore status from before a load (the native side can deliver late events). */
   private loading = false;
+
+  /** The last web status: its track and time (see `webFix`). */
+  private webLast: { index: number; time: number } | null = null;
+
+  /**
+   * expo-audio's web playlist (58.0.x) leaves `isLoaded` false and
+   * `isBuffering` true after it moves to the preloaded next track: that
+   * element's load events came while it preloaded. On the web, a time that
+   * moves on the same track means the track is loaded and plays.
+   */
+  private webFix<T extends { currentIndex?: number; currentTime: number; isLoaded: boolean; isBuffering: boolean; playing: boolean; duration: number }>(s: T): T {
+    if (Platform.OS !== 'web') return s;
+    const index = s.currentIndex ?? 0;
+    const last = this.webLast;
+    this.webLast = { index, time: s.currentTime };
+    const moved = !!last && last.index === index && s.playing && Math.abs(s.currentTime - last.time) > 0.001;
+    if (!moved) return s.duration > 0 && !s.isLoaded ? { ...s, isLoaded: true } : s;
+    return { ...s, isLoaded: true, isBuffering: false };
+  }
 
   subscribe(l: AudioEngineListener): () => void {
     this.listeners.add(l);
@@ -66,20 +89,25 @@ export class AudioEngine {
   private ensure(): AudioPlaylist {
     if (this.playlist) return this.playlist;
     const p = createAudioPlaylist({ sources: [], updateInterval: 500, loop: 'none' });
-    p.addListener('playlistStatusUpdate', (s) => {
+    p.addListener('playlistStatusUpdate', (raw) => {
+      const s = this.webFix(raw);
       const index = s.currentIndex ?? 0;
       if (this.pendingStart !== null && s.isLoaded && index === 0) {
         const start = this.pendingStart;
         this.pendingStart = null;
         void p.seekTo(start).finally(() => {
-          if (this.pendingPlay) p.play();
+          if (this.pendingPlay) this.playNow(p);
           this.pendingPlay = false;
         });
       }
       // Until the new track is ready (and has seeked to its start), keep reporting the start position.
       if (this.loading && s.isLoaded && this.pendingStart === null) this.loading = false;
       this.lastIndex = index;
-      if (!this.loading && s.currentTime >= 0) this.lastPosition = s.currentTime;
+      if (!this.loading && s.currentTime >= 0) {
+        this.lastPosition = s.currentTime;
+        this.statusAt = nowMs();
+        this.statusPlaying = s.playing && !s.isBuffering;
+      }
       if (s.duration > 0) this.lastDuration = s.duration;
       this.emit({
         type: 'status',
@@ -134,6 +162,17 @@ export class AudioEngine {
     return this.lastDuration;
   }
 
+  /**
+   * The position now: the last status (it comes every 500 ms) moved on by the
+   * time since it came, while the player plays. Watch and listen together
+   * compare positions to the millisecond, so the status alone is too old.
+   */
+  livePosition(): number {
+    if (!this.statusPlaying || this.loading) return this.lastPosition;
+    const moved = ((nowMs() - this.statusAt) / 1000) * this.rate;
+    return this.lastPosition + Math.min(Math.max(0, moved), 1);
+  }
+
   get currentKey(): string | null {
     return this.keys[this.lastIndex] ?? null;
   }
@@ -167,7 +206,7 @@ export class AudioEngine {
     } else {
       this.pendingStart = null;
       this.pendingPlay = false;
-      if (autoplay) p.play();
+      if (autoplay) this.playNow(p);
     }
   }
 
@@ -198,10 +237,18 @@ export class AudioEngine {
       this.pendingPlay = true;
       return;
     }
-    this.playlist?.play();
+    if (this.playlist) this.playNow(this.playlist);
+  }
+
+  /** Plays, then sets the rate again: on iOS, play() puts the rate back to 1. */
+  private playNow(p: AudioPlaylist): void {
+    p.play();
+    if (this.rate !== 1) p.playbackRate = this.rate;
   }
 
   pause(): void {
+    this.lastPosition = this.livePosition();
+    this.statusPlaying = false;
     this.pendingPlay = false;
     this.playlist?.pause();
   }
@@ -215,10 +262,14 @@ export class AudioEngine {
       return;
     }
     this.lastPosition = s;
+    this.statusAt = nowMs();
     void p.seekTo(s);
   }
 
   setRate(rate: number): void {
+    // Keep the live position right across the change.
+    this.lastPosition = this.livePosition();
+    this.statusAt = nowMs();
     this.rate = rate;
     if (this.playlist) this.playlist.playbackRate = rate;
   }
@@ -260,6 +311,10 @@ export class AudioEngine {
     }
     this.lockControls = null;
   }
+}
+
+function nowMs(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
 let engine: AudioEngine | null = null;

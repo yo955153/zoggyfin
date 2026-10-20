@@ -7,12 +7,16 @@ import { create } from 'zustand';
 import type { BaseItemDto } from '@/api/types';
 
 import { IDLE, type Phase } from './machine';
-import type { Advert, Member, SharedItem } from './protocol';
+import type { BleState } from './link-native-types';
+import type { Advert, MediaKind, Member, SharedItem } from './protocol';
 
 export type TogetherMode = 'none' | 'nearby' | 'syncplay';
 
-/** The screen that shows the session sheet. `join`: a screen with no item (sign-in, offline banner) that only joins. */
-export type SheetPlace = 'player' | 'item' | 'join';
+/**
+ * The screen that shows the session sheet. `join`: a screen with no item
+ * (sign-in, offline banner) that only joins. `music`: the music player.
+ */
+export type SheetPlace = 'player' | 'item' | 'join' | 'music';
 
 export interface JoinRequest {
   inviteId: string;
@@ -20,11 +24,39 @@ export interface JoinRequest {
   name: string;
   /** The guest has the item downloaded. */
   have: boolean;
+  /** The guest scanned or typed the host's code. */
+  code?: boolean;
+  /** The request came over Bluetooth (the devices then make a Wi-Fi link). */
+  ble?: boolean;
 }
 
 export interface NearbyHost {
+  /** A service id (found on the network) or a Bluetooth peer id. */
   peerId: string;
   advert: Advert;
+  /** `ble`: found over Bluetooth only; a join first makes a Wi-Fi link. */
+  via: 'network' | 'ble';
+}
+
+/** What the host shows so that guests can join by code. */
+export interface JoinCodeView {
+  link: string;
+  short: string;
+}
+
+/** A session that this device was in, saved for a short time so a restarted app can join it again. */
+export interface SavedSession {
+  sessionId: string;
+  key: string;
+  epoch: number;
+  role: 'host' | 'guest';
+  hostName: string;
+  title: string;
+  kind: MediaKind;
+  memberId: string;
+  /** The video item of the session (a host can start it again). */
+  itemId: string | null;
+  at: number;
 }
 
 export interface SyncQuality {
@@ -45,6 +77,8 @@ export interface SyncPlayGroupView {
 
 export interface TogetherState {
   mode: TogetherMode;
+  /** What the session shares. */
+  kind: MediaKind;
   role: 'host' | 'guest' | null;
   phase: Phase;
   item: SharedItem | null;
@@ -71,10 +105,25 @@ export interface TogetherState {
     loading: boolean;
     error: string | null;
   };
+  /** Host: the join code (QR link and short code). */
+  joinCode: JoinCodeView | null;
+  /** Host: who can find the session ("Apple devices nearby (direct)"). */
+  visibleTo: string[];
+  /** The Wi-Fi network this device made for the session (Android), for the Wi-Fi QR code. */
+  hotspot: { ssid: string; password: string } | null;
+  /** A Bluetooth rendezvous in progress: the step text for the sheet. */
+  rendezvous: { text: string; failed: boolean } | null;
+  /** When the guest started to look (ms, Date.now), for the help card. */
+  browsingSince: number | null;
+  localNetwork: 'denied' | 'ok' | 'unknown';
+  ble: BleState | null;
+  /** A session from before an app restart that can be joined again. */
+  rejoin: SavedSession | null;
 }
 
 export const initialTogether: TogetherState = {
   mode: 'none',
+  kind: 'video',
   role: null,
   phase: IDLE,
   item: null,
@@ -89,6 +138,14 @@ export const initialTogether: TogetherState = {
   notice: null,
   sheet: { open: false, where: 'item', item: null },
   syncplay: { groups: [], group: null, loading: false, error: null },
+  joinCode: null,
+  visibleTo: [],
+  hotspot: null,
+  rendezvous: null,
+  browsingSince: null,
+  localNetwork: 'unknown',
+  ble: null,
+  rejoin: null,
 };
 
 export const useTogetherStore = create<TogetherState>(() => initialTogether);
@@ -108,5 +165,9 @@ export function closeTogetherSheet(): void {
 
 /** True while a session runs (nearby or SyncPlay group). */
 export function useInTogether(): boolean {
-  return useTogetherStore((s) => s.mode !== 'none' && (s.phase.name === 'hosting' || s.phase.name === 'syncing' || s.phase.name === 'joined' || s.syncplay.group !== null));
+  return useTogetherStore(
+    (s) =>
+      s.mode !== 'none' &&
+      (s.phase.name === 'hosting' || s.phase.name === 'syncing' || s.phase.name === 'joined' || s.phase.name === 'reconnecting' || s.syncplay.group !== null),
+  );
 }

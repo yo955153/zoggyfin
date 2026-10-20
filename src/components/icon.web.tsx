@@ -4,7 +4,9 @@ import {
   ArrowUp,
   ArrowUpDown,
   AudioWaveform,
+  Bluetooth,
   Book,
+  Camera,
   Captions,
   Cast,
   Check,
@@ -31,6 +33,7 @@ import {
   House,
   Image,
   Info,
+  Keyboard,
   Layers,
   LayoutGrid,
   List,
@@ -53,6 +56,7 @@ import {
   Play,
   QrCode,
   Radio,
+  RadioTower,
   Repeat,
   Repeat1,
   Rewind,
@@ -229,6 +233,10 @@ const LUCIDE: Record<IconName, Glyph> = {
   'person.2.fill': { icon: Users },
   'person.2.slash': { icon: UserX },
   'lock.fill': { icon: Lock },
+  'dot.radiowaves.left.and.right': { icon: Bluetooth },
+  personalhotspot: { icon: RadioTower },
+  camera: { icon: Camera },
+  keyboard: { icon: Keyboard },
 };
 
 export function Icon({ name, size, color, weight }: IconProps) {

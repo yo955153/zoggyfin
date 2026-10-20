@@ -27,21 +27,46 @@ function write(): void {
   lines = [];
 }
 
+let events: string[] = [];
+
+/** Session events (development builds): `Documents/together-events.jsonl`, kept across role changes. */
+function writeEvents(): void {
+  if (!events.length) return;
+  try {
+    const f = new File(Paths.document, 'together-events.jsonl');
+    const old = f.exists ? f.textSync() : '';
+    f.write(old + events.join('\n') + '\n');
+  } catch {
+    // A measurement aid only.
+  }
+  events = [];
+}
+
 export const syncLog = {
-  start(r: 'host' | 'guest', read: () => { pos: number; playing: boolean }, now: () => number): void {
+  event(t: number, msg: string, data?: object): void {
+    if (!__DEV__) return;
+    events.push(JSON.stringify({ k: 'e', t, msg, ...data }));
+    setTimeout(writeEvents, 0);
+  },
+  /** `fresh`: a new session (the old log goes). A role change in the same session keeps the log. */
+  start(r: 'host' | 'guest', read: () => { pos: number; playing: boolean; track?: string | null }, now: () => number, fresh = true): void {
     if (!__DEV__) return;
     syncLog.stop();
     role = r;
     clock = now;
-    try {
-      const f = new File(Paths.document, 'together-log.jsonl');
-      if (f.exists) f.delete();
-    } catch {
-      // Ignore.
+    if (fresh) {
+      try {
+        for (const name of ['together-log.jsonl', 'together-events.jsonl']) {
+          const f = new File(Paths.document, name);
+          if (f.exists) f.delete();
+        }
+      } catch {
+        // Ignore.
+      }
     }
     poll = setInterval(() => {
-      const { pos, playing } = read();
-      lines.push(JSON.stringify({ k: 'p', r: role, t: clock(), pos, playing }));
+      const { pos, playing, track } = read();
+      lines.push(JSON.stringify({ k: 'p', r: role, t: clock(), pos, playing, ...(track ? { tr: track } : {}) }));
     }, 200);
     flush = setInterval(write, 2000);
   },

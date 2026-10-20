@@ -146,18 +146,30 @@ Phase 5 ("Watch together"):
 - A "Watch together" button in the video player and a "Together" action on video item pages
   open the session sheet. A "Together" indicator in the player shows the session; tap it to
   open the sheet.
-- Nearby mode (iPhone, iPad, Mac; no internet and no Jellyfin server needed): the host shares
-  a downloaded video from any saved server. People nearby see the session, ask to join, and
-  the host accepts or declines. A guest plays its own download of the same item (same server
-  and item Id) or streams the host's file over the local or peer-to-peer link. Everyone can
-  play, pause, seek and change the speed, or the host turns on "Only the host controls".
-  The group waits while a member loads. Multipeer Connectivity carries the messages.
+- Nearby mode (iPhone, iPad and the Mac app; Android from its next build, not tested yet;
+  no internet and no Jellyfin server needed):
+  the host shares a downloaded video, album, playlist or audiobook from any saved server.
+  People nearby see the session, ask to join, and the host accepts or declines. A guest
+  plays its own download of the same item (same server and item Id) or streams the host's
+  file. Everyone can play, pause, seek and change the speed (and, for audio, next, previous,
+  shuffle and repeat), or the host turns on "Only the host controls". The group waits while
+  a new member loads.
+- The link: Bonjour (`_zgf-together._tcp`) and one TCP port per session. Apple devices
+  connect directly with no router (peer-to-peer Wi-Fi); Android needs the same Wi-Fi or a
+  hotspot, which the Android device makes. A join code (QR code or short text) works on
+  Wi-Fi that hides devices from each other, for example in hotels and on planes.
+- Drops: nobody pauses when a device drops. A guest comes back by itself for 2 minutes, or
+  with "Rejoin" for 10 minutes after an app restart. When the host drops, the member that
+  joined first and has the media becomes the host.
+- Listen together: "Listen together" in the music player's ⋯ menu and on album and
+  playlist pages. A "Together" indicator shows in the full and mini music players.
 - Internet mode: Jellyfin SyncPlay groups on the signed-in server, on native and the web.
-  Start a group with the current item, join a group, play, pause and seek for everyone,
-  next and previous item of the group queue, leave.
+  Start a group with the current item or the audio queue, join a group, play, pause and
+  seek for everyone, next and previous item of the group queue, leave.
 - Sync: the host (nearby) or the server (SyncPlay) is the clock; each device measures its
   clock offset with ping/pong and corrects drift with small speed changes or a seek. On two
-  simulators the median sync error was 4 ms (streamed) and 15 ms (own download). See
+  simulators the median sync error was 2–11 ms for video and 5 ms for music; the Mac app
+  as a guest had 38 ms (video) and 75 ms (music). See
   [docs/specs/watch-together-spike.md](docs/specs/watch-together-spike.md).
 - Not on TV. The web has SyncPlay only.
 
@@ -165,7 +177,7 @@ Offline use (no sign-in needed):
 
 - With no account signed in, or when the server does not answer, the app offers
   "Downloads" (when a download is on the device, from any server) and
-  "Join a nearby session" (iPhone, iPad, Mac). They are on the sign-in screen and in the
+  "Join a nearby session" (iPhone, iPad, Mac app). They are on the sign-in screen and in the
   Home offline banner. Downloads play from the device; play one and use "Watch together"
   to host a nearby session. Signing out keeps the downloads.
 - When the host ends a session, a guest that streams the host's file leaves the player; a
@@ -196,8 +208,10 @@ The design is in [docs/specs](docs/specs/) and [docs/design](docs/design/).
 
 The native app includes a small local module, `modules/zoggyfin-native`, that reports
 hardware decoders and hardware keyboard presses, draws the system volume slider and runs
-nearby watch together (Multipeer Connectivity, a range server for the host's file and a
-loopback relay for the guest).
+the nearby transport for watch and listen together (Network.framework and Bluetooth LE on
+Apple devices, `NsdManager`, Bluetooth LE and the local-only hotspot on Android, a range
+server for the host's file and a loopback relay for Apple guests). The Mac app uses the
+same Swift code through `desktop/src-tauri/swift/`.
 It builds with the app.
 
 ## Run a development build

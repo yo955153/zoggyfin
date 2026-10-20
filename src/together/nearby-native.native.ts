@@ -1,37 +1,62 @@
 /**
- * The nearby native module (modules/zoggyfin-native, ZoggyfinTogetherModule):
- * Multipeer Connectivity, the media server and the guest relay. Optional: a
- * build without it (an older build that gets this code over the air) has
- * `nearbyNative === null`, and nearby mode stays hidden.
+ * The nearby native module on iOS, iPadOS and Android (modules/zoggyfin-native,
+ * `ZoggyfinTogether`): the transport of `link-native-types.ts`. Optional: a
+ * build without it (an older build that gets this code over the air, or a
+ * build with the old Multipeer module) has `linkNative === null`, and nearby
+ * mode stays hidden.
  */
 import { type EventSubscription, requireOptionalNativeModule } from 'expo';
 
-import type { NearbyEvents, NearbyNative } from './nearby-native-types';
+import type { LinkEvents, NearbyLinkNative } from './link-native-types';
+import type { NearbyNative } from './nearby-native-types';
 
-interface Module extends NearbyNative {
-  addListener<K extends keyof NearbyEvents>(name: K, listener: NearbyEvents[K]): EventSubscription;
-}
+type Module = Omit<NearbyLinkNative, 'on'> & {
+  addListener<K extends keyof LinkEvents>(name: K, listener: LinkEvents[K]): EventSubscription;
+};
 
 const mod = requireOptionalNativeModule<Module>('ZoggyfinTogether');
 
-export const nearbyNative: NearbyNative | null =
-  mod && typeof mod.startHosting === 'function'
-    ? {
-        monotonicNow: () => mod.monotonicNow(),
-        startHosting: (name, info) => mod.startHosting(name, info),
-        startBrowsing: (name) => mod.startBrowsing(name),
-        stopAdvertising: () => mod.stopAdvertising(),
-        stopBrowsing: () => mod.stopBrowsing(),
-        invite: (peerId, context) => mod.invite(peerId, context),
-        respond: (inviteId, accept) => mod.respond(inviteId, accept),
-        send: (text, peerIds, reliable) => mod.send(text, peerIds, reliable),
-        stop: () => mod.stop(),
-        startMediaServer: () => mod.startMediaServer(),
-        shareFile: (urlPath, filePath, mime) => mod.shareFile(urlPath, filePath, mime),
-        stopMediaServer: () => mod.stopMediaServer(),
-        startRelay: (service) => mod.startRelay(service),
-        stopRelay: () => mod.stopRelay(),
-        mediaStats: () => mod.mediaStats(),
-        on: (name, listener) => mod.addListener(name, listener),
-      }
-    : null;
+/** The old Multipeer API is gone. */
+export const nearbyNative: NearbyNative | null = null;
+
+function wrap(m: Module): NearbyLinkNative {
+  const opt = <K extends keyof NearbyLinkNative>(k: K) => (typeof m[k as keyof Module] === 'function' ? (m[k as keyof Module] as NearbyLinkNative[K]) : undefined);
+  return {
+    platform: m.platform === 'android' ? 'android' : 'apple',
+    monotonicNow: () => m.monotonicNow(),
+    randomBytes: (n) => m.randomBytes(n),
+    startServer: (name, txt) => m.startServer(name, txt),
+    stopAdvertising: () => m.stopAdvertising(),
+    shareFile: (path, file, mime) => m.shareFile(path, file, mime),
+    unshareAll: () => m.unshareAll(),
+    stopServer: () => m.stopServer(),
+    startBrowsing: () => m.startBrowsing(),
+    stopBrowsing: () => m.stopBrowsing(),
+    connect: (id) => m.connect(id),
+    connectAddress: (host, port) => m.connectAddress(host, port),
+    mediaBase: (id, host, port) => m.mediaBase(id, host, port),
+    stopRelay: () => m.stopRelay(),
+    send: (id, text) => m.send(id, text),
+    close: (id) => m.close(id),
+    addresses: () => m.addresses(),
+    stopAll: () => m.stopAll(),
+    mediaStats: () => m.mediaStats(),
+    startHotspot: opt('startHotspot')?.bind(m),
+    stopHotspot: opt('stopHotspot')?.bind(m),
+    bleState: opt('bleState')?.bind(m),
+    bleRequestPermission: opt('bleRequestPermission')?.bind(m),
+    bleAdvertise: opt('bleAdvertise')?.bind(m),
+    bleStopAdvertising: opt('bleStopAdvertising')?.bind(m),
+    bleScan: opt('bleScan')?.bind(m),
+    bleStopScan: opt('bleStopScan')?.bind(m),
+    bleSend: opt('bleSend')?.bind(m),
+    bleDisconnect: opt('bleDisconnect')?.bind(m),
+    bleStopAll: opt('bleStopAll')?.bind(m),
+    joinWifi: opt('joinWifi')?.bind(m),
+    leaveWifi: opt('leaveWifi')?.bind(m),
+    openSettings: opt('openSettings')?.bind(m),
+    on: (name, listener) => m.addListener(name, listener),
+  };
+}
+
+export const linkNative: NearbyLinkNative | null = mod && typeof mod.startServer === 'function' ? wrap(mod) : null;

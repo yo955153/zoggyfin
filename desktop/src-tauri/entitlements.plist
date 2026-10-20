@@ -5,8 +5,16 @@
   The app needs no exceptions: every dylib in Contents/Frameworks has the same
   Team ID, so library validation passes, and libmpv and FFmpeg use no JIT.
   Network access needs no entitlement outside the App Sandbox.
+  The hardened runtime blocks some resources unless the app has the entitlement:
+  - device.bluetooth: the nearby sessions find people over Bluetooth LE (CoreBluetooth).
+  - personal-information.location: CoreWLAN gives the Wi-Fi names only with the
+    Location permission (join the Wi-Fi of a nearby Android phone).
 -->
 <plist version="1.0">
 <dict>
+  <key>com.apple.security.device.bluetooth</key>
+  <true/>
+  <key>com.apple.security.personal-information.location</key>
+  <true/>
 </dict>
 </plist>

@@ -23,7 +23,11 @@ function busy(status: string): boolean {
   return status === 'loading' || status === 'buffering';
 }
 
-export function bindVideoPort(onOutside?: (control: UserControl) => void): BoundPort {
+/**
+ * `endPauses`: the host's port. When the film ends, it sends a pause to
+ * `onOutside`, so the group stops at the end. A guest's port only notes it.
+ */
+export function bindVideoPort(onOutside?: (control: UserControl) => void, opts: { endPauses?: boolean } = {}): BoundPort {
   const direct = videoSession().direct;
   let intent = playerState().playing;
   let buffering = busy(playerState().status);
@@ -46,6 +50,11 @@ export function bindVideoPort(onOutside?: (control: UserControl) => void): Bound
         setBuffering(false);
       }
     }
+    if (s.status === 'ended' && prev.status !== 'ended' && intent) {
+      intent = false;
+      if (opts.endPauses) onOutside?.({ action: 'pause' });
+      return;
+    }
     if (s.playing !== prev.playing && s.playing !== intent && !busy(s.status) && s.status !== 'ended' && s.now) {
       intent = s.playing;
       onOutside?.({ action: s.playing ? 'play' : 'pause' });
@@ -55,6 +64,9 @@ export function bindVideoPort(onOutside?: (control: UserControl) => void): Bound
   return {
     position: () => direct.position(),
     isPlaying: () => intent,
+    resync: () => {
+      intent = playerState().playing;
+    },
     isBuffering: () => buffering,
     play: () => {
       intent = true;

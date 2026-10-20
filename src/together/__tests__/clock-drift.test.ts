@@ -1,5 +1,5 @@
 import { ClockSync, isoToMs, measure, median } from '../clock';
-import { DriftCorrector, positionAt, reanchor } from '../drift';
+import { DriftCorrector, positionAt, reanchor, SEEK_ONLY_DRIFT } from '../drift';
 
 describe('measure', () => {
   it('finds the offset and round trip on a symmetric path', () => {
@@ -122,5 +122,53 @@ describe('DriftCorrector', () => {
     expect(d.decide({ expected: 30, actual: 10, groupRate: 1, now: 100 })).toEqual({ kind: 'none' });
     d.reset();
     expect(d.decide({ expected: 30, actual: 10, groupRate: 1, now: 100 }).kind).toBe('seek');
+  });
+});
+
+describe('DriftCorrector, seek only (web audio)', () => {
+  it('never changes the rate, and seeks above the threshold with the lead', () => {
+    const d = new DriftCorrector(SEEK_ONLY_DRIFT);
+    expect(d.decide({ expected: 10.1, actual: 10, groupRate: 1, now: 0 })).toEqual({ kind: 'none' });
+    const a = d.decide({ expected: 10.3, actual: 10, groupRate: 1, now: 0 });
+    expect(a.kind).toBe('seek');
+    expect(a.kind === 'seek' && a.position).toBeCloseTo(10.3 + SEEK_ONLY_DRIFT.seekLead);
+  });
+
+  it('waits for the cooldown after its seek', () => {
+    const d = new DriftCorrector(SEEK_ONLY_DRIFT);
+    d.decide({ expected: 10.5, actual: 10, groupRate: 1, now: 0 });
+    expect(d.decide({ expected: 11.5, actual: 10, groupRate: 1, now: SEEK_ONLY_DRIFT.seekCooldown - 1 })).toEqual({ kind: 'none' });
+  });
+
+  it('learns the lead from the drift its seek leaves', () => {
+    const d = new DriftCorrector(SEEK_ONLY_DRIFT);
+    const start = d.seekLead;
+    d.decide({ expected: 10.5, actual: 10, groupRate: 1, now: 0 });
+    // The seek left the player 80 ms behind: the next lead is 80 ms longer.
+    expect(d.decide({ expected: 20.08, actual: 20, groupRate: 1, now: 3000 })).toEqual({ kind: 'none' });
+    expect(d.seekLead).toBeCloseTo(start + 0.08);
+    // A player 200 ms ahead after the next seek: the lead gets shorter.
+    d.decide({ expected: 30.5, actual: 30, groupRate: 1, now: 4000 }); // seeks
+    d.decide({ expected: 40, actual: 40.2, groupRate: 1, now: 7000 }); // learns, then seeks again
+    expect(d.seekLead).toBeCloseTo(start + 0.08 - 0.2);
+  });
+
+  it('keeps the learned lead inside its limits, and a user seek does not teach it', () => {
+    const d = new DriftCorrector(SEEK_ONLY_DRIFT);
+    d.decide({ expected: 10.5, actual: 10, groupRate: 1, now: 0 });
+    d.decide({ expected: 30, actual: 20, groupRate: 1, now: 3000 });
+    expect(d.seekLead).toBe(1.5);
+    const e = new DriftCorrector(SEEK_ONLY_DRIFT);
+    e.decide({ expected: 10.5, actual: 10, groupRate: 1, now: 0 });
+    e.noteSeek(100);
+    e.decide({ expected: 20.08, actual: 20, groupRate: 1, now: 3000 });
+    expect(e.seekLead).toBe(SEEK_ONLY_DRIFT.seekLead);
+  });
+
+  it('the default corrector does not learn', () => {
+    const d = new DriftCorrector();
+    d.decide({ expected: 30, actual: 10, groupRate: 1, now: 0 });
+    d.decide({ expected: 40.3, actual: 40, groupRate: 1, now: 3000 });
+    expect(d.seekLead).toBe(0.1);
   });
 });

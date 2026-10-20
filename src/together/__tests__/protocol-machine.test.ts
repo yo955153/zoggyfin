@@ -63,7 +63,8 @@ describe('protocol', () => {
     expect(decodeJoinContext(null)).toBeNull();
     const ad = encodeAdvert({ sessionId: 's1', hostName: 'H'.repeat(100), itemId: 'i1', itemName: 'Film', serverId: 'srv' });
     expect(ad.h).toHaveLength(60);
-    expect(decodeAdvert(ad)).toEqual({ sessionId: 's1', hostName: 'H'.repeat(60), itemId: 'i1', itemName: 'Film', serverId: 'srv' });
+    expect(decodeAdvert(ad)).toEqual({ sessionId: 's1', hostName: 'H'.repeat(60), itemId: 'i1', itemName: 'Film', serverId: 'srv', kind: 'video', epoch: 0 });
+    expect(decodeAdvert(encodeAdvert({ sessionId: 's1', hostName: 'H', itemId: 'i1', itemName: 'Album', serverId: null, kind: 'audio', epoch: 2 }))).toMatchObject({ kind: 'audio', epoch: 2 });
     expect(decodeAdvert({ v: '1', s: 's', i: 'i' })?.serverId).toBeNull();
     expect(decodeAdvert({ v: '0', s: 's', i: 'i' })).toBeNull();
   });

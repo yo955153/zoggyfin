@@ -8,8 +8,30 @@
  * pauses) and plays again when everyone is ready.
  */
 import { positionAt } from './drift';
-import type { Anchor, ControlAction, Member, Message, SharedItem, StreamRef } from './protocol';
+import type { Anchor, ControlAction, MediaKind, Member, Message, SharedItem, SharedQueue, StreamRef } from './protocol';
 import type { PlayerPort, Timers } from './player-port';
+
+/** The queue actions of an audio session. */
+export type QueueAction = Extract<ControlAction, { action: 'next' | 'previous' | 'jump' | 'shuffle' | 'repeat' }>;
+
+/** The host's audio queue, for an audio session (`audio-binding.ts`). */
+export interface RoomQueue {
+  snapshot(): SharedQueue;
+  /** The key of the current queue entry. */
+  track(): string | null;
+  /** The player moved to another entry (the end of a track, or a queue action). */
+  onTrack(listener: (key: string) => void): () => void;
+  /** The order, the entries or the play modes changed. */
+  onQueue(listener: () => void): () => void;
+  apply(c: QueueAction): void;
+}
+
+export function isQueueAction(c: ControlAction): c is QueueAction {
+  return c.action === 'next' || c.action === 'previous' || c.action === 'jump' || c.action === 'shuffle' || c.action === 'repeat';
+}
+
+/** A member that is away is removed after this long, ms. */
+export const AWAY_LIMIT = 120_000;
 
 export interface RoomDeps {
   send(message: Message, to?: string[]): void;
@@ -23,6 +45,14 @@ export interface RoomDeps {
   onDenied?(peerId: string): void;
 }
 
+/** A member as the room keeps it: the public facts and the socket it uses now. */
+interface RoomMember extends Member {
+  peerId: string | null;
+  awayTimer: unknown;
+  /** A member that came back while the group plays: it catches up, the group does not wait for it. */
+  catchingUp?: boolean;
+}
+
 export interface RoomOptions {
   sessionId: string;
   item: SharedItem;
@@ -31,6 +61,17 @@ export interface RoomOptions {
   onlyHostControls: boolean;
   startLead?: number;
   heartbeatMs?: number;
+  kind?: MediaKind;
+  /** Audio: the host's queue. */
+  queue?: RoomQueue;
+  /** The session key that members use to come back (link.ts). */
+  key?: string;
+  epoch?: number;
+  /** The host's own member id. */
+  hostId?: string;
+  /** A new host: the anchor to start from (from its own player), and the members it takes over (all away until they come back). */
+  anchor?: Anchor;
+  members?: Member[];
 }
 
 export class HostRoom {
@@ -39,7 +80,15 @@ export class HostRoom {
   /** The group wants to play; it may still wait for a member that buffers. */
   private wantPlaying: boolean;
   private waiting = false;
-  private readonly members = new Map<string, Member>();
+  /** By member id. */
+  private readonly members = new Map<string, RoomMember>();
+  private readonly peerToMember = new Map<string, string>();
+  private unsubQueue: (() => void)[] = [];
+  readonly kind: MediaKind;
+  readonly key: string | null;
+  readonly epoch: number;
+  readonly hostId: string | null;
+  private readonly queue: RoomQueue | null;
   private hostBuffering = false;
   private startTimer: unknown = null;
   private heartbeat: unknown = null;
@@ -59,9 +108,21 @@ export class HostRoom {
     this.stream = opts.stream;
     this.onlyHostControls = opts.onlyHostControls;
     this.startLead = opts.startLead ?? 300;
+    this.kind = opts.kind ?? 'video';
+    this.queue = opts.queue ?? null;
+    this.key = opts.key ?? null;
+    this.epoch = opts.epoch ?? 0;
+    this.hostId = opts.hostId ?? null;
     const p = deps.player;
-    this.wantPlaying = p.isPlaying();
-    this.anchor = { playing: p.isPlaying(), rate: 1, hostTime: deps.now(), position: p.position() };
+    this.wantPlaying = opts.anchor ? opts.anchor.playing : p.isPlaying();
+    this.anchor = opts.anchor ?? { playing: p.isPlaying(), rate: 1, hostTime: deps.now(), position: p.position() };
+    for (const m of opts.members ?? []) {
+      this.members.set(m.id, { ...m, buffering: false, away: true, peerId: null, awayTimer: deps.timers.setTimeout(() => this.forget(m.id), AWAY_LIMIT) });
+    }
+    if (this.queue) {
+      const q = this.queue;
+      this.unsubQueue = [q.onTrack(() => this.trackChanged()), q.onQueue(() => this.broadcastQueue())];
+    }
     this.unsubBuffering = p.onBuffering((b) => {
       this.hostBuffering = b;
       this.updateWaiting();
@@ -70,7 +131,12 @@ export class HostRoom {
   }
 
   get memberList(): Member[] {
-    return [...this.members.values()];
+    return [...this.members.values()].map(({ peerId: _p, awayTimer: _t, catchingUp: _c, ...m }) => m);
+  }
+
+  /** The member id of a socket, or null. */
+  memberOf(peerId: string): string | null {
+    return this.peerToMember.get(peerId) ?? null;
   }
 
   get state(): { anchor: Anchor; waiting: boolean; wantPlaying: boolean } {
@@ -85,7 +151,28 @@ export class HostRoom {
         return;
       case 'hello': {
         const local = message.have.includes(this.item.id);
-        this.members.set(peerId, { id: peerId, name: message.name || 'Guest', local, buffering: true });
+        const id = message.memberId || peerId;
+        const old = this.members.get(id);
+        if (old) {
+          this.deps.timers.clearTimeout(old.awayTimer);
+          if (old.peerId && old.peerId !== peerId) this.peerToMember.delete(old.peerId);
+        }
+        // A member that comes back keeps its place (and its join time) for the host election.
+        this.members.set(id, {
+          id,
+          name: message.name || 'Guest',
+          local,
+          buffering: true,
+          joinedAt: old?.joinedAt ?? this.deps.now(),
+          canHost: message.canHost ?? false,
+          maker: message.maker ?? false,
+          away: false,
+          peerId,
+          awayTimer: null,
+          // Nobody pauses on a drop: a member that comes back while the group plays catches up.
+          catchingUp: !!old && this.wantPlaying,
+        });
+        this.peerToMember.set(peerId, id);
         this.deps.send(
           {
             t: 'welcome',
@@ -94,7 +181,12 @@ export class HostRoom {
             stream: this.stream,
             onlyHostControls: this.onlyHostControls,
             anchor: this.currentAnchor(),
-            you: peerId,
+            you: id,
+            kind: this.kind,
+            ...(this.queue ? { queue: this.queue.snapshot(), track: this.queue.track() ?? undefined } : {}),
+            ...(this.key ? { key: this.key } : {}),
+            epoch: this.epoch,
+            ...(this.hostId ? { hostId: this.hostId } : {}),
           },
           [peerId],
         );
@@ -104,7 +196,7 @@ export class HostRoom {
         return;
       }
       case 'control':
-        if (!this.members.has(peerId)) return;
+        if (!this.peerToMember.has(peerId)) return;
         if (this.onlyHostControls) {
           this.deps.send({ t: 'denied', reason: 'Only the host controls playback.' }, [peerId]);
           this.deps.onDenied?.(peerId);
@@ -113,32 +205,70 @@ export class HostRoom {
         this.apply(message);
         return;
       case 'buffering': {
-        const m = this.members.get(peerId);
-        if (!m) return;
-        this.members.set(peerId, { ...m, buffering: message.buffering, local: message.local });
+        const id = this.peerToMember.get(peerId);
+        const m = id ? this.members.get(id) : undefined;
+        if (!id || !m) return;
+        this.members.set(id, {
+          ...m,
+          buffering: message.buffering,
+          local: message.local,
+          canHost: message.canHost ?? m.canHost,
+          catchingUp: message.buffering ? m.catchingUp : false,
+        });
         this.broadcastMembers();
         this.updateWaiting();
         return;
       }
-      case 'leave':
-        this.removeMember(peerId);
+      case 'leave': {
+        const id = this.peerToMember.get(peerId);
+        this.peerToMember.delete(peerId);
+        if (id) this.forget(id);
         return;
+      }
       default:
         return;
     }
   }
 
-  /** The link to a guest closed. */
+  /**
+   * The link to a guest closed. The member stays in the list as away (the
+   * group does not wait for it) and can come back with the session key.
+   * After `AWAY_LIMIT` it is removed.
+   */
   removeMember(peerId: string): void {
-    if (!this.members.delete(peerId)) return;
+    const id = this.peerToMember.get(peerId);
+    this.peerToMember.delete(peerId);
+    const m = id ? this.members.get(id) : undefined;
+    if (!id || !m || m.peerId !== peerId) return;
+    this.members.set(id, { ...m, away: true, buffering: false, peerId: null, awayTimer: this.deps.timers.setTimeout(() => this.forget(id), AWAY_LIMIT) });
     this.broadcastMembers();
     this.updateWaiting();
+  }
+
+  private forget(id: string): void {
+    const m = this.members.get(id);
+    if (!m) return;
+    this.deps.timers.clearTimeout(m.awayTimer);
+    if (m.peerId) this.peerToMember.delete(m.peerId);
+    this.members.delete(id);
+    this.broadcastMembers();
+    this.updateWaiting();
+  }
+
+  /** The sockets of the members that are connected now. */
+  private get peers(): string[] {
+    return [...this.members.values()].map((m) => m.peerId).filter((p): p is string => p !== null);
   }
 
   /** A control from the host's own player. */
   apply(c: ControlAction): void {
     const p = this.deps.player;
     const now = this.deps.now();
+    if (isQueueAction(c)) {
+      // The queue changes the player; the track and queue listeners tell the group.
+      this.queue?.apply(c);
+      return;
+    }
     switch (c.action) {
       case 'play':
         this.wantPlaying = true;
@@ -199,10 +329,28 @@ export class HostRoom {
     this.cancelStart();
     this.deps.timers.clearInterval(this.heartbeat);
     this.unsubBuffering();
+    this.unsubQueue.forEach((u) => u());
+    this.unsubQueue = [];
+    for (const m of this.members.values()) this.deps.timers.clearTimeout(m.awayTimer);
   }
 
+  /** Members that are away, or that came back and catch up, do not hold the group. */
   private blocked(): boolean {
-    return this.hostBuffering || [...this.members.values()].some((m) => m.buffering);
+    return this.hostBuffering || [...this.members.values()].some((m) => m.buffering && !m.away && !m.catchingUp);
+  }
+
+  /** Audio: the host's player moved to another queue entry. The new track starts at 0 now. */
+  private trackChanged(): void {
+    if (this.startTimer !== null) return;
+    this.anchor = { ...this.anchor, hostTime: this.deps.now(), position: 0 };
+    this.broadcastState();
+  }
+
+  private broadcastQueue(): void {
+    if (!this.queue) return;
+    this.seq += 1;
+    if (this.peers.length) this.deps.send({ t: 'queue', seq: this.seq, queue: this.queue.snapshot() }, this.peers);
+    this.deps.onChange?.();
   }
 
   private scheduleStart(position: number): void {
@@ -257,17 +405,18 @@ export class HostRoom {
   private beat(): void {
     if (this.startTimer !== null) return;
     this.anchor = this.currentAnchor();
-    if (this.members.size) this.broadcastState();
+    if (this.peers.length) this.broadcastState();
   }
 
   private broadcastState(): void {
     this.seq += 1;
-    if (this.members.size) this.deps.send({ t: 'state', seq: this.seq, anchor: this.anchor, waiting: this.waiting });
+    const track = this.queue?.track() ?? undefined;
+    if (this.peers.length) this.deps.send({ t: 'state', seq: this.seq, anchor: this.anchor, waiting: this.waiting, ...(track ? { track } : {}) }, this.peers);
     this.deps.onChange?.();
   }
 
   private broadcastMembers(): void {
-    if (this.members.size) this.deps.send({ t: 'members', members: this.memberList, onlyHostControls: this.onlyHostControls });
+    if (this.peers.length) this.deps.send({ t: 'members', members: this.memberList, onlyHostControls: this.onlyHostControls }, this.peers);
     this.deps.onChange?.();
   }
 }

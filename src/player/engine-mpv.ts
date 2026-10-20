@@ -7,6 +7,7 @@
 import { desktopWindow, localPath, mpv, type MpvEvent, type MpvTrack, nowPlaying, type NowPlayingInfo, type RemoteCommand } from '@/platform/desktop';
 
 import type { EngineEvent, EngineListener, EngineSource, EngineSubtitle, VideoEngine } from './engine-types';
+import { PositionLine } from './position-line';
 
 /** What Now Playing shows for the current state; null when nothing plays. */
 export function nowPlayingInfo(
@@ -38,6 +39,15 @@ export class MpvEngine implements VideoEngine {
   /** One libmpv call at a time, in order. */
   private chain: Promise<unknown> = Promise.resolve();
   private pos = 0;
+  /**
+   * The position while the video plays: libmpv reports it late, by a
+   * different time each time (see position-line.ts). A real wait for data
+   * comes as `paused-for-cache`.
+   */
+  private line = new PositionLine();
+  /** True while the video waits: a seek, or the cache. */
+  private seeking = false;
+  private stalled = false;
   private cacheEnd = 0;
   /** A file is loading or loaded (libmpv also reports properties while idle). */
   private active = false;
@@ -111,6 +121,7 @@ export class MpvEngine implements VideoEngine {
         this.tracksNow = e.tracks;
         break;
       case 'playback-restart':
+        this.seeking = false;
         // After a seek: Now Playing moves its time from the new position.
         if (this.active) this.publish();
         break;
@@ -137,12 +148,17 @@ export class MpvEngine implements VideoEngine {
   };
 
   private onProp(name: string, value: number | boolean | string | null) {
-    if (name === 'pause' && typeof value === 'boolean') this.paused = value;
+    if (name === 'pause' && typeof value === 'boolean') {
+      this.paused = value;
+      this.line.reset();
+    }
     if (!this.active) return;
     switch (name) {
       case 'time-pos':
         if (typeof value === 'number') {
           this.pos = value;
+          if (this.paused || this.seeking || this.stalled) this.line.reset();
+          this.line.report(value, performance.now());
           this.emit({ type: 'time', position: value, buffered: Math.max(value, this.cacheEnd) });
         }
         break;
@@ -162,11 +178,23 @@ export class MpvEngine implements VideoEngine {
           this.emit({ type: 'playing', playing: !value });
         }
         break;
+      case 'seeking':
+        if (typeof value === 'boolean') {
+          this.seeking = value;
+          this.line.reset();
+        }
+        break;
       case 'paused-for-cache':
+        if (typeof value === 'boolean') {
+          this.stalled = value;
+          this.line.reset();
+        }
         if (this.loaded && typeof value === 'boolean') this.emit({ type: 'status', status: value ? 'loading' : 'ready' });
         break;
       case 'speed':
         if (typeof value === 'number') {
+          // Keep the position now, then move on at the new rate.
+          this.line.rerate(performance.now(), this.rate);
           this.rate = value;
           this.publish();
           this.emit({ type: 'rate', rate: value });
@@ -182,8 +210,15 @@ export class MpvEngine implements VideoEngine {
     }
   }
 
+  /**
+   * The position now. libmpv sends `time-pos` at most four times a second
+   * (see mpv/player.rs), so the last value is up to 250 ms old: while the
+   * video plays, it moves on by the time since it came. Watch together
+   * compares positions to the millisecond.
+   */
   get position(): number {
-    return this.pos;
+    if (!this.active || !this.loaded || this.paused || this.seeking || this.stalled) return this.pos;
+    return this.line.at(performance.now(), this.rate) ?? this.pos;
   }
 
   load(source: EngineSource): void {
@@ -191,6 +226,9 @@ export class MpvEngine implements VideoEngine {
     this.active = true;
     this.loaded = false;
     this.pos = start;
+    this.line.reset();
+    this.seeking = false;
+    this.stalled = false;
     this.cacheEnd = 0;
     this.tracksNow = [];
     this.added.clear();
@@ -231,6 +269,8 @@ export class MpvEngine implements VideoEngine {
 
   seekTo(seconds: number): void {
     this.pos = Math.max(0, seconds);
+    this.seeking = true;
+    this.line.reset();
     this.run(() => mpv.command('seek', this.pos.toFixed(3), 'absolute'));
   }
 

@@ -7,6 +7,11 @@
  *                       ▲                      │ DISCONNECTED (declined)               │
  *                       └──────────────────────┘          HOST_ENDED / DISCONNECTED ──▶ ended
  *   any ──LEAVE / RESET──▶ idle;  any ──FAIL──▶ ended
+ *
+ * A guest that loses the link to the host keeps playing:
+ *   joined ──LINK_LOST──▶ reconnecting ──RELINKED──▶ joined
+ *                              │ PROMOTED (this device is the new host) ──▶ hosting
+ *                              └ GIVE_UP ──▶ ended
  */
 
 export type EndReason = 'host-ended' | 'lost' | 'error';
@@ -18,6 +23,8 @@ export type Phase =
   | { name: 'requesting'; hostPeerId: string; hostName: string }
   | { name: 'syncing'; hostPeerId: string; hostName: string }
   | { name: 'joined'; hostPeerId: string; hostName: string; sessionId: string }
+  /** The link to the host is lost; the player plays on. `waitingForHost`: no other member has the media. */
+  | { name: 'reconnecting'; hostName: string; sessionId: string; since: number; waitingForHost: boolean }
   | { name: 'ended'; reason: EndReason; message: string };
 
 export type PhaseEvent =
@@ -31,7 +38,12 @@ export type PhaseEvent =
   | { type: 'END' }
   | { type: 'LEAVE' }
   | { type: 'FAIL'; message: string }
-  | { type: 'RESET' };
+  | { type: 'RESET' }
+  | { type: 'LINK_LOST'; at: number }
+  | { type: 'RELINKED'; hostPeerId: string; hostName: string }
+  | { type: 'WAITING_FOR_HOST'; waiting: boolean }
+  | { type: 'PROMOTED' }
+  | { type: 'GIVE_UP'; message: string };
 
 export const IDLE: Phase = { name: 'idle' };
 
@@ -71,10 +83,24 @@ export function transition(phase: Phase, event: PhaseEvent): Phase {
       return { name: 'ended', reason: 'error', message: event.message };
     case 'RESET':
       return phase.name === 'idle' ? phase : IDLE;
+    case 'LINK_LOST':
+      return phase.name === 'joined'
+        ? { name: 'reconnecting', hostName: phase.hostName, sessionId: phase.sessionId, since: event.at, waitingForHost: false }
+        : phase;
+    case 'RELINKED':
+      return phase.name === 'reconnecting'
+        ? { name: 'joined', hostPeerId: event.hostPeerId, hostName: event.hostName, sessionId: phase.sessionId }
+        : phase;
+    case 'WAITING_FOR_HOST':
+      return phase.name === 'reconnecting' && phase.waitingForHost !== event.waiting ? { ...phase, waitingForHost: event.waiting } : phase;
+    case 'PROMOTED':
+      return phase.name === 'reconnecting' ? { name: 'hosting', sessionId: phase.sessionId } : phase;
+    case 'GIVE_UP':
+      return phase.name === 'reconnecting' ? { name: 'ended', reason: 'lost', message: event.message } : phase;
   }
 }
 
 /** True while this device is in a session (as host or guest). */
 export function inSession(phase: Phase): boolean {
-  return phase.name === 'hosting' || phase.name === 'syncing' || phase.name === 'joined';
+  return phase.name === 'hosting' || phase.name === 'syncing' || phase.name === 'joined' || phase.name === 'reconnecting';
 }

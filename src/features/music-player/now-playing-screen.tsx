@@ -15,7 +15,10 @@ import { useApi } from '@/api/use-api';
 import { Icon, type IconName } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
 import { ToastHost } from '@/components/toast-host';
+import { useSessionStore } from '@/auth/session-store';
 import { canDownload, downloads, findDownload } from '@/downloads';
+import { TogetherPill } from '@/features/together/together-pill';
+import { TogetherSheetHost } from '@/features/together/together-sheet';
 import { openAddToPlaylist } from '@/features/playlists/add-to-playlist';
 import { useHideDevToolsButton } from '@/lib/dev-tools';
 import { itemHref } from '@/lib/navigation';
@@ -29,7 +32,11 @@ import { formatRemaining, SLEEP_MINUTES, sleepAtEnd, sleepFor, sleepOff, sleepRe
 import { useAudioStore } from '@/player/audio/store';
 import { playerState, setPlayerState, usePlayerStore } from '@/player/store';
 import { chapterAt, formatTime } from '@/player/timeline';
+import { features } from '@/platform/tv';
 import { font, scriptStyle, type } from '@/theme';
+import { nearbySupported } from '@/together/nearby';
+import { openTogetherSheet } from '@/together/store';
+import { syncPlaySupported } from '@/together/syncplay';
 
 import { AirPlayButton } from '../player/airplay-button';
 import { Glass } from '../player/glass';
@@ -104,6 +111,7 @@ export function NowPlayingScreen() {
   const { width, height } = useWindowDimensions();
   const reduced = useReducedMotion();
   const { api, userId } = useApi();
+  const signedIn = useSessionStore((st) => !!st.session);
   const s = audioSession();
 
   useHideDevToolsButton();
@@ -447,6 +455,7 @@ export function NowPlayingScreen() {
       <Pressable onPress={minimize} style={styles.closeButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close the player. Music keeps playing">
         <Icon name="chevron.down" size={iconSize.md} color={c.textOnMediaSecondary} weight="semibold" />
       </Pressable>
+      <TogetherPill top={insets.top + spacing.xs} right={spacing.lg} onPress={() => openTogetherSheet('music', null)} />
     </View>
   );
 
@@ -575,6 +584,17 @@ export function NowPlayingScreen() {
                     ...(canDownload(item) && findDownload(item.Id)?.state !== 'completed'
                       ? [{ key: 'download', label: 'Download this song', selected: false, onPress: () => void downloads.download(item) }]
                       : []),
+                    ...(features.watchTogether && (nearbySupported || (syncPlaySupported && signedIn))
+                      ? [
+                          {
+                            key: 'together',
+                            label: 'Listen together',
+                            selected: false,
+                            // The menu closes first: one sheet at a time.
+                            onPress: () => setTimeout(() => openTogetherSheet('music', item), 300),
+                          },
+                        ]
+                      : []),
                     { key: 'mix', label: 'Instant mix from this song', selected: false, onPress: () => void s.instantMix(item) },
                     { key: 'queue', label: 'Add to queue again', selected: false, onPress: () => void s.addToQueue(item) },
                     { key: 'stop', label: 'Stop playback', selected: false, onPress: () => void s.stop() },
@@ -591,6 +611,7 @@ export function NowPlayingScreen() {
       <ArtBackground item={item} />
       <Animated.View style={[styles.root, frameStyle, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>{body}</Animated.View>
       <PlayerSheet visible={sheet !== null} title={sheetTitle} sections={sheetSections} onClose={() => setSheet(null)} />
+      <TogetherSheetHost where="music" />
       <ToastHost overlay />
     </KeyInput>
   );

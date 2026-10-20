@@ -227,10 +227,11 @@ this repo.
 People watch or listen to the same item in sync, even with no internet (for example on
 a plane).
 
-- **Nearby mode (no internet, no router)**: Apple Multipeer Connectivity
-  (Bluetooth + peer-to-peer Wi-Fi) between iPhone, iPad and Mac, in a native Expo
-  module behind `src/together/transport`. Android joins later through Wi-Fi Aware, if
-  the iOS 26 API allows it.
+- **Nearby mode (no internet)**: one transport on every platform: Bonjour / DNS-SD
+  (`_zgf-together._tcp`), TCP with framed messages and an HTTP range server on one port.
+  iPhone, iPad and the Mac app connect directly with no router (peer-to-peer Wi-Fi).
+  Android needs a shared Wi-Fi or a hotspot; Bluetooth LE lets an Android device make
+  that hotspot by itself. See "Nearby transport (part 2)" below.
 - **Who can join**: anyone nearby with the app. No Jellyfin account is needed. The host
   sees each join request and accepts it.
 - **Media source**: if the guest has the same item downloaded (match on Jellyfin item id
@@ -295,10 +296,113 @@ The spike results are in `docs/specs/watch-together-spike.md`.
 - **Toasts in the players**: the video and music players are native modals over the root
   view, so each mounts its own toast host (under the top controls in the video player).
   While a player's host is mounted, the root host shows nothing.
-- **Deviations**: audio items are not shared yet; nearby and SyncPlay sessions are for
-  video. Sharing audio needs the guest's audio engine (expo-audio and its queue) bound to
-  the session, which the player binding does not do (it binds the video player only).
-  This is not a small change, so it waits for a later phase.
+- **Deviations**: none left from this list. Audio came in part 2 (below).
+
+### Nearby transport (part 2)
+
+Multipeer Connectivity is Apple-only, so it could not talk to Android or the desktop app.
+Part 2 replaces it with one transport for every platform. The contract and the wire format
+are in `src/together/link-native-types.ts`.
+
+- **Discovery**: DNS-SD service `_zgf-together._tcp` with a TXT record (session id, host
+  name, item, kind, epoch). iOS, iPadOS and macOS: Network.framework (`NWListener`,
+  `NWBrowser`, `NWConnection`, all with `includePeerToPeer`), so Apple devices connect
+  with no router (AWDL). Android: `NsdManager`. Multipeer is gone: Network.framework gives
+  the same peer-to-peer links, and one transport is simpler to keep in sync.
+- **One port per session**: a connection that starts with `ZGF1` is a control socket
+  (4-byte big-endian length + UTF-8 JSON per frame). Any other connection is HTTP/1.1 with
+  byte ranges, for the shared files at `/<token>/<n>.<ext>`. The port closes with the
+  session. Apple guests read the host's files through a loopback relay (a player cannot
+  open a Bonjour name or a scoped AWDL address); Android and the desktop app read
+  `http://<address>:<port>/…`.
+- **Code**: the Swift transport (`NearbyCore.swift`, `MediaServer.swift`, `NearbyBle.swift`,
+  `WifiJoin.swift`) is shared by the iOS module and the Mac app (a C bridge,
+  `desktop/src-tauri/swift/`, compiled by `build.rs`; `src/together/link-desktop.ts` on the
+  JavaScript side). Android: `ZoggyfinTogetherModule.kt`, `NearbyBle.kt`, `NearbyWifi.kt`.
+  The handshake (`link.ts`), the protocol, the clock, the drift logic and the recovery
+  rules are shared JavaScript.
+- **Handshake** (`link.ts`): the guest sends `join` (name, has a copy, member id, maybe a
+  key). The host accepts or declines. A guest with the session key (a reconnect, or a
+  member that follows a new host) gets in with no new approval.
+- **Security**: the host approves each new guest; every file path has a random token; the
+  port is open only during the session. The TCP link has no encryption (the session
+  messages and the files are not secret enough to need it on a local network); the
+  Bluetooth rendezvous encrypts the Wi-Fi password (below). Known limit: the session key
+  goes in clear text in the welcome, so a device that reads the network traffic could
+  rejoin with it and skip the approval.
+- **Join code**: the host shows a QR code (`zoggyfin://join?v=1&a=<addresses>&p=<port>&s=<session>&k=<code key>`)
+  and a short text code (one address, the port and a key prefix, 17 Crockford base32
+  characters). The Camera app opens the link in Zoggyfin (route `/join`). The code works
+  when the Wi-Fi hides devices from each other (common in hotels and on planes). The host
+  still approves (`join-code.ts`).
+- **Help**: the host sheet shows who can find the session ("Visible to"); a guest that
+  finds nothing for 8 s gets a help card (`nearby-help.ts`): permissions, same Wi-Fi,
+  Apple devices connect directly, the Android device makes the hotspot, the code.
+- **No Wi-Fi with Android**: an iPhone with no mobile data cannot turn on Personal
+  Hotspot, and iOS apps cannot make a Wi-Fi network. So the Android device makes the
+  network (`WifiManager.startLocalOnlyHotspot`), whatever its role, and shows a Wi-Fi QR
+  code (`WIFI:T:WPA;S:…;P:…;;`).
+- **Bluetooth LE rendezvous** (`rendezvous.ts`, `rendezvous-crypto.ts`): the host
+  advertises a GATT service with an INFO characteristic (session, host, title, kind,
+  platform, can make a hotspot, can join a Wi-Fi). The guest list merges sessions from the
+  network and from Bluetooth ("Needs a quick Wi-Fi link"). On Join the two devices do an
+  X25519 key exchange (HKDF-SHA256, XChaCha20-Poly1305; the audited `@noble` libraries),
+  the host approves, the Android device makes a local-only hotspot and sends the SSID and
+  the password encrypted; the other device joins it (iOS `NEHotspotConfiguration`, macOS
+  CoreWLAN, Android `WifiNetworkSpecifier`) and connects to the host's address with the
+  session key. Known limit: the key exchange has no authentication, so a device in
+  Bluetooth range could read the Wi-Fi password with an active attack.
+
+### Listen together (part 2)
+
+- **Audio port** (`audio-binding.ts`): the audio session (`src/player/audio/session.ts`)
+  has the same gate as video (play, pause, seek, rate, and for queues next, previous, a
+  jump, shuffle and repeat) and a `direct` API for the session. The audio position is the
+  last engine status moved on by the time since it came (the status comes every 500 ms).
+- **Shared queue**: the host sends its queue (entry keys, items, order, current index,
+  shuffle, repeat, long-form) in the welcome and after each change; each `state` names
+  the entry (`track`) that its anchor applies to. Guests keep the host's entry keys, so a
+  track change names the same entry everywhere. A guest's queue edits are locked; its
+  Next, Previous and queue taps go to the host.
+- **Track changes**: the host's gapless change re-anchors the group at position 0 of the
+  new entry. A guest whose player is on the entry before it, less than 2 s from its end,
+  waits for its own gapless change; else it loads the entry at the group position.
+- **Media per track**: the guest's own download (server id + item id), else the host's
+  file over the session port, else the server stream when the guest is signed in to that
+  server.
+- **Long-form audio** uses the same path; the rate is the group rate.
+- **Drift per player**: a port can carry its own drift options. The web audio element (the
+  Mac app) loses time on every rate change, so it corrects by seeks only, with a seek lead
+  learned from its own seeks (`SEEK_ONLY_DRIFT`). Measurements: `watch-together-spike.md`.
+- **SyncPlay**: the group queue plays in the audio player with SyncPlay's playlist item
+  ids as entry keys. Next, Previous, a queue jump, shuffle and repeat go to the server. At
+  a gapless change a device asks the server for the next item (the server takes the first
+  request). Speed is not shared (SyncPlay has no speed).
+
+### When a device drops off (part 2)
+
+Rules in `recovery.ts` (unit-tested); the host room keeps members that drop as away.
+
+- Nobody pauses because a peer is gone. The pill and the sheet show "Reconnecting…".
+- A guest that drops tries again for 2 minutes (0.5 s, 1 s, 2 s, 4 s, 8 s, then every
+  10 s) with the session key: Bonjour, the last address, or Bluetooth. Then it resyncs.
+- When the host drops, the guests try it for 6 s, then elect a new host: only a member
+  that has all the media (its own downloads) can be host; the earliest joined wins, ties
+  go to the lower member id. Every member has the host's member list, so every member
+  elects the same device with no extra messages. The new host continues from its own
+  player (no jump), advertises the same session with a higher epoch, and the others join
+  it with the session key. Guests that streamed switch to the new host's files.
+- With no member that has the media, the guests play on until their buffer is empty and
+  show "<host> has the file. Waiting for them to come back…".
+- A member that comes back while the group plays does not hold the group while it loads;
+  it catches up. A new member still holds the group until it has loaded.
+- A host that comes back after a new host took over joins as a member (it does not take
+  the session back: a second change would disturb everyone again).
+- At the end of a film the host's player stays at the end and the group pauses there.
+- When the device that made the Wi-Fi drops, the network is gone: devices with their own
+  copy play on; the others find the session again over Bluetooth, where another Android
+  device can make a new network.
+- After an app restart, the session is kept for 10 minutes; the sheet offers "Rejoin".
 
 ## Offline use (no sign-in)
 

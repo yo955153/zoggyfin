@@ -5,91 +5,24 @@
 import Foundation
 import Network
 
-/// Bonjour service type of the media server (must be in NSBonjourServices).
-let mediaServiceType = "_zgf-media._tcp"
-
-/// A small HTTP/1.1 server for GET and HEAD with byte ranges, enough for
-/// AVPlayer to play a shared file. It listens on all interfaces, including
-/// peer-to-peer Wi-Fi, and publishes itself with Bonjour. Only shared paths
-/// answer; a path holds a random token.
-final class MediaServer {
-  private let queue = DispatchQueue(label: "zoggyfin.media-server")
-  private var listener: NWListener?
+/// The files that the session port serves over HTTP. A URL path holds a
+/// random token, so only guests that got the path from the host can read a file.
+final class SharedFiles {
   private var files: [String: (path: String, mime: String)] = [:]
-  private var connections: [ObjectIdentifier: HTTPConnection] = [:]
   private(set) var bytesServed: Int = 0
   private(set) var requests: Int = 0
-  private var name = ""
 
-  func start(completion: @escaping (Result<(UInt16, String), Error>) -> Void) {
-    queue.async {
-      if let l = self.listener, let port = l.port {
-        completion(.success((port.rawValue, self.name)))
-        return
-      }
-      do {
-        let params = NWParameters.tcp
-        params.includePeerToPeer = true
-        let l = try NWListener(using: params)
-        let name = "zgf-\(UUID().uuidString.prefix(8).lowercased())"
-        self.name = name
-        l.service = NWListener.Service(name: name, type: mediaServiceType)
-        var done = false
-        l.stateUpdateHandler = { state in
-          switch state {
-          case .ready:
-            if !done, let port = l.port {
-              done = true
-              completion(.success((port.rawValue, name)))
-            }
-          case .failed(let error):
-            if !done {
-              done = true
-              completion(.failure(error))
-            }
-            self.stop()
-          default:
-            break
-          }
-        }
-        l.newConnectionHandler = { [weak self] conn in
-          guard let self else { return }
-          let c = HTTPConnection(connection: conn, server: self, queue: self.queue)
-          self.connections[ObjectIdentifier(c)] = c
-          c.start()
-        }
-        l.start(queue: self.queue)
-        self.listener = l
-      } catch {
-        completion(.failure(error))
-      }
-    }
-  }
-
+  // All calls on the queue of the owner (NearbyCore).
   func share(urlPath: String, filePath: String, mimeType: String) {
-    queue.async {
-      self.files.removeAll()
-      self.files[urlPath] = (filePath, mimeType)
-    }
+    files[urlPath] = (filePath, mimeType)
   }
 
-  func stop() {
-    queue.async {
-      self.listener?.cancel()
-      self.listener = nil
-      self.files.removeAll()
-      for c in self.connections.values { c.cancel() }
-      self.connections.removeAll()
-    }
+  func removeAll() {
+    files.removeAll()
   }
 
-  // Called on `queue` by connections.
   func file(for path: String) -> (path: String, mime: String)? {
     files[path]
-  }
-
-  func closed(_ c: HTTPConnection) {
-    connections.removeValue(forKey: ObjectIdentifier(c))
   }
 
   func count(bytes: Int) {
@@ -101,19 +34,24 @@ final class MediaServer {
   }
 }
 
-/// One TCP connection; serves requests one after the other (keep-alive).
+/// One HTTP/1.1 connection: GET and HEAD with one byte range, enough for
+/// AVPlayer, ExoPlayer and libmpv. Serves requests one after the other
+/// (keep-alive). The connection is already started; `initial` holds the
+/// bytes that were read to tell HTTP from a control socket.
 final class HTTPConnection {
   private let connection: NWConnection
-  private weak var server: MediaServer?
-  private let queue: DispatchQueue
-  private var buffer = Data()
+  private let files: SharedFiles
+  private let onClose: (HTTPConnection) -> Void
+  private var buffer: Data
   private var handle: FileHandle?
+  private var closed = false
   private static let chunk = 256 * 1024
 
-  init(connection: NWConnection, server: MediaServer, queue: DispatchQueue) {
+  init(connection: NWConnection, initial: Data, files: SharedFiles, onClose: @escaping (HTTPConnection) -> Void) {
     self.connection = connection
-    self.server = server
-    self.queue = queue
+    self.buffer = initial
+    self.files = files
+    self.onClose = onClose
   }
 
   func start() {
@@ -125,7 +63,6 @@ final class HTTPConnection {
         break
       }
     }
-    connection.start(queue: queue)
     readRequest()
   }
 
@@ -134,9 +71,11 @@ final class HTTPConnection {
   }
 
   private func finish() {
+    guard !closed else { return }
+    closed = true
     try? handle?.close()
     handle = nil
-    server?.closed(self)
+    onClose(self)
   }
 
   private func readRequest() {
@@ -162,7 +101,7 @@ final class HTTPConnection {
   }
 
   private func handle(head: String) {
-    server?.countRequest()
+    files.countRequest()
     let lines = head.components(separatedBy: "\r\n")
     let parts = (lines.first ?? "").split(separator: " ")
     guard parts.count >= 2 else { return respond(400, "Bad Request") }
@@ -174,7 +113,7 @@ final class HTTPConnection {
       headers[line[..<colon].lowercased()] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
     }
     guard method == "GET" || method == "HEAD" else { return respond(405, "Method Not Allowed") }
-    guard let file = server?.file(for: path),
+    guard let file = files.file(for: path),
           let attrs = try? FileManager.default.attributesOfItem(atPath: file.path),
           let size = (attrs[.size] as? NSNumber)?.int64Value
     else { return respond(404, "Not Found") }
@@ -247,7 +186,7 @@ final class HTTPConnection {
         self.connection.cancel()
         return
       }
-      self.server?.count(bytes: data.count)
+      self.files.count(bytes: data.count)
       self.pump(remaining: remaining - Int64(data.count))
     })
   }
@@ -290,13 +229,14 @@ final class HTTPConnection {
 }
 
 /// Guest side: a loopback TCP port. Each connection opens a connection to
-/// the host's media service (over peer-to-peer Wi-Fi when there is no
-/// router) and copies bytes both ways, so AVPlayer reads
-/// http://127.0.0.1:<port>/<path> like any web file.
+/// the host's session port (over peer-to-peer Wi-Fi when there is no
+/// router) and copies bytes both ways, so a player reads
+/// http://127.0.0.1:<port>/<path> like any web file. A player cannot open a
+/// Bonjour name, and an AWDL address has a scope that a URL cannot hold.
 final class MediaRelay {
   private let queue = DispatchQueue(label: "zoggyfin.media-relay")
   private var listener: NWListener?
-  private var service = ""
+  private var target: NWEndpoint?
   private var pipes: [ObjectIdentifier: Pipe] = [:]
   private(set) var bytesRelayed: Int = 0
 
@@ -309,14 +249,14 @@ final class MediaRelay {
     }
   }
 
-  func start(service: String, completion: @escaping (Result<UInt16, Error>) -> Void) {
+  func start(target: NWEndpoint, completion: @escaping (Result<UInt16, Error>) -> Void) {
     queue.async {
-      if let l = self.listener, let port = l.port, self.service == service {
+      if let l = self.listener, let port = l.port, self.target == target {
         completion(.success(port.rawValue))
         return
       }
       self.stopNow()
-      self.service = service
+      self.target = target
       do {
         let params = NWParameters.tcp
         params.requiredInterfaceType = .loopback
@@ -354,6 +294,7 @@ final class MediaRelay {
   private func stopNow() {
     listener?.cancel()
     listener = nil
+    target = nil
     for p in pipes.values {
       p.a.cancel()
       p.b.cancel()
@@ -362,9 +303,11 @@ final class MediaRelay {
   }
 
   private func accept(_ inbound: NWConnection) {
-    let params = NWParameters.tcp
-    params.includePeerToPeer = true
-    let upstream = NWConnection(to: .service(name: service, type: mediaServiceType, domain: "local.", interface: nil), using: params)
+    guard let target else {
+      inbound.cancel()
+      return
+    }
+    let upstream = NWConnection(to: target, using: nearbyParameters())
     let pipe = Pipe(a: inbound, b: upstream)
     let key = ObjectIdentifier(pipe)
     pipes[key] = pipe

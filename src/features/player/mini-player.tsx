@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { Icon } from '@/components/icon';
+import { TogetherChip } from '@/features/together/together-pill';
 import { ItemImage } from '@/components/item-image';
 import { episodeLabel } from '@/lib/format';
 import { activePlayback, openFullPlayer } from '@/player';
@@ -105,6 +106,7 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
           ) : null}
         </Animated.View>
       </Pressable>
+      <TogetherChip iconOnly={inline} />
       <Pressable onPress={toggle} hitSlop={6} style={styles.button} accessibilityRole="button" accessibilityLabel={playing ? 'Pause' : 'Play'}>
         <Icon name={playing ? 'pause.fill' : 'play.fill'} size={iconSize.md} color={c.text} weight="semibold" />
       </Pressable>

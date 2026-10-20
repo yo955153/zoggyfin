@@ -17,6 +17,12 @@
  * `fineWindow`, it also nudges drift above `fineAbove` (40 ms): a player
  * starts late by a steady amount (the spike measured 15–130 ms), and that
  * error would otherwise stay under 150 ms for the whole film.
+ *
+ * Some players lose time on every rate change: the WebKit audio element of
+ * the desktop app lost 170–480 ms per change, and 380–570 ms per seek
+ * (measured on macOS). For them `nudge` is false: the corrector seeks when
+ * the drift passes `rateAbove`, and `learnLead` sets the seek lead from the
+ * drift that each of its own seeks leaves (`SEEK_ONLY_DRIFT`).
  */
 import type { Anchor } from './protocol';
 
@@ -48,6 +54,10 @@ export interface DriftOptions {
   fineAbove: number;
   /** ms after the cooldown with the lower threshold. */
   fineWindow: number;
+  /** False: no rate changes; a drift above `rateAbove` seeks. Default true. */
+  nudge?: boolean;
+  /** True: after each corrector seek, add the drift that is left to `seekLead`. */
+  learnLead?: boolean;
 }
 
 export const DEFAULT_DRIFT: DriftOptions = {
@@ -62,6 +72,22 @@ export const DEFAULT_DRIFT: DriftOptions = {
   fineAbove: 0.04,
   fineWindow: 8000,
 };
+
+/** For players that lose time on a rate change (the desktop app's WebKit audio). */
+export const SEEK_ONLY_DRIFT: DriftOptions = {
+  ...DEFAULT_DRIFT,
+  nudge: false,
+  learnLead: true,
+  rateAbove: 0.12,
+  seekLead: 0.43,
+  seekCooldown: 2500,
+  fineAbove: 0.12,
+  fineWindow: 0,
+};
+
+/** The limits of a learned seek lead, seconds. */
+const LEAD_MIN = 0;
+const LEAD_MAX = 1.5;
 
 export type DriftAction = { kind: 'none' } | { kind: 'rate'; rate: number } | { kind: 'seek'; position: number };
 
@@ -84,13 +110,24 @@ export class DriftCorrector {
   /** +1 while speeding up, -1 while slowing down. */
   private direction = 0;
   private seekAt = -Infinity;
+  /** True after a corrector seek, until the drift it left is measured. */
+  private learning = false;
+  private lead: number;
 
-  constructor(private readonly opts: DriftOptions = DEFAULT_DRIFT) {}
+  constructor(private readonly opts: DriftOptions = DEFAULT_DRIFT) {
+    this.lead = opts.seekLead;
+  }
+
+  /** The seek lead now, seconds (it changes only with `learnLead`). */
+  get seekLead(): number {
+    return this.lead;
+  }
 
   /** Call after any seek that the corrector did not ask for (a user seek). */
   noteSeek(now: number): void {
     this.seekAt = now;
     this.nudging = false;
+    this.learning = false;
   }
 
   reset(): void {
@@ -108,13 +145,21 @@ export class DriftCorrector {
     // Positive: the player is behind and must go faster.
     const drift = expected - actual;
     const size = Math.abs(drift);
+    if (this.learning) {
+      // The first look after our own seek: what is left is the lead error.
+      this.learning = false;
+      this.lead = Math.min(LEAD_MAX, Math.max(LEAD_MIN, this.lead + drift / Math.max(groupRate, 0.25)));
+    }
     const fine = now - this.seekAt < o.seekCooldown + o.fineWindow;
     const nudgeAbove = fine ? Math.min(o.fineAbove, o.rateAbove) : o.rateAbove;
-    if (size > o.seekAbove) {
+    const nudge = o.nudge !== false;
+    if (size > o.seekAbove || (!nudge && size > nudgeAbove)) {
       this.seekAt = now;
       this.nudging = false;
-      return { kind: 'seek', position: Math.max(0, expected + o.seekLead * groupRate) };
+      this.learning = o.learnLead === true;
+      return { kind: 'seek', position: Math.max(0, expected + this.lead * groupRate) };
     }
+    if (!nudge) return { kind: 'none' };
     const keepNudging = this.nudging && drift * this.direction > -o.overshoot;
     if (size > nudgeAbove || keepNudging) {
       if (!keepNudging) this.direction = Math.sign(drift);

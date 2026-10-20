@@ -110,3 +110,54 @@ about 2.5 minutes, so the numbers show the size of the error, not a precise stat
 - Start with `AVPlayer.setRate(_:time:atHostTime:)` in the native module. It starts a player
   at an exact host time and would remove the start offset.
 - A "Do not wait" control for the host when a guest buffers for a long time.
+
+## Part 2: the new transport, listen together and drops (2026-10-19)
+
+Setup: an iPhone 17 simulator, an iPad simulator and the Mac app (development build) on one
+Mac, all on the Mac's monotonic clock, so their logs compare directly. The links go over
+loopback, not over Wi-Fi or AWDL. Error = the guest's position minus the host's position at
+the same time, 200 ms samples, 3 s after each start, seek or track change left out. Steps:
+play, seek, rate 1.5 and back, next, previous (the lab route `together-lab`).
+
+| Pair | Media | Median | p95 | Notes |
+|---|---|---|---|---|
+| iPhone host → iPad, stream | video | 8 ms | 13 ms | 664 samples |
+| iPhone host → iPad, own copy | video | 2–11 ms | 6–11 ms | three runs |
+| iPad host → iPhone, stream | album (2 tracks) | 5 ms | 11 ms | next, previous, rate 1.5 |
+| iPad host → Mac app, stream | album | 75 ms | 114 ms | 8 seeks in 3 min |
+| iPad host → Mac app, stream | video (libmpv) | 38 ms | 149 ms | no seeks |
+| SyncPlay, iPhone ↔ Mac app | album | 6 ms | 77 ms | server group, Date.now clocks |
+
+Drops (three devices: iPhone host, iPad with its own copy, Mac app that streams):
+
+- Host drop: the iPad elected itself 7.6 s after the drop (6 s of retries first). Its
+  position did not move (the handover jump was 1–11 ms; the largest 200 ms step was off by
+  0.0 ms) and it never paused. The Mac app relinked to the iPad about 1 s later and moved
+  its stream to the iPad's file.
+- Guest restart: the Mac app was reloaded; "Rejoin" brought it back with no new approval,
+  as the same member.
+
+What the measurements changed:
+
+- WebKit audio (the Mac app) loses 170–480 ms on each `playbackRate` change and 380–570 ms
+  on each seek. A web audio guest therefore corrects only by seeks, with a seek lead that
+  it learns from its own seeks (`SEEK_ONLY_DRIFT` in `drift.ts`).
+- libmpv sends `time-pos` at most four times a second, late by a different time each time,
+  and the value stops for 400–600 ms at times while the sound plays on. The Mac app's
+  position is the highest prediction from the reports of the last 2 s
+  (`src/player/position-line.ts`). Before: median 89 ms, p95 417 ms; after: 38 ms, 149 ms.
+- After a reload (a new track, a new host's stream) a player is paused, but the together
+  port still said "playing", so the follower only seeked. The port now takes the player's
+  real state on each attach, and a reload plays at once when the group plays.
+- iOS `AVPlayer.play()` sets the rate back to 1, so the audio engine sets the rate again
+  after each play.
+- expo-audio's web playlist (58.0.x) reports `isLoaded: false` and `isBuffering: true` after
+  it moves to the preloaded next track. The audio engine treats a moving time as loaded.
+- A member that comes back while the group plays no longer pauses the group while it
+  buffers (the new host paused for 650 ms before); it catches up.
+- At the end of a film the host's player stopped and the group waited for a dead player.
+  In a session the player now stays at the end and the group pauses there.
+
+Not tested here (needs real devices): AWDL with no router, Bluetooth LE, the hotspot join
+(`NEHotspotConfiguration`, CoreWLAN, `WifiNetworkSpecifier`), Android (the Kotlin module is
+not compiled yet), the Local Network prompt, and two clocks that are not one clock.

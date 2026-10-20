@@ -1,4 +1,9 @@
+// The nearby transport (Swift, macOS): swift/build_nearby.rs.
+#[path = "swift/build_nearby.rs"]
+mod build_nearby;
+
 fn main() {
+    build_nearby::build();
     // libmpv: Homebrew for development (see desktop/README.md). MPV_LIB_DIR overrides it;
     // the release build points it at the LGPL build of desktop/scripts/build-libmpv.sh.
     let dir = std::env::var("MPV_LIB_DIR").unwrap_or_else(|_| "/opt/homebrew/lib".into());

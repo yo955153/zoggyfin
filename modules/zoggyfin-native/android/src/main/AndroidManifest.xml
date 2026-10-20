@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Permissions for the nearby "Watch together" transport. They merge into the app manifest. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Sockets, NSD and the local-only hotspot. -->
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+  <!-- The hotspot on Android 8 to 12 and the Bluetooth scan on Android 9 to 11. Android 12 needs coarse with fine. -->
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <!-- The hotspot on Android 13 and later. -->
+  <uses-permission
+    android:name="android.permission.NEARBY_WIFI_DEVICES"
+    android:usesPermissionFlags="neverForLocation" />
+
+  <!-- Bluetooth LE rendezvous: Android 9 to 11. -->
+  <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+  <!-- Bluetooth LE rendezvous: Android 12 and later. -->
+  <uses-permission
+    android:name="android.permission.BLUETOOTH_SCAN"
+    android:usesPermissionFlags="neverForLocation" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+  <!-- The app also runs on devices with no Bluetooth LE or Wi-Fi (TV boxes with Ethernet). -->
+  <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+  <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+  <uses-feature android:name="android.hardware.wifi" android:required="false" />
+  <uses-feature android:name="android.hardware.location" android:required="false" />
+  <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+</manifest>

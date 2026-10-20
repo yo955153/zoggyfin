@@ -28,6 +28,7 @@ import { audioSession } from '@/player/audio/session';
 import '@/invite/wiring';
 import { useInviteLinks } from '@/invite/use-invite-links';
 import { mediaColors, useTheme } from '@/theme';
+import { nearby } from '@/together/nearby';
 import { AppThemeProvider } from '@/theme/provider';
 
 export default function RootLayout() {
@@ -87,6 +88,8 @@ function Root({ session }: { session: boolean }) {
   }, []);
   // Desktop app only: look for a new version soon after start and every few hours.
   useEffect(() => startUpdateChecks(), []);
+  // A nearby session from before a restart: the session sheet offers to rejoin it.
+  useEffect(() => nearby().loadSaved(), []);
   // Bring back the last audio queue (paused) after a restart.
   useEffect(() => {
     if (!session) return;

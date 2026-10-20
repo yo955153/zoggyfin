@@ -27,6 +27,7 @@ import { readJson, writeJson } from '@/storage/json';
 import { storage } from '@/storage/kv';
 
 import { mediaCapabilities } from '../capabilities';
+import { controlGate, queueGate, type UserControl } from '../control-gate';
 import { buildDeviceProfile } from '../device-profile';
 import { isForeignDownload, outboxOnly, withOutbox } from '../outbox-transport';
 import { ProgressReporter, secondsToTicks, ticksToSecondsExact, toServerReport } from '../progress-reporter';
@@ -64,6 +65,13 @@ import {
 import { sleepDue, sleepFadeVolume, sleepOff, type SleepTimer } from './sleep-timer';
 import { audioState, initialAudioState, setAudioState } from './store';
 import { formatLine, predictPlayMethod, universalAudioUrl } from './stream-url';
+
+/**
+ * A listen-together guest: where each track comes from (its own download, or
+ * the host's file over the session port), set by the session. Null: the
+ * normal rules (download, else the server).
+ */
+export type SharedSource = (item: AudioItem) => string | null;
 
 const QUEUE_KEY = 'audio.queue.v1';
 const POSITION_KEY = 'audio.position.v1';
@@ -153,6 +161,11 @@ class AudioSession {
   /** For the gap measurement between tracks (development builds log it). */
   private lastStatus: { key: string; position: number; duration: number; at: number } | null = null;
   private pendingGap: { from: string; endsAt: number } | null = null;
+  /** Listen together (guest): the source of each track; the queue is the host's. */
+  private shared: SharedSource | null = null;
+  /** Nearby (true): no progress reports. SyncPlay (false): the guest's own server gets them. */
+  private sharedNoReports = true;
+  private trackListeners = new Set<(key: string) => void>();
 
   constructor() {
     this.engine.subscribe(this.onEngine);
@@ -276,6 +289,7 @@ class AudioSession {
     setAudioState({ queue: nq, resumedAt: null });
     const entry = currentEntry(nq);
     if (!entry) return;
+    this.trackListeners.forEach((l) => l(entry.key));
     // Sleep timer "end of track": the next track has already begun, so pause it at its start.
     const sleep = audioState().sleep;
     if (sleepDue(sleep, { now: Date.now(), itemKey: entry.key, position: 0, trackEnded: true }) && sleep.kind === 'end') {
@@ -337,6 +351,14 @@ class AudioSession {
     if (!entry) return null;
     const profile = buildDeviceProfile(mediaCapabilities(), { maxBitrate: this.bitrate || bitrateFor(usePlaybackSettings.getState(), false) });
     const playSessionId = randomId().replace(/-/g, '');
+    const sharedUri = this.shared?.(entry.item) ?? null;
+    if (sharedUri) {
+      this.tracks.set(entry.key, { playSessionId, playMethod: 'DirectPlay', url: sharedUri });
+      return { key: entry.key, uri: sharedUri };
+    }
+    // A guest with no file for this track streams it from the server only when it is signed in to that server.
+    const active = useSessionStore.getState().session?.serverId;
+    if (this.shared && (!active || (entry.item.ServerId && entry.item.ServerId !== active))) return null;
     // A downloaded track plays from the device; the server URL is built only when it is not.
     // A download from any saved server plays from the device.
     // The server (and a sign-in) is needed only for a track that is not on the device.
@@ -418,11 +440,15 @@ class AudioSession {
     const next = nextEntry ? this.trackFor(nextEntry) : null;
     this.publish(entry, start, 'loading');
     setAudioState({ resumedAt: resumed ? Date.now() : null });
-    const rate = audioState().longForm ? Number(storage.getString(RATE_KEY) ?? '1') || 1 : 1;
-    this.engine.setRate(rate);
-    setPlayerState({ rate });
+    // In a session the group rate applies (the session sets it).
+    if (!controlGate.active) {
+      const rate = audioState().longForm ? Number(storage.getString(RATE_KEY) ?? '1') || 1 : 1;
+      this.engine.setRate(rate);
+      setPlayerState({ rate });
+    }
     await this.engine.load(current, next, start, opts.autoplay);
     if (id !== this.loadId) return;
+    this.trackListeners.forEach((l) => l(entry.key));
     this.startReporter(entry);
     this.afterTrackStart(entry);
     this.watchAppState();
@@ -430,6 +456,8 @@ class AudioSession {
   }
 
   private startReporter(entry: QueueEntry<AudioItem>) {
+    // A nearby guest plays the host's queue: its server does not get progress for it.
+    if (this.shared && this.sharedNoReports) return;
     const info = this.tracks.get(entry.key);
     const other = foreignRecord(entry.item.Id);
     if (other) {
@@ -576,6 +604,8 @@ class AudioSession {
   // ---- Persistence ---------------------------------------------------------------
 
   private persistQueue() {
+    // A guest's queue is the host's: it does not come back after a restart.
+    if (this.shared) return;
     try {
       const { serverId, userId } = context();
       const a = audioState();
@@ -617,8 +647,20 @@ class AudioSession {
 
   // ---- Public API ------------------------------------------------------------------
 
+  /** True (with a toast) when a listen-together host owns the queue. */
+  private queueLocked(): boolean {
+    const message = queueGate.locked;
+    if (message) toast(message, { icon: 'lock.fill' });
+    return message !== null;
+  }
+
+  private gate(c: UserControl): boolean {
+    return controlGate.intercept(c);
+  }
+
   /** Plays a request: a song with its album, a container (album, artist, playlist, genre) or a single item. */
   async play(request: PlayRequest): Promise<void> {
+    if (this.queueLocked()) return;
     const id = ++this.loadId;
     try {
       let items: BaseItemDto[];
@@ -673,6 +715,7 @@ class AudioSession {
   }
 
   private async editQueue(item: BaseItemDto, how: 'next' | 'end') {
+    if (this.queueLocked()) return;
     try {
       const items = (await this.tracksOf(item)).filter((i) => i.Id).map(slimItem);
       if (!items.length) {
@@ -704,6 +747,7 @@ class AudioSession {
   }
 
   async instantMix(item: BaseItemDto): Promise<void> {
+    if (this.queueLocked()) return;
     try {
       const { api, userId } = context();
       const mix = await jf.getInstantMix(api, userId, item);
@@ -723,6 +767,11 @@ class AudioSession {
   }
 
   resume(): void {
+    if (this.gate({ action: 'play' })) return;
+    this.doResume();
+  }
+
+  private doResume(): void {
     if (!this.engine.loaded) {
       const st = playerState();
       void this.startCurrent({ autoplay: true, startSeconds: st.status === 'ended' ? 0 : st.position });
@@ -732,6 +781,11 @@ class AudioSession {
   }
 
   pause(): void {
+    if (this.gate({ action: 'pause' })) return;
+    this.doPause();
+  }
+
+  private doPause(): void {
     this.engine.pause();
     this.saveNow();
   }
@@ -739,6 +793,11 @@ class AudioSession {
   seekTo(seconds: number): void {
     const { duration } = playerState();
     const target = Math.max(0, duration > 0 ? Math.min(seconds, duration - 0.5) : seconds);
+    if (this.gate({ action: 'seek', position: target })) return;
+    this.doSeek(target);
+  }
+
+  private doSeek(target: number): void {
     setPlayerState({ position: target });
     if (!this.engine.loaded) return;
     this.engine.seekTo(target);
@@ -752,6 +811,11 @@ class AudioSession {
 
   /** Next: the gapless path when the engine already has the next track loaded. */
   next(): void {
+    if (this.gate({ action: 'next' })) return;
+    this.doNext();
+  }
+
+  private doNext(): void {
     const q = audioState().queue;
     const nq = advance(q, true);
     if (!nq) return;
@@ -766,14 +830,19 @@ class AudioSession {
   }
 
   previous(): void {
+    if (this.gate({ action: 'previous' })) return;
+    this.doPrevious();
+  }
+
+  private doPrevious(): void {
     const position = this.engine.loaded ? this.engine.position : playerState().position;
     if (position > RESTART_SECONDS) {
-      this.seekTo(0);
+      this.doSeek(0);
       return;
     }
     const nq = back(audioState().queue);
     if (!nq) {
-      this.seekTo(0);
+      this.doSeek(0);
       return;
     }
     setAudioState({ queue: nq });
@@ -804,6 +873,11 @@ class AudioSession {
   }
 
   jump(key: string): void {
+    if (this.gate({ action: 'jump', key })) return;
+    this.doJump(key);
+  }
+
+  private doJump(key: string): void {
     const q = audioState().queue;
     const nq = jumpTo(q, key);
     if (nq === q || nq.index === q.index) return;
@@ -812,12 +886,14 @@ class AudioSession {
   }
 
   move(from: number, to: number): void {
+    if (this.queueLocked()) return;
     setAudioState({ queue: moveEntry(audioState().queue, from, to) });
     this.syncNext();
     this.persistQueue();
   }
 
   remove(key: string): void {
+    if (this.queueLocked()) return;
     setAudioState({ queue: removeEntry(audioState().queue, key) });
     this.tracks.delete(key);
     this.syncNext();
@@ -825,6 +901,7 @@ class AudioSession {
   }
 
   clearQueue(): void {
+    if (this.queueLocked()) return;
     setAudioState({ queue: clearUpcoming(audioState().queue) });
     this.syncNext();
     this.persistQueue();
@@ -832,19 +909,37 @@ class AudioSession {
 
   toggleShuffle(): void {
     const q = audioState().queue;
-    setAudioState({ queue: setShuffle(q, !q.shuffle) });
+    if (this.gate({ action: 'shuffle', on: !q.shuffle })) return;
+    this.doShuffle(!q.shuffle);
+  }
+
+  private doShuffle(on: boolean): void {
+    const q = audioState().queue;
+    if (q.shuffle === on) return;
+    setAudioState({ queue: setShuffle(q, on) });
     this.syncNext();
     this.persistQueue();
   }
 
   cycleRepeat(): void {
     const q = audioState().queue;
-    setAudioState({ queue: { ...q, repeat: nextRepeat(q.repeat) } });
+    if (this.gate({ action: 'repeat', mode: nextRepeat(q.repeat) })) return;
+    this.doRepeat(nextRepeat(q.repeat));
+  }
+
+  private doRepeat(mode: QueueState<AudioItem>['repeat']): void {
+    const q = audioState().queue;
+    setAudioState({ queue: { ...q, repeat: mode } });
     this.syncNext();
     this.persistQueue();
   }
 
   setRate(rate: number): void {
+    if (this.gate({ action: 'rate', rate })) return;
+    this.doRate(rate);
+  }
+
+  private doRate(rate: number): void {
     this.engine.setRate(rate);
     setPlayerState({ rate });
     if (audioState().longForm) storage.set(RATE_KEY, String(rate));
@@ -869,6 +964,82 @@ class AudioSession {
         toast('Sleep timer: paused', { icon: 'checkmark' });
       }
     }, 1000);
+  }
+
+  // ---- Listen together ---------------------------------------------------------------
+
+  /**
+   * The player controls with no gate: the together session uses them after it
+   * decided for the group, so a group command does not come back to it.
+   */
+  readonly direct = {
+    play: () => this.doResume(),
+    pause: () => this.doPause(),
+    seek: (seconds: number) => this.doSeek(Math.max(0, seconds)),
+    rate: (rate: number) => {
+      this.engine.setRate(rate);
+      setPlayerState({ rate });
+    },
+    next: () => this.doNext(),
+    previous: () => this.doPrevious(),
+    jump: (key: string) => this.doJump(key),
+    shuffle: (on: boolean) => this.doShuffle(on),
+    repeat: (mode: QueueState<AudioItem>['repeat']) => this.doRepeat(mode),
+    /** The position now (seconds): the last engine status moved on by the time since it came. */
+    position: () => (this.engine.loaded ? this.engine.livePosition() : playerState().position),
+    track: () => (this.engine.loaded ? this.engine.currentKey : null),
+  };
+
+  /** Called with the queue entry key each time another track starts (gapless or loaded). */
+  onTrackChange(listener: (key: string) => void): () => void {
+    this.trackListeners.add(listener);
+    return () => this.trackListeners.delete(listener);
+  }
+
+  /**
+   * A listen-together guest: plays the host's queue. `source` gives each
+   * track's URL (own download or the host's file). The player starts paused
+   * at `startSeconds` of the entry `key`; the session starts it.
+   */
+  async loadShared(queue: QueueState<AudioItem>, longForm: boolean, source: SharedSource, startSeconds: number, opts: { reports?: boolean; autoplay?: boolean } = {}): Promise<void> {
+    this.shared = source;
+    this.sharedNoReports = !opts.reports;
+    this.tracks.clear();
+    setAudioState({ queue, longForm, resumedAt: null });
+    await this.startCurrent({ autoplay: opts.autoplay ?? false, startSeconds });
+  }
+
+  /** The host's queue changed: keep the current track when it is still current, else move to the new one (playing when `autoplay`). */
+  updateShared(queue: QueueState<AudioItem>, longForm: boolean, autoplay = false): void {
+    if (!this.shared) return;
+    const cur = currentEntry(audioState().queue);
+    const next = currentEntry(queue);
+    setAudioState({ queue, longForm });
+    if (cur && next && cur.key === next.key) {
+      this.syncNext();
+      return;
+    }
+    void this.startCurrent({ autoplay, startSeconds: 0 });
+  }
+
+  /** The group plays another entry: load it at `startSeconds`, paused unless `autoplay`. */
+  async moveShared(key: string, startSeconds: number, autoplay = false): Promise<void> {
+    const q = audioState().queue;
+    const nq = jumpTo(q, key);
+    if (nq === q && currentEntry(q)?.key !== key) return;
+    setAudioState({ queue: nq });
+    await this.startCurrent({ autoplay, startSeconds });
+  }
+
+  /** The guest's session is over: the queue stays, the normal sources apply again. */
+  leaveShared(): void {
+    this.shared = null;
+  }
+
+  /** The remaining seconds of the current track, or null. */
+  remaining(): number | null {
+    const d = playerState().duration;
+    return this.engine.loaded && d > 0 ? Math.max(0, d - this.engine.livePosition()) : null;
   }
 
   /** Refreshes Recently played and the item pages, for example when the player closes. */

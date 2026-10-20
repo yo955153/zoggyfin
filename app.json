@@ -15,13 +15,18 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
-        "NSLocalNetworkUsageDescription": "Zoggyfin connects to your Jellyfin server on the local network and finds nearby devices to watch together.",
-        "NSBonjourServices": ["_zgf-together._tcp", "_zgf-together._udp", "_zgf-media._tcp", "_zgf-lan._tcp"],
+        "NSLocalNetworkUsageDescription": "Zoggyfin connects to your Jellyfin server on the local network and finds nearby devices to watch and listen together.",
+        "NSBonjourServices": [
+          "_zgf-together._tcp",
+          "_zgf-lan._tcp"
+        ],
         "CADisableMinimumFrameDurationOnPhone": true,
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSBluetoothAlwaysUsageDescription": "Zoggyfin uses Bluetooth to find nearby people who watch or listen together with you, also with no Wi-Fi."
       },
       "entitlements": {
-        "com.apple.developer.networking.wifi-info": true
+        "com.apple.developer.networking.wifi-info": true,
+        "com.apple.developer.networking.HotspotConfiguration": true
       }
     },
     "android": {

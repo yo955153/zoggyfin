@@ -711,6 +711,8 @@ class VideoSession {
       return;
     }
     setPlayerState({ status: 'ended', playing: false });
+    // In a session the player stays at the end: the group stops there and can seek back.
+    if (controlGate.active) return;
     await this.stop();
   }
 
