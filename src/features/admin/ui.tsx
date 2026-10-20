@@ -19,6 +19,7 @@ import { createStyles, type AppTheme, font, iconSize, radius, scaled, sizes, spa
 import { useSidebarInset } from '@/theme/sidebar-inset';
 
 import { type AdminTarget, useAdminAccess } from './access';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 /** Content width from which Admin screens use two columns (iPad landscape, Mac, desktop web). */
 export const ADMIN_WIDE = 900;
@@ -76,6 +77,7 @@ export function AdminGate({ serverId, title, children }: { serverId: string | un
 export function AdminPage({ children, onRefresh, wide = false, inset = true, style }: { children: ReactNode; onRefresh?: () => unknown; wide?: boolean; inset?: boolean; style?: ViewStyle }) {
   const rs = useStyles(makeSettingsStyles);
   const s = useStyles(makeStyles);
+  const bottomPad = useTabBottomPadding();
   const sidebarInset = useSidebarInset();
   const sidebar = inset ? sidebarInset : 0;
   const { c } = useTheme();
@@ -85,7 +87,7 @@ export function AdminPage({ children, onRefresh, wide = false, inset = true, sty
       contentInsetAdjustmentBehavior="automatic"
       style={rs.page}
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={[rs.content, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}
+      contentContainerStyle={[rs.content, { paddingBottom: bottomPad }, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}
       refreshControl={pull.onRefresh ? <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={c.text3} colors={[c.accent]} /> : undefined}>
       <View style={[rs.inner, wide && s.innerWide, style]}>{children}</View>
     </ScrollView>

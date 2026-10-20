@@ -31,6 +31,7 @@ import { useRootScreenOptions } from '@/lib/stack-options';
 import { usePlayer } from '@/player';
 import { createStyles, type AppTheme, font, iconSize, motion, radius, scaled, scriptStyle, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
 import { useSidebarInset } from '@/theme/sidebar-inset';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 /**
  * The Downloads tab (design system §7.11): the storage bar, "In progress"
@@ -39,6 +40,7 @@ import { useSidebarInset } from '@/theme/sidebar-inset';
  */
 export default function DownloadsScreen() {
   const s = useStyles(makeStyles);
+  const bottomPad = useTabBottomPadding();
   const { c } = useTheme();
   const l = useLayout();
   const root = useRootScreenOptions();
@@ -70,7 +72,7 @@ export default function DownloadsScreen() {
               }),
         }}
       />
-      <ScrollView contentInsetAdjustmentBehavior="automatic" style={s.page} contentContainerStyle={[s.content, { paddingHorizontal: l.gutter, paddingLeft: sidebar + l.gutter }]}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" style={s.page} contentContainerStyle={[s.content, { paddingHorizontal: l.gutter, paddingLeft: sidebar + l.gutter, paddingBottom: bottomPad }]}>
         {!downloadsSupported ? (
           <EmptyState
             icon="arrow.down.circle"

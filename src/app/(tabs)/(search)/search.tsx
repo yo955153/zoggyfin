@@ -49,12 +49,14 @@ import { createStyles,
   useTheme,
   webInput,
 } from '@/theme';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 const RECENT_KEY = 'search.recent';
 const PLACEHOLDER = 'Movies, shows, music, people';
 
 export default function SearchScreen() {
   const s = useStyles(makeStyles);
+  const bottomPad = useTabBottomPadding();
   const { c } = useTheme();
   const l = useLayout();
   const root = useRootScreenOptions();
@@ -127,7 +129,7 @@ export default function SearchScreen() {
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         style={s.page}
-        contentContainerStyle={s.content}>
+        contentContainerStyle={[s.content, { paddingBottom: bottomPad }]}>
         {ownField ? (
           <View style={[s.fieldRow, { paddingHorizontal: l.gutter }]}>
             <View style={s.field}>

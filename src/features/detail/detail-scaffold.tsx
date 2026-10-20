@@ -49,6 +49,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePullRefresh } from '@/lib/use-pull-refresh';
 
 import { fitRoundActions, heroHeight, heroLayout } from './hero-layout';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 export type ArtShape = 'poster' | 'square' | 'circle' | 'thumb';
 
@@ -109,6 +110,7 @@ export function DetailScaffold<Row>({
   onRefresh,
 }: DetailScaffoldProps<Row>) {
   const s = useStyles(makeStyles);
+  const bottomPad = useTabBottomPadding(spacing.huge * 2, { autoInset: false });
   const { c } = useTheme();
   const l = useLayout();
   const insets = useSafeAreaInsets();
@@ -323,7 +325,7 @@ export function DetailScaffold<Row>({
           <View style={[s.page, { width: pageWidth }]}>{renderRow ? renderRow(row, index) : null}</View>
         )}
         ListHeaderComponent={header}
-        ListFooterComponent={<View style={[s.page, s.footer, { width: pageWidth }]}>{footer}</View>}
+        ListFooterComponent={<View style={[s.page, s.footer, { width: pageWidth, paddingBottom: bottomPad }]}>{footer}</View>}
         contentInsetAdjustmentBehavior="never"
         style={s.list}
         scrollEventThrottle={16}

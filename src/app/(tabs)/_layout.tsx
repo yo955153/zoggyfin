@@ -5,11 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDownloadsStore } from '@/downloads/store';
 import { GlobalPlayerKeys } from '@/features/player/global-keys';
 import { MiniPlayer, useMiniPlayerVisible } from '@/features/player/mini-player';
-import { features } from '@/platform/tv';
+import { HAS_ACCESSORY, TAB_BAR_HEIGHT } from '@/lib/tab-bar-inset';
+import { features, isTV } from '@/platform/tv';
 import { fontFamily, spacing, useLayout, useTheme } from '@/theme';
 
-/** iOS 26 has the tab bar bottom accessory slot; elsewhere the mini player floats. */
-const HAS_ACCESSORY = Platform.OS === 'ios' && Number.parseInt(String(Platform.Version), 10) >= 26;
 
 /** The accessory renders twice (regular and inline); each copy picks its layout. */
 function Accessory() {
@@ -17,8 +16,12 @@ function Accessory() {
   return <MiniPlayer inline={placement === 'inline'} />;
 }
 
-/** Native tab bar height, for the floating mini player on web, Android and older iOS. Material 3 bars are 80 dp. */
-const TAB_BAR_HEIGHT = Platform.OS === 'web' ? 68 : Platform.OS === 'android' ? 80 : 49;
+/**
+ * Android: the tab screens keep the automatic bottom inset, so content ends
+ * above the opaque Material bar. iOS scroll views inset themselves, and web
+ * screens pad with useTabBottomPadding().
+ */
+const NO_AUTO_INSETS = Platform.OS !== 'android' || isTV;
 
 function FloatingMiniPlayer() {
   const insets = useSafeAreaInsets();
@@ -82,24 +85,24 @@ export default function TabsLayout() {
           <Accessory />
         </NativeTabs.BottomAccessory>
       ) : null}
-      <NativeTabs.Trigger name="(home)" disableAutomaticContentInsets>
+      <NativeTabs.Trigger name="(home)" disableAutomaticContentInsets={NO_AUTO_INSETS}>
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(library)" disableAutomaticContentInsets>
+      <NativeTabs.Trigger name="(library)" disableAutomaticContentInsets={NO_AUTO_INSETS}>
         <NativeTabs.Trigger.Label>Library</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'square.stack', selected: 'square.stack.fill' }} md="stacks" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(music)" disableAutomaticContentInsets>
+      <NativeTabs.Trigger name="(music)" disableAutomaticContentInsets={NO_AUTO_INSETS}>
         <NativeTabs.Trigger.Label>Music</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="music.note" md="music_note" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(saved)" disableAutomaticContentInsets hidden={!features.downloads}>
+      <NativeTabs.Trigger name="(saved)" disableAutomaticContentInsets={NO_AUTO_INSETS} hidden={!features.downloads}>
         <NativeTabs.Trigger.Label>Downloads</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'arrow.down.circle', selected: 'arrow.down.circle.fill' }} md="download" />
         <NativeTabs.Trigger.Badge hidden={!badge}>{badge ?? undefined}</NativeTabs.Trigger.Badge>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(search)" disableAutomaticContentInsets role="search">
+      <NativeTabs.Trigger name="(search)" disableAutomaticContentInsets={NO_AUTO_INSETS} role="search">
         <NativeTabs.Trigger.Label>Search</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="magnifyingglass" md="search" />
       </NativeTabs.Trigger>

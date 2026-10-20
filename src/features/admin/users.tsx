@@ -6,8 +6,7 @@
 import type { UserDto, UserPolicy } from '@jellyfin/sdk/lib/generated-client/models';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Platform, Switch, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Switch, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
@@ -40,9 +39,9 @@ import {
 import { openAdminUser } from './nav';
 import { adminKeys, useAdminAction, useLibraries, useParentalRatings, useUsers } from './queries';
 import { AdminPage, Badge, Columns, ConfirmSheet, TextSheet, useAdminWide } from './ui';
+import { useTabBarOverlap } from '@/lib/tab-bar-inset';
 
 /** The web tab bar floats over the bottom of the page; native tab bars are in the safe area inset. */
-const WEB_TAB_BAR = Platform.OS === 'web' ? 76 : 0;
 
 function sortUsers(list: readonly UserDto[]): UserDto[] {
   return [...list].sort((a, b) => Number(!!b.Policy?.IsAdministrator) - Number(!!a.Policy?.IsAdministrator) || (a.Name ?? '').localeCompare(b.Name ?? ''));
@@ -152,7 +151,7 @@ export function UserEditor({ target, userId, embedded = false }: { target: Admin
   }
   const [picker, setPicker] = useState<Picker>(null);
   const [sheet, setSheet] = useState<'password' | 'delete' | null>(null);
-  const insets = useSafeAreaInsets();
+  const barOverlap = useTabBarOverlap({ autoInset: false });
   const wide = useAdminWide();
   const layout = useLayout();
 
@@ -345,9 +344,9 @@ export function UserEditor({ target, userId, embedded = false }: { target: Admin
     <View style={s.screen}>
       <AdminPage onRefresh={() => Promise.all([users.refetch(), libs.refetch()])} wide>
         <View style={s.editor}>{body}</View>
-        {saveBar ? <View style={s.saveSpace} /> : null}
+        {saveBar ? <View style={[s.saveSpace, { height: s.saveSpace.height + barOverlap }]} /> : null}
       </AdminPage>
-      {saveBar ? <View style={[s.saveDock, { paddingBottom: insets.bottom + WEB_TAB_BAR + spacing.md }]}>{saveBar}</View> : null}
+      {saveBar ? <View style={[s.saveDock, { paddingBottom: barOverlap + spacing.md }]}>{saveBar}</View> : null}
     </View>
   );
 }
@@ -407,7 +406,7 @@ const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
     ...shadow('floating'),
   },
   screen: { flex: 1, backgroundColor: c.bgGrouped },
-  saveSpace: { height: 96 + WEB_TAB_BAR },
+  saveSpace: { height: 96 },
   saveDock: { position: 'absolute' as const, left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.md, alignItems: 'center' as const },
   saveText: { ...font(type.subheadline), color: c.text, flexShrink: 1, minWidth: 160 },
   saveButtons: { flexDirection: 'row' as const, gap: spacing.sm },

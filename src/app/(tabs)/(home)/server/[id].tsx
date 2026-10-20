@@ -39,6 +39,7 @@ import { KIND_LABEL, MIXED_CONTENT_TEXT } from '@/servers/status';
 import { cleanSsids, parseSsidList } from '@/servers/wifi-rule';
 import { createStyles, type AppTheme, font, iconSize, mediaColors, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
 import { useSidebarInset } from '@/theme/sidebar-inset';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 const MODES: { value: ConnectionMode; label: string; icon: 'gauge' | 'house' | 'globe' }[] = [
   { value: 'auto', label: 'Automatic', icon: 'gauge' },
@@ -50,6 +51,7 @@ const MODES: { value: ConnectionMode; label: string; icon: 'gauge' | 'house' | '
 export default function ServerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const styles = useStyles(makeSettingsStyles);
+  const bottomPad = useTabBottomPadding();
   const { c } = useTheme();
   const sidebar = useSidebarInset();
   const accounts = useAccounts();
@@ -75,7 +77,7 @@ export default function ServerScreen() {
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         style={styles.page}
-        contentContainerStyle={[styles.content, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPad }, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}
         keyboardShouldPersistTaps="handled">
         <View style={styles.inner}>
           <Group>

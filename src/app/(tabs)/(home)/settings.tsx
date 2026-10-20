@@ -28,9 +28,11 @@ import { APPEARANCE_OPTIONS, useAppearance } from '@/settings/appearance';
 import { QUALITY_OPTIONS, qualityLabel, SKIP_OPTIONS, usePlaybackSettings } from '@/settings/playback';
 import { iconSize, mediaColors, scaled, sizes, spacing, useStyles, useTheme } from '@/theme';
 import { useSidebarInset } from '@/theme/sidebar-inset';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 export default function SettingsScreen() {
   const styles = useStyles(makeSettingsStyles);
+  const bottomPad = useTabBottomPadding();
   const { c } = useTheme();
   const { session } = useApi();
   const [busy, setBusy] = useState(false);
@@ -62,7 +64,7 @@ export default function SettingsScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Settings', headerStyle: { backgroundColor: c.bgGrouped }, contentStyle: { backgroundColor: c.bgGrouped } }} />
-      <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.page} contentContainerStyle={[styles.content, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.page} contentContainerStyle={[styles.content, { paddingBottom: bottomPad }, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}>
         <View style={styles.inner}>
           <Group>
             <View style={[styles.row, styles.account]}>

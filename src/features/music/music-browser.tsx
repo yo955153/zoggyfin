@@ -21,6 +21,7 @@ import { usePlayer } from '@/player';
 import { readJson, writeJson } from '@/storage/json';
 import { storage } from '@/storage/kv';
 import { spacing, useLayout } from '@/theme';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 export type AudioLibraryKind = 'music' | 'books';
 
@@ -65,7 +66,6 @@ const SORTS: Record<MusicTab, SortChoice[]> = {
   authors: [NAME],
 };
 
-const listStyle = { paddingBottom: spacing.huge * 2, paddingTop: spacing.sm };
 
 /** Albums / Artists / Playlists / Songs / Genres (or Audiobooks / Authors), as a pager that follows a horizontal swipe. */
 export function MusicBrowser({ libraryId, kind = 'music' }: { libraryId: string; kind?: AudioLibraryKind }) {
@@ -159,6 +159,7 @@ function MusicPage({ libraryId, tab }: { libraryId: string; tab: MusicTab }) {
   const pull = usePullRefresh(q.refetch);
   const [menu, setMenu] = useState<BaseItemDto | undefined>(undefined);
   const l = useLayout();
+  const bottomPad = useTabBottomPadding(spacing.huge * 2, { autoInset: false });
   const more = () => {
     if (q.hasNextPage && !q.isFetchingNextPage) q.fetchNextPage();
   };
@@ -212,7 +213,7 @@ function MusicPage({ libraryId, tab }: { libraryId: string; tab: MusicTab }) {
           refreshing={pull.refreshing}
           onRefresh={pull.onRefresh}
           ListEmptyComponent={empty}
-          contentContainerStyle={listStyle}
+          contentContainerStyle={{ paddingBottom: bottomPad, paddingTop: spacing.sm }}
         />
         <ItemActionSheet item={menu} visible={!!menu} onClose={() => setMenu(undefined)} />
       </>

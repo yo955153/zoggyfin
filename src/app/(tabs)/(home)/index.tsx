@@ -14,11 +14,13 @@ import { useRootScreenOptions } from '@/lib/stack-options';
 import { isTV } from '@/platform/tv';
 import { homeSections } from '@/registry/home-sections';
 import { createStyles, type AppTheme, sizes, spacing, useStyles, useTheme } from '@/theme';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 registerBuiltinHomeSections();
 
 export default function HomeScreen() {
   const s = useStyles(makeStyles);
+  const bottomPad = useTabBottomPadding();
   const { c } = useTheme();
   const root = useRootScreenOptions();
   const { session, scope } = useApi();
@@ -56,7 +58,7 @@ export default function HomeScreen() {
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         style={s.flex}
-        contentContainerStyle={s.content}
+        contentContainerStyle={[s.content, { paddingBottom: bottomPad }]}
         refreshControl={isTV ? undefined : <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={c.text2} />}>
         <OfflineBanner entries />
         {sections.map((sec) => (

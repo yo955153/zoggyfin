@@ -14,9 +14,11 @@ import { useExtensions } from '@/extensions/store';
 import { Group, makeSettingsStyles, SettingsRow } from '@/features/settings/rows';
 import { spacing, useStyles, useTheme } from '@/theme';
 import { useSidebarInset } from '@/theme/sidebar-inset';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 export default function ExtensionsScreen() {
   const styles = useStyles(makeSettingsStyles);
+  const bottomPad = useTabBottomPadding();
   const { c } = useTheme();
   const sidebar = useSidebarInset();
   const list = useExtensions((st) => st.list);
@@ -37,7 +39,7 @@ export default function ExtensionsScreen() {
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         style={styles.page}
-        contentContainerStyle={[styles.content, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}>
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPad }, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}>
         <View style={styles.inner}>
           {panels.length || takesLinks ? (
             <Group>

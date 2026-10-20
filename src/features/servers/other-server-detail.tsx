@@ -21,11 +21,13 @@ import { createStyles, type AppTheme, font, radius, scaled, scriptStyle, spacing
 
 import { switchAccount } from './actions';
 import { useServerNames } from './use-server-names';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 const CONTAINERS = new Set(['Series', 'Season', 'MusicAlbum', 'Playlist', 'BoxSet', 'Folder']);
 
 export function OtherServerDownloadDetail({ item, serverId }: { item: BaseItemDto; serverId: string }) {
   const s = useStyles(makeStyles);
+  const bottomPad = useTabBottomPadding();
   const l = useLayout();
   const player = usePlayer();
   const accounts = useAccounts();
@@ -57,7 +59,7 @@ export function OtherServerDownloadDetail({ item, serverId }: { item: BaseItemDt
   };
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[s.content, { paddingHorizontal: l.gutter }]}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[s.content, { paddingHorizontal: l.gutter, paddingBottom: bottomPad }]}>
       <View style={s.hero}>
         <ItemImage item={item} variant={audio ? 'square' : wide ? 'landscape' : 'poster'} width={width} aspectRatio={audio ? 1 : wide ? 16 / 9 : 2 / 3} rounded={radius.lg} />
         <Text style={[s.title, scriptStyle(item.Name, s.title)]} accessibilityRole="header">

@@ -8,6 +8,7 @@ import { usePullRefresh } from '@/lib/use-pull-refresh';
 import { gridLayout, spacing, useLayout, useTheme } from '@/theme';
 
 import { Tile, type TileShape } from './tile';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 interface ItemGridProps {
   items: BaseItemDto[];
@@ -42,6 +43,7 @@ export function ItemGrid({
   autoInset = true,
 }: ItemGridProps) {
   const l = useLayout();
+  const bottomPad = useTabBottomPadding(spacing.huge * 2, { autoInset });
   const { c } = useTheme();
   const openItem = useOpenItem();
   const pull = usePullRefresh(onRefresh);
@@ -79,7 +81,7 @@ export function ItemGrid({
         key={columns}
         keyExtractor={(it, i) => it.Id ?? String(i)}
         contentInsetAdjustmentBehavior={autoInset ? 'automatic' : 'never'}
-        contentContainerStyle={{ paddingHorizontal: gutter, paddingBottom: spacing.huge * 2, paddingTop: autoInset ? spacing.xs : spacing.lg }}
+        contentContainerStyle={{ paddingHorizontal: gutter, paddingBottom: bottomPad, paddingTop: autoInset ? spacing.xs : spacing.lg }}
         onEndReached={onEndReached}
         onEndReachedThreshold={0.8}
         refreshing={pull.refreshing}

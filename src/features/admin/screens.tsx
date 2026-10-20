@@ -25,6 +25,7 @@ import { SessionsSection } from './sessions';
 import { TasksSection } from './tasks';
 import { AdminGate, AdminPage, useAdminWide } from './ui';
 import { UserEditor, UsersSection } from './users';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 function SectionBody({ section, target, split }: { section: AdminSection; target: AdminTarget; split?: boolean }) {
   switch (section) {
@@ -81,10 +82,11 @@ function AdminHomeWide({ target }: { target: AdminTarget }) {
   const { c } = useTheme();
   const sidebar = useSidebarInset();
   const [section, setSection] = useState<AdminSection>('dashboard');
+  const bottomPad = useTabBottomPadding(spacing.huge, { autoInset: false });
   const refresh = useRefreshAll(target);
   return (
     <View style={[s.split, sidebar ? { paddingLeft: sidebar } : null]}>
-      <ScrollView style={s.nav} contentContainerStyle={s.navContent}>
+      <ScrollView style={s.nav} contentContainerStyle={[s.navContent, { paddingBottom: bottomPad }]}>
         <Text style={s.server} numberOfLines={2}>
           {target.serverName}
         </Text>

@@ -17,12 +17,14 @@ import { confirmDestructive } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
 import { mediaColors, spacing, useStyles, useTheme } from '@/theme';
 import { useSidebarInset } from '@/theme/sidebar-inset';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 const NO_OPTIONS: Record<string, { value: string; label: string }[]> = {};
 
 export default function ExtensionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const styles = useStyles(makeSettingsStyles);
+  const bottomPad = useTabBottomPadding();
   const { c } = useTheme();
   const sidebar = useSidebarInset();
   const ext = useExtensions((st) => st.list.find((e) => e.manifest.id === id));
@@ -92,7 +94,7 @@ export default function ExtensionScreen() {
   return (
     <>
       <Stack.Screen options={{ title: m.name, headerStyle: { backgroundColor: c.bgGrouped }, contentStyle: { backgroundColor: c.bgGrouped } }} />
-      <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.page} contentContainerStyle={[styles.content, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.page} contentContainerStyle={[styles.content, { paddingBottom: bottomPad }, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}>
         <View style={styles.inner}>
           <Group footer={m.description}>
             <SettingsRow icon="checkmark.circle.fill" label="On" onPress={() => setEnabled(m.id, !ext.enabled)} role="switch" checked={ext.enabled} trailing={sw(ext.enabled, (v) => setEnabled(m.id, v), 'On')} />

@@ -36,6 +36,7 @@ import { confirmDestructive } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
 import { createStyles, type AppTheme, font, iconSize, mediaColors, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
 import { useSidebarInset } from '@/theme/sidebar-inset';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 interface Sent {
   userName: string;
@@ -46,6 +47,7 @@ interface Sent {
 export function InviteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const styles = useStyles(makeSettingsStyles);
+  const bottomPad = useTabBottomPadding();
   const { c } = useTheme();
   const sidebar = useSidebarInset();
   const server = findServer(useAccounts(), id);
@@ -184,7 +186,7 @@ export function InviteScreen() {
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         style={styles.page}
-        contentContainerStyle={[styles.content, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPad }, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}
         keyboardShouldPersistTaps="handled">
         <View style={styles.inner}>
           {sent ? <SentCard sent={sent} serverName={server.name} onShare={() => void share(sent)} onDone={() => setSent(null)} /> : null}

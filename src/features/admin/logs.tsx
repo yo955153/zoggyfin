@@ -23,6 +23,7 @@ import { appendLogChunk, formatSince, logLineLevel, nextLogRange, searchLines } 
 import { openAdminLog } from './nav';
 import { useLogFiles } from './queries';
 import { useAdminWide } from './ui';
+import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 const MONO = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' });
 
@@ -101,6 +102,7 @@ const EMPTY: LogState = { lines: [], carry: '', loadedBytes: 0, total: null, don
 /** One log file, read-only, in a monospace font. */
 export function LogViewer({ target, name }: { target: AdminTarget; name: string }) {
   const s = useStyles(makeStyles);
+  const bottomPad = useTabBottomPadding(spacing.huge, { autoInset: false });
   const { c } = useTheme();
   const wide = useAdminWide();
   const [st, setSt] = useState<LogState>(EMPTY);
@@ -213,7 +215,7 @@ export function LogViewer({ target, name }: { target: AdminTarget; name: string 
         onEndReached={() => {
           if (!searching) void loadMore();
         }}
-        contentContainerStyle={s.listContent}
+        contentContainerStyle={[s.listContent, { paddingBottom: bottomPad }]}
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={<Text style={s.status}>{searching ? 'No line contains this text.' : 'The file is empty.'}</Text>}
         ListFooterComponent={
