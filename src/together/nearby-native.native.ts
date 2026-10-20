@@ -38,6 +38,7 @@ function wrap(m: Module): NearbyLinkNative {
     mediaBase: (id, host, port) => m.mediaBase(id, host, port),
     stopRelay: () => m.stopRelay(),
     send: (id, text) => m.send(id, text),
+    sendPong: opt('sendPong')?.bind(m),
     close: (id) => m.close(id),
     addresses: () => m.addresses(),
     stopAll: () => m.stopAll(),

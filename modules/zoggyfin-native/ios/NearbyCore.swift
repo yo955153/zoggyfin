@@ -17,15 +17,27 @@ let maxHTTPPerGuest = 3
 /// HTTP connections in all at most.
 let maxHTTPTotal = 32
 
-/// TCP with peer-to-peer Wi-Fi (AWDL) and no Nagle delay.
-func nearbyParameters() -> NWParameters {
+/// TCP with peer-to-peer Wi-Fi (AWDL) and no Nagle delay. `control`: a control socket of a
+/// guest. It gets the interactive voice class (Wi-Fi WMM voice), so the clock pings and the
+/// group state do not wait behind the media in the radio's queues.
+func nearbyParameters(control: Bool = false) -> NWParameters {
   let tcp = NWProtocolTCP.Options()
   tcp.noDelay = true
   tcp.connectionTimeout = 10
   let params = NWParameters(tls: nil, tcp: tcp)
   params.includePeerToPeer = true
+  if control { params.serviceClass = .interactiveVoice }
   return params
 }
+
+/// The send context of a control frame: IP metadata with the interactive voice class. The
+/// host's control sockets come from the one listener that also takes the HTTP connections,
+/// so their parameters cannot carry the class; each frame asks for it.
+let controlFrameContext: NWConnection.ContentContext = {
+  let ip = NWProtocolIP.Metadata()
+  ip.serviceClass = .interactiveVoice
+  return NWConnection.ContentContext(identifier: "zgf-control", metadata: [ip])
+}()
 
 /// The cross-platform nearby transport for Apple platforms (see
 /// `src/together/link-native-types.ts` for the contract and the wire format).
@@ -254,7 +266,7 @@ public final class NearbyCore {
         self.emit("onSocketClosed", ["socketId": id, "reason": "Bad address."])
         return
       }
-      let conn = NWConnection(to: endpoint, using: nearbyParameters())
+      let conn = NWConnection(to: endpoint, using: nearbyParameters(control: true))
       let s = FrameSocket(id: id, connection: conn, inbound: false, owner: self, queue: self.queue)
       self.sockets[id] = s
       s.startOutbound()
@@ -290,6 +302,18 @@ public final class NearbyCore {
       s.send(Data(text.utf8))
       return true
     }
+  }
+
+  /// Host: a pong to a ping. The text is built here and `t2` is stamped right before the frame
+  /// goes to the connection, after any wait in JavaScript or in the Mac app's bridge.
+  public func sendPong(socketId: String, id: Double, t0: Double, t1: Double) -> Bool {
+    guard id.isFinite, t0.isFinite, t1.isFinite else { return false }
+    queue.async {
+      guard let s = self.sockets[socketId], s.isOpen else { return }
+      let text = "{\"v\":1,\"t\":\"pong\",\"id\":\(Int64(id)),\"t0\":\(t0),\"t1\":\(t1),\"t2\":\(nearbyMonotonicMs())}"
+      s.send(Data(text.utf8))
+    }
+    return true
   }
 
   public func close(socketId: String) {
@@ -461,7 +485,7 @@ private final class FrameSocket {
     let n = UInt32(body.count).bigEndian
     withUnsafeBytes(of: n) { frame.append(contentsOf: $0) }
     frame.append(body)
-    connection.send(content: frame, completion: .contentProcessed { [weak self] error in
+    connection.send(content: frame, contentContext: controlFrameContext, isComplete: true, completion: .contentProcessed { [weak self] error in
       if error != nil { self?.connection.cancel() }
     })
   }

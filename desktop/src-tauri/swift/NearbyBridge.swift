@@ -202,6 +202,8 @@ private final class NearbyBridge: NearbyEventSink {
     // Both
     case "send":
       return .value(core.send(socketId: nativeId(try a.string(0)), text: try a.string(1)))
+    case "sendPong":
+      return .value(core.sendPong(socketId: nativeId(try a.string(0)), id: try a.double(1), t0: try a.double(2), t1: try a.double(3)))
     case "close":
       core.close(socketId: nativeId(try a.string(0)))
     case "addresses":

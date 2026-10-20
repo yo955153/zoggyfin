@@ -143,6 +143,16 @@ export class NearbyLink {
     }
   }
 
+  /** Host: answers a ping. `t2` is stamped in native code when the build can (link-native-types.ts). */
+  sendPong(peerId: string, id: number, t0: number, t1: number): void {
+    if (!this.isUp(peerId)) return;
+    if (this.native.sendPong) {
+      this.native.sendPong(peerId, id, t0, t1);
+      return;
+    }
+    this.native.send(peerId, encode({ t: 'pong', id, t0, t1, t2: this.native.monotonicNow() }));
+  }
+
   /** Closes one peer's socket with no event. */
   drop(peerId: string): void {
     const p = this.peers.get(peerId);

@@ -43,6 +43,8 @@ export interface RoomDeps {
   onChange?(): void;
   /** A guest asked for something it may not do. */
   onDenied?(peerId: string): void;
+  /** Answers a ping with `t2` stamped as late as it can be (link.ts `sendPong`). Unset: `send` with `now()`. */
+  pong?(peerId: string, id: number, t0: number, t1: number): void;
 }
 
 /** A member as the room keeps it: the public facts and the socket it uses now. */
@@ -147,7 +149,8 @@ export class HostRoom {
   receive(peerId: string, message: Message, receivedAt: number): void {
     switch (message.t) {
       case 'ping':
-        this.deps.send({ t: 'pong', id: message.id, t0: message.t0, t1: receivedAt, t2: this.deps.now() }, [peerId]);
+        if (this.deps.pong) this.deps.pong(peerId, message.id, message.t0, receivedAt);
+        else this.deps.send({ t: 'pong', id: message.id, t0: message.t0, t1: receivedAt, t2: this.deps.now() }, [peerId]);
         return;
       case 'hello': {
         const local = message.have.includes(this.item.id);

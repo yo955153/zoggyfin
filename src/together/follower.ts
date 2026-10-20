@@ -46,7 +46,12 @@ export interface FollowerStats {
 
 const BURST = 8;
 const BURST_GAP = 120;
-const PING_EVERY = 2000;
+/** Pings until the clock converges, and after a jump, ms. */
+export const PING_FAST = 2000;
+/** Pings once the clock converged, ms (each ping wakes the host's radio). */
+export const PING_SLOW = 10_000;
+/** After a jump (a relink, or a round trip far above the lowest), this many pings go at the fast pace. */
+const FAST_AFTER_JUMP = 8;
 const TICK = 500;
 
 export class Follower {
@@ -57,6 +62,9 @@ export class Follower {
   private pingId = 0;
   private pending = new Set<number>();
   private timers: unknown[] = [];
+  private pingTimer: unknown = null;
+  /** Pings left at the fast pace (after a jump). */
+  private fastLeft = 0;
   private unsubBuffering: (() => void) | null = null;
   /** The other guests (this guest is left out). */
   members: Member[] = [];
@@ -85,7 +93,7 @@ export class Follower {
     this.hello = { name, have, extra };
     this.deps.send({ t: 'hello', name, have, ...extra });
     for (let i = 0; i < BURST; i++) this.timers.push(this.deps.timers.setTimeout(() => this.ping(), i * BURST_GAP));
-    this.timers.push(this.deps.timers.setInterval(() => this.ping(), PING_EVERY));
+    this.schedulePing();
     this.timers.push(this.deps.timers.setInterval(() => this.anchors.follow(false), TICK));
   }
 
@@ -138,6 +146,7 @@ export class Follower {
     // The player plays already: tell the host at once, so the group does not wait for this device.
     if (this.player) this.deps.send({ ...this.bufferingMessage(this.player.isBuffering()), ...(extra?.canHost !== undefined ? { canHost: extra.canHost } : {}) } as Message);
     for (let i = 0; i < BURST; i++) this.timers.push(this.deps.timers.setTimeout(() => this.ping(), i * BURST_GAP));
+    this.jumped();
   }
 
   /** The player state now changes only with local controls (this device is the new host). Keeps the player. */
@@ -159,12 +168,16 @@ export class Follower {
 
   receive(message: Message, receivedAt: number): void {
     switch (message.t) {
-      case 'pong':
+      case 'pong': {
         if (!this.pending.delete(message.id)) return;
-        this.clock.add({ t0: message.t0, t1: message.t1, t2: message.t2, t3: receivedAt });
+        const before = this.converged() ? this.clock.estimate() : null;
+        const m = this.clock.add({ t0: message.t0, t1: message.t1, t2: message.t2, t3: receivedAt });
+        // The round trip jumped (another path, or a busy link): measure at the fast pace again.
+        if (m && before && m.rtt > before.minRtt * 2 + 20) this.jumped();
         if (this.clock.count === 3) this.anchors.follow(true);
         this.deps.onChange?.();
         return;
+      }
       case 'welcome':
         this.selfId = message.you ?? null;
         this.onlyHostControls = message.onlyHostControls;
@@ -232,9 +245,39 @@ export class Follower {
       this.deps.timers.clearInterval(t);
     }
     this.timers = [];
+    if (this.pingTimer !== null) this.deps.timers.clearTimeout(this.pingTimer);
+    this.pingTimer = null;
     this.anchors.detach();
     this.unsubBuffering?.();
     this.unsubBuffering = null;
+  }
+
+  /** The clock has enough quiet samples that agree: ping at the slow pace. */
+  private converged(): boolean {
+    const e = this.clock.estimate();
+    return !!e && e.samples >= 12 && e.used >= 6 && e.spread < 5;
+  }
+
+  /** The time to the next ping, ms. */
+  get pingEvery(): number {
+    return this.fastLeft > 0 || !this.converged() ? PING_FAST : PING_SLOW;
+  }
+
+  private schedulePing(): void {
+    if (this.pingTimer !== null) this.deps.timers.clearTimeout(this.pingTimer);
+    this.pingTimer = this.deps.timers.setTimeout(() => {
+      this.pingTimer = null;
+      this.ping();
+      if (this.fastLeft > 0) this.fastLeft -= 1;
+      this.schedulePing();
+    }, this.pingEvery);
+  }
+
+  /** A relink or a round trip jump: the next pings go at the fast pace. */
+  private jumped(): void {
+    const slow = this.pingEvery === PING_SLOW;
+    this.fastLeft = FAST_AFTER_JUMP;
+    if (slow || this.pingTimer === null) this.schedulePing();
   }
 
   private ping(): void {

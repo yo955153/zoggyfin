@@ -153,6 +153,14 @@ export interface NearbyLinkNative {
 
   // Both
   send(socketId: string, text: string): boolean;
+  /**
+   * Host: sends a pong to a ping. The native layer builds the message and
+   * stamps `t2` (its monotonic clock) right before the frame goes to the
+   * socket, so a wait in a queue (the JavaScript thread, the Mac app's Tauri
+   * bridge) does not make the guest's clock wrong. Optional: older builds
+   * have none, and JavaScript stamps `t2`.
+   */
+  sendPong?(socketId: string, id: number, t0: number, t1: number): boolean;
   close(socketId: string): void;
   /** The IPv4 addresses of this device, for the join code. */
   addresses(): Promise<LinkAddress[]>;

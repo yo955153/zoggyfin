@@ -39,6 +39,24 @@ describe('ClockSync', () => {
     expect(e.samples).toBe(8);
   });
 
+  it('ignores samples with a high round trip, even when most samples are slow', () => {
+    const c = new ClockSync();
+    // True offset 100. Four quiet samples (rtt 10), then a busy upload: the pong waits 190 ms in the host's queue.
+    for (let i = 0; i < 4; i++) c.add({ t0: i * 100, t1: i * 100 + 5 + 100, t2: i * 100 + 5 + 100, t3: i * 100 + 10 });
+    for (let i = 4; i < 24; i++) c.add({ t0: i * 100, t1: i * 100 + 5 + 100, t2: i * 100 + 5 + 100, t3: i * 100 + 200 });
+    const e = c.estimate()!;
+    expect(e.offset).toBe(100);
+    expect(e.used).toBe(4);
+    expect(e.minRtt).toBe(10);
+  });
+
+  it('keeps samples within a few ms of the lowest round trip', () => {
+    const c = new ClockSync();
+    for (let i = 0; i < 6; i++) c.add({ t0: 0, t1: 100 + i, t2: 100 + i, t3: 10 + 2 * i });
+    // rtt 10, 12, 14, 16, 18, 20: the limit is 10 + 5.
+    expect(c.estimate()!.used).toBe(3);
+  });
+
   it('drops impossible samples and keeps a window', () => {
     const c = new ClockSync(3);
     c.add({ t0: 10, t1: 0, t2: 0, t3: 5 }); // negative rtt

@@ -173,3 +173,63 @@ describe('AnchorFollower attach', () => {
     expect(p.isPlaying()).toBe(true);
   });
 });
+
+describe('Follower ping pace', () => {
+  /** A guest whose pings a host answers after `rtt` ms (half each way). Counts the pings. */
+  function pinger(rtt: () => number) {
+    const clock = new VirtualClock();
+    const pings: number[] = [];
+    let f: Follower;
+    f = new Follower({
+      send: (m) => {
+        if (m.t !== 'ping') return;
+        pings.push(clock.t);
+        const d = rtt();
+        clock.setTimeout(() => f.receive({ t: 'pong', id: m.id, t0: m.t0, t1: clock.t + 500, t2: clock.t + 500 }, clock.t + d / 2), d / 2);
+      },
+      now: () => clock.t,
+      timers: clock,
+    });
+    f.start('Phone', []);
+    return { clock, pings, f: () => f };
+  }
+  const between = (pings: number[], a: number, b: number) => pings.filter((t) => t >= a && t < b).length;
+
+  it('pings every 2 s until the clock converges, then every 10 s', () => {
+    const { clock, pings, f } = pinger(() => 10);
+    clock.advance(60_000);
+    // The start burst (8) and 2 s pings until 12 samples agree.
+    expect(between(pings, 0, 1000)).toBe(8);
+    expect(f().pingEvery).toBe(10_000);
+    expect(between(pings, 30_000, 60_000)).toBe(3);
+  });
+
+  it('pings fast again after a relink, and after a round trip jump', () => {
+    let rtt = 10;
+    const { clock, pings, f } = pinger(() => rtt);
+    clock.advance(60_000);
+    f().relink(() => undefined, false);
+    expect(f().pingEvery).toBe(2000);
+    // The relink's link sends nothing: the next pings get no answer, the pace stays fast for 8 pings.
+    clock.advance(20_000);
+    expect(f().pingEvery).toBe(10_000);
+    void pings;
+    const g = pinger(() => rtt);
+    g.clock.advance(60_000);
+    rtt = 300;
+    g.clock.advance(12_000);
+    expect(g.f().pingEvery).toBe(2000);
+  });
+});
+
+describe('HostRoom pong', () => {
+  it('lets the link stamp the pong when it can', () => {
+    const clock = new VirtualClock();
+    const pong = jest.fn();
+    const send = jest.fn();
+    const room = new HostRoom({ send, now: () => clock.t, player: new FakePlayer(clock), timers: clock, pong }, { sessionId: 's', item, stream: null, onlyHostControls: false });
+    room.receive('g', { t: 'ping', id: 7, t0: 1.5 }, 40);
+    expect(pong).toHaveBeenCalledWith('g', 7, 1.5, 40);
+    expect(send).not.toHaveBeenCalled();
+  });
+});

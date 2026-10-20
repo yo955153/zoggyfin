@@ -111,3 +111,36 @@ describe('NearbyLink', () => {
     expect(t.log.some((l) => l.startsWith('request') || l.startsWith('host up'))).toBe(false);
   });
 });
+
+describe('NearbyLink pong', () => {
+  it('stamps t2 in JavaScript when the build has no native pong', async () => {
+    const t = setup();
+    await t.hostDev.startServer('zgf-1', { v: '1' });
+    t.guestDev.startBrowsing();
+    t.guest.join({ serviceId: 'zgf-1' }, { v: 1, name: 'Sam', have: false });
+    t.clock.advance(10);
+    const hostPeer = [...t.net.links.values()][0]!.bId;
+    t.host.respond(hostPeer, true);
+    t.clock.advance(10);
+    t.host.sendPong(hostPeer, 4, 1.5, 9);
+    t.clock.advance(10);
+    expect(t.log).toContain('guest got pong');
+    const pong = JSON.parse(t.hostDev.sent.at(-1)!.text);
+    expect(pong).toMatchObject({ t: 'pong', id: 4, t0: 1.5, t1: 9 });
+    expect(typeof pong.t2).toBe('number');
+  });
+
+  it('uses the native pong when the build has one', async () => {
+    const t = setup();
+    const sendPong = jest.fn(() => true);
+    Object.assign(t.hostDev, { sendPong });
+    await t.hostDev.startServer('zgf-1', { v: '1' });
+    t.guestDev.startBrowsing();
+    t.guest.join({ serviceId: 'zgf-1' }, { v: 1, name: 'Sam', have: false });
+    t.clock.advance(10);
+    const hostPeer = [...t.net.links.values()][0]!.bId;
+    t.host.respond(hostPeer, true);
+    t.host.sendPong(hostPeer, 4, 1.5, 9);
+    expect(sendPong).toHaveBeenCalledWith(hostPeer, 4, 1.5, 9);
+  });
+});

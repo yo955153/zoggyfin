@@ -66,6 +66,8 @@ private const val HTTP_IDLE_TIMEOUT_MS = 30_000
 private const val MAX_HTTP_PER_GUEST = 3
 /** HTTP connections in all at most. */
 private const val MAX_HTTP_TOTAL = 32
+/** The IP TOS of a control socket: DSCP EF (46), which Wi-Fi maps to the WMM voice queue. */
+private const val CONTROL_TRAFFIC_CLASS = 0xB8
 /** A paced response sends this many seconds of media at once (the player's start buffer), then `PACE_FACTOR` x the bitrate. */
 private const val PACE_BURST_SECONDS = 10.0
 private const val PACE_FACTOR = 1.5
@@ -255,6 +257,15 @@ class ZoggyfinTogetherModule : Module() {
 
     Function("send") { socketId: String, text: String ->
       sockets[socketId]?.send(text) ?: false
+    }
+
+    /** Host: a pong to a ping. The writer thread stamps `t2` right before the frame goes out. */
+    Function("sendPong") { socketId: String, id: Double, t0: Double, t1: Double ->
+      if (id.isFinite() && t0.isFinite() && t1.isFinite()) {
+        sockets[socketId]?.sendLate { "{\"v\":1,\"t\":\"pong\",\"id\":${id.toLong()},\"t0\":$t0,\"t1\":$t1,\"t2\":${now()}}" } ?: false
+      } else {
+        false
+      }
     }
 
     Function("close") { socketId: String ->
@@ -572,6 +583,7 @@ class ZoggyfinTogetherModule : Module() {
       if (head.contentEquals(MAGIC)) {
         s.soTimeout = 0
         s.tcpNoDelay = true
+        setControlClass(s)
         val c = newControlSocket(inbound = true)
         if (!c.attach(s)) return
         emit("onSocketOpen", mapOf("socketId" to c.id, "inbound" to true))
@@ -620,6 +632,15 @@ class ZoggyfinTogetherModule : Module() {
 
   // MARK: Control sockets
 
+  /** The WMM voice class for a control socket, so pings and the group state do not wait behind media. */
+  private fun setControlClass(s: Socket) {
+    try {
+      s.trafficClass = CONTROL_TRAFFIC_CLASS
+    } catch (e: Exception) {
+      // Some networks or IPv6 sockets refuse it: the socket works with the default class.
+    }
+  }
+
   private fun newControlSocket(inbound: Boolean): ControlSocket {
     val c = ControlSocket(UUID.randomUUID().toString(), inbound)
     sockets[c.id] = c
@@ -629,6 +650,7 @@ class ZoggyfinTogetherModule : Module() {
   private fun openOutbound(c: ControlSocket, address: InetSocketAddress) {
     val s = Socket()
     if (!c.attach(s)) return
+    setControlClass(s)
     try {
       s.connect(address, CONNECT_TIMEOUT_MS)
       s.tcpNoDelay = true
@@ -674,9 +696,18 @@ class ZoggyfinTogetherModule : Module() {
 
     fun send(text: String): Boolean {
       if (closed.get() || !open) return false
-      val s = socket ?: return false
       val bytes = text.toByteArray(Charsets.UTF_8)
       if (bytes.isEmpty() || bytes.size > MAX_FRAME) return false
+      return write { frameOf(bytes) }
+    }
+
+    /** Sends a text that the writer thread makes right before it writes (a pong's send time). */
+    fun sendLate(make: () -> String): Boolean {
+      if (closed.get() || !open) return false
+      return write { frameOf(make().toByteArray(Charsets.UTF_8)) }
+    }
+
+    private fun frameOf(bytes: ByteArray): ByteArray {
       val frame = ByteArray(4 + bytes.size)
       val n = bytes.size
       frame[0] = (n ushr 24).toByte()
@@ -684,11 +715,16 @@ class ZoggyfinTogetherModule : Module() {
       frame[2] = (n ushr 8).toByte()
       frame[3] = n.toByte()
       System.arraycopy(bytes, 0, frame, 4, n)
+      return frame
+    }
+
+    private fun write(frame: () -> ByteArray): Boolean {
+      val s = socket ?: return false
       return try {
         writer.execute {
           try {
             val out: OutputStream = s.getOutputStream()
-            out.write(frame)
+            out.write(frame())
             out.flush()
           } catch (e: IOException) {
             close(e.message ?: "Could not send.")

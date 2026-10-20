@@ -10,8 +10,11 @@
  * and t2 are the server's request reception and response times.
  *
  * One sample has an error of up to rtt / 2 when the path is not symmetric.
- * The estimate keeps recent samples, uses the half with the lowest round
- * trip, and takes the median offset of that half.
+ * Under load (a host that also uploads media) the extra delay is in the
+ * queues, and it is mostly one way. So the estimate uses only the samples
+ * whose round trip is close to the lowest one in the window (the quiet
+ * ones), and takes their median offset. A sample with a high round trip
+ * never moves the offset.
  */
 
 export interface ClockSample {
@@ -46,19 +49,27 @@ export interface ClockEstimate {
   /** Largest offset minus smallest offset of the samples used, ms. */
   spread: number;
   samples: number;
+  /** The number of samples the estimate used (the quiet ones). */
+  used: number;
+  /** The lowest round trip in the window, ms. */
+  minRtt: number;
 }
+
+/** A sample counts as quiet when its round trip is at most the lowest one plus this, ms (or plus half the lowest, when that is more). */
+export const RTT_SLACK = 5;
 
 export class ClockSync {
   private samples: ClockMeasure[] = [];
 
-  constructor(private readonly keep = 16) {}
+  constructor(private readonly keep = 32) {}
 
-  /** Adds one ping/pong. Samples with a negative or absurd round trip are dropped. */
-  add(sample: ClockSample): void {
+  /** Adds one ping/pong. Samples with a negative or absurd round trip are dropped. Returns the measure, or null when dropped. */
+  add(sample: ClockSample): ClockMeasure | null {
     const m = measure(sample);
-    if (!Number.isFinite(m.offset) || !(m.rtt >= 0) || m.rtt > 10_000) return;
+    if (!Number.isFinite(m.offset) || !(m.rtt >= 0) || m.rtt > 10_000) return null;
     this.samples.push(m);
     if (this.samples.length > this.keep) this.samples.shift();
+    return m;
   }
 
   get count(): number {
@@ -71,13 +82,20 @@ export class ClockSync {
 
   estimate(): ClockEstimate | null {
     if (!this.samples.length) return null;
-    const best = [...this.samples].sort((a, b) => a.rtt - b.rtt).slice(0, Math.max(1, Math.ceil(this.samples.length / 2)));
-    const offsets = best.map((s) => s.offset);
+    const minRtt = Math.min(...this.samples.map((s) => s.rtt));
+    const limit = minRtt + Math.max(RTT_SLACK, minRtt / 2);
+    let used = this.samples.filter((s) => s.rtt <= limit);
+    // Too few quiet samples (a short window): the lowest round trips, at least 3.
+    const floor = Math.min(3, this.samples.length);
+    if (used.length < floor) used = [...this.samples].sort((a, b) => a.rtt - b.rtt).slice(0, floor);
+    const offsets = used.map((s) => s.offset);
     return {
       offset: median(offsets),
-      rtt: median(best.map((s) => s.rtt)),
+      rtt: median(used.map((s) => s.rtt)),
       spread: Math.max(...offsets) - Math.min(...offsets),
       samples: this.samples.length,
+      used: used.length,
+      minRtt,
     };
   }
 }

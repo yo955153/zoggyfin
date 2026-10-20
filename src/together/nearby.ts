@@ -400,7 +400,15 @@ class NearbyController {
     if (this.expiryTimer) clearInterval(this.expiryTimer);
     this.expiryTimer = setInterval(() => this.expireRequests(), 5_000);
     this.room = new HostRoom(
-      { send: this.send, now: this.now, player: opts.port, timers: realTimers, onChange: () => this.publishHost(), onDenied: () => undefined },
+      {
+        send: this.send,
+        now: this.now,
+        player: opts.port,
+        timers: realTimers,
+        onChange: () => this.publishHost(),
+        onDenied: () => undefined,
+        pong: (peer, id, t0, t1) => this.link?.sendPong(peer, id, t0, t1),
+      },
       {
         sessionId,
         item: shared,

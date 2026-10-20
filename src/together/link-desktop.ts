@@ -162,6 +162,12 @@ function makeLink(): NearbyLinkNative {
       void queued('send', [socketId, text]);
       return true;
     },
+    // Swift stamps t2 when the frame leaves, after the wait in the Tauri queue.
+    sendPong(socketId, id, t0, t1) {
+      if (!openSockets.has(socketId)) return false;
+      void queued('sendPong', [socketId, id, t0, t1]);
+      return true;
+    },
     close: (socketId) => void queued('close', [socketId]),
     addresses: () => afterQueue<LinkAddress[]>('addresses'),
     stopAll() {
