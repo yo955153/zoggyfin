@@ -8,10 +8,10 @@ const authError = Object.assign(new Error('Unauthorized'), { response: { status:
 
 describe('isPrivateAddress', () => {
   it('knows private ranges and .local names', () => {
-    for (const a of ['http://10.0.0.5:8096', '172.16.1.1:8096', 'http://172.31.0.1', `https://${home(1, 2)}`, 'jellyfin.local', 'http://nas.local:8096/jf']) {
+    for (const a of ['http://10.0.0.5:8096', '172.16.1.1:8096', 'http://172.31.0.1', `https://${home(1, 2)}`, 'jellyfin.local', 'http://nas.local:8096/jf', 'http://nas:8096', 'media.lan']) {
       expect(isPrivateAddress(a)).toBe(true);
     }
-    for (const a of ['https://jf.example.com', 'http://100.64.1.2:8096', 'https://box.example.ts.net', 'http://192.0.2.10:8096', 'http://172.32.0.1', 'http://8.8.8.8', '', 'local']) {
+    for (const a of ['https://jf.example.com', 'http://100.64.1.2:8096', 'https://box.example.ts.net', 'http://192.0.2.10:8096', 'http://172.32.0.1', 'http://8.8.8.8', '', 'http://[2001:db8::1]:8096']) {
       expect(isPrivateAddress(a)).toBe(false);
     }
   });

@@ -5,7 +5,7 @@ const home = (c: number, d: number): string => formatIPv4(0xc0a80000 + c * 256 +
 
 describe('classifyAddress', () => {
   it('knows the local network', () => {
-    for (const a of ['http://10.1.2.3:8096', '172.16.0.9', 'https://172.31.255.1', `http://${home(0, 2)}/jf`, 'nas.local', 'http://169.254.1.1', 'http://[fd12::1]:8096']) {
+    for (const a of ['http://10.1.2.3:8096', '172.16.0.9', 'https://172.31.255.1', `http://${home(0, 2)}/jf`, 'nas.local', 'http://169.254.1.1', 'http://[fd12::1]:8096', 'http://nas:8096', 'jf.home.arpa', 'box.localdomain']) {
       expect(classifyAddress(a)).toBe('lan');
     }
   });

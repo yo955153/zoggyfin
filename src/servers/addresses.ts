@@ -11,6 +11,8 @@
  *   for a higher one that already failed.
  */
 
+import { classifyAddress } from './address-class';
+
 export type AddressKind = 'internal' | 'external';
 
 /** Automatic (default), or only addresses of one kind. */
@@ -36,46 +38,29 @@ export type ProbeResult = { url: string; ok: true; ms: number } | { url: string;
 /** Asks one address for its server Id (GET /System/Info/Public). Throws or rejects when it does not answer. */
 export type ProbeFn = (url: string, timeoutMs: number) => Promise<{ id: string | null | undefined }>;
 
-const PRIVATE_V4 = [/^10\./, /^127\./, /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./, /^169\.254\./];
-/** 100.64.0.0/10 (carrier-grade NAT), the range Tailscale uses. */
-const TAILSCALE_V4 = /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./;
-const LOCAL_SUFFIX = /\.(local|lan|home|internal|localdomain|home\.arpa)$/i;
-
-function hostOf(url: string): string {
-  const m = /^[a-z]+:\/\/(\[[^\]]+\]|[^/:?#]+)/i.exec(url);
-  return (m?.[1] ?? '').toLowerCase();
-}
-
 /** Where an address can work, from its host alone. */
 export type AddressNetwork = 'internet' | 'tailscale' | 'home';
 
 /**
  * Tailscale: a 100.64.0.0/10 address, a Tailscale IPv6 address (fd7a:115c:a1e0::/48)
- * or a MagicDNS name (`*.ts.net`). Home: a private address or a local name.
+ * or a MagicDNS name (`*.ts.net`). Home: a private address, this device or a local name.
  * Everything else: the internet. A WireGuard address is a private address, so
  * only the user can tell it from a home network address.
+ * It uses `classifyAddress`, the one shared classifier.
  */
 export function addressNetwork(url: string): AddressNetwork {
-  const host = hostOf(url);
-  if (!host) return 'internet';
-  if (TAILSCALE_V4.test(host) || /\.ts\.net$/.test(host) || /^\[fd7a:115c:a1e0:/i.test(host)) return 'tailscale';
-  return guessKind(url) === 'internal' ? 'home' : 'internet';
+  const c = classifyAddress(url);
+  if (c === 'tailscale') return 'tailscale';
+  return c === 'public' ? 'internet' : 'home';
 }
 
 /**
- * A first guess for a new address: private IPs, `.local`-style names and
- * one-label names are internal. Tailscale addresses are external: they work
- * away from home.
+ * A first guess for a new address: private IPs, this device, `.local`-style
+ * names and one-label names are internal. Tailscale addresses are external:
+ * they work away from home.
  */
 export function guessKind(url: string): AddressKind {
-  const host = hostOf(url);
-  if (!host) return 'external';
-  if (TAILSCALE_V4.test(host) || /^\[fd7a:115c:a1e0:/i.test(host)) return 'external';
-  if (host === 'localhost') return 'internal';
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return PRIVATE_V4.some((r) => r.test(host)) ? 'internal' : 'external';
-  if (host.startsWith('[')) return /^\[(fc|fd|fe80|::1)/i.test(host) ? 'internal' : 'external';
-  if (LOCAL_SUFFIX.test(host) || !host.includes('.')) return 'internal';
-  return 'external';
+  return addressNetwork(url) === 'home' ? 'internal' : 'external';
 }
 
 /** Jellyfin writes Ids with and without dashes; compare them the same way. */

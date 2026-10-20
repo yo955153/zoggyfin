@@ -3,9 +3,10 @@
  * local network help, the discovery and the address labels.
  *
  * - `lan`: the local network: the RFC 1918 ranges (10/8, 172.16/12 and the
- *   /16 block of home routers), link-local
- *   169.254/16, and `.local` names. iOS and macOS ask the user for local
- *   network access before the app can reach these.
+ *   /16 block of home routers), link-local 169.254/16, IPv6 unique-local and
+ *   link-local addresses, names that end in a local suffix (`LOCAL_SUFFIX`:
+ *   local, lan, home, localdomain, home.arpa and one more) and one-label names. iOS and macOS ask the
+ *   user for local network access before the app can reach these.
  * - `tailscale`: Tailscale (100.64/10, the CGNAT range, `*.ts.net` names and
  *   fd7a:115c:a1e0::/48). This is a VPN, not the local network.
  * - `loopback`: this device.
@@ -14,6 +15,9 @@
 import { isPrivateIPv4, parseIPv4 } from './discovery/subnet';
 
 export type AddressClass = 'lan' | 'tailscale' | 'loopback' | 'public';
+
+/** Name suffixes that home routers and local DNS use. */
+const LOCAL_SUFFIX = /\.(local|lan|home|internal|localdomain|home\.arpa)$/;
 
 /** The host of a URL or of a bare `host:port`, in lower case. Brackets of an IPv6 address are removed. */
 export function hostOf(urlOrHost: string): string {
@@ -31,7 +35,7 @@ export function classifyAddress(urlOrHost: string): AddressClass {
   if (!host) return 'public';
   if (host === 'localhost' || host === '::1') return 'loopback';
   if (host.endsWith('.ts.net')) return 'tailscale';
-  if (host.endsWith('.local')) return 'lan';
+  if (LOCAL_SUFFIX.test(host)) return 'lan';
   const n = parseIPv4(host);
   if (n !== null) {
     if (n >>> 24 === 127) return 'loopback';
@@ -41,7 +45,9 @@ export function classifyAddress(urlOrHost: string): AddressClass {
   if (host.includes(':')) {
     if (/^fd7a:115c:a1e0:/.test(host)) return 'tailscale';
     if (/^(fe8|fe9|fea|feb|fc|fd)/.test(host)) return 'lan';
+    return 'public';
   }
+  if (!host.includes('.')) return 'lan';
   return 'public';
 }
 

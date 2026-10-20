@@ -45,6 +45,11 @@
           "category": ["BROWSABLE", "DEFAULT"]
         },
         {
+          "action": "VIEW",
+          "data": [{ "scheme": "zoggyfin" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
           "action": "SEND",
           "category": ["DEFAULT"],
           "data": [{ "mimeType": "text/plain" }]
