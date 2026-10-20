@@ -1,0 +1,71 @@
+name: Bug report
+description: Something does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the report. Please do not post passwords, tokens, invite links or
+        screenshots of a private server. For a security problem, use private reporting
+        (see SECURITY.md) and not this form.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - iPhone
+        - iPad
+        - Android
+        - Web
+        - Mac app
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS or browser version
+      description: For example iOS 26.1, macOS 26.0 or Safari 26.
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Zoggyfin version
+      description: Settings shows the version. For TestFlight, add the build number.
+    validations:
+      required: true
+  - type: input
+    id: server-version
+    attributes:
+      label: Jellyfin server version
+      description: For example 10.11.0.
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Say what you did and what you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to repeat the problem
+      placeholder: |
+        1. Open ...
+        2. Tap ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: More details
+      description: Media type and codec, network setup, screenshots (demo server only), logs. Remove private data first.

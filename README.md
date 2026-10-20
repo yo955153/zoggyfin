@@ -1,21 +1,96 @@
-# Zoggyfin
+<p align="center">
+  <img src="assets/images/icon.png" alt="The Zoggyfin app icon" width="128" height="128">
+</p>
+
+<h1 align="center">Zoggyfin</h1>
+
+<p align="center">
+  A fast, clear Jellyfin client for iPhone, iPad, Mac and the web, with watch and listen together.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: MPL-2.0" src="https://img.shields.io/badge/license-MPL--2.0-blue"></a>
+  <a href="https://github.com/zog-tech/zoggyfin/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/zog-tech/zoggyfin/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Platforms: iOS, iPadOS, macOS, web" src="https://img.shields.io/badge/platforms-iOS%20%7C%20iPadOS%20%7C%20macOS%20%7C%20web-lightgrey">
+  <img alt="Android: coming soon" src="https://img.shields.io/badge/Android-coming%20soon-orange">
+</p>
+
+<p align="center">
+  <a href="https://zoggyfin.zog-tech.com">Website</a> ·
+  <a href="https://testflight.apple.com/join/qRFABNBJ">TestFlight</a> ·
+  <a href="https://releases.zog-tech.com/zoggyfin/latest/Zoggyfin-arm64.dmg">Mac download</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
+
+<p align="center">
+  <img src="site/public/img/hero-music-720.webp" alt="The music player: album art, the song title, a progress bar and playback controls." width="200">
+  <img src="site/public/img/hero-movie-720.webp" alt="A movie page with a large poster, a Play button and the cast." width="200">
+  <img src="site/public/img/hero-search-720.webp" alt="Search results grouped into Top result, Movies and People." width="200">
+</p>
+
+The screenshots show demo content from the public Jellyfin demo server.
 
 Zoggyfin is an open-source client for [Jellyfin](https://jellyfin.org) media servers.
-It runs on iPhone, iPad and the web, and on Apple silicon Macs as a desktop app with libmpv (`desktop/`).
-Android comes later. The goal is a client that is fast, stable and clear.
+The goal is a client that is fast, stable and clear.
+It runs on iPhone, iPad and the web, and on Apple silicon Macs as a desktop app with libmpv.
+Android is coming soon.
 
 Zoggyfin is not affiliated with the Jellyfin project.
 
+## Features
+
+- **Video player.** Direct play when the device can open the file, HLS when it cannot. It has
+  trickplay previews, chapters, audio and subtitle tracks, Skip Intro, Picture in Picture,
+  AirPlay and a mini player.
+- **Music player.** Background audio, a queue, synced lyrics, Instant Mix, a sleep timer and
+  a long-form mode for audiobooks.
+- **Downloads for offline play.** Movies, episodes, songs, albums and playlists download in
+  the background. The app plays them with no server and reports progress when the server is back.
+- **Many servers and accounts.** Save several servers with several users each. A server can
+  have internal and external addresses, and the app picks the first one that answers.
+- **Server discovery.** The first screen finds Jellyfin servers on the local network.
+- **Watch and listen together.** Use Jellyfin SyncPlay groups over the internet, or start a
+  nearby session with no internet and no server.
+- **Invites.** An administrator adds a person and sends one link or QR code.
+- **Admin panel.** Dashboard, now playing, users, libraries, tasks, activity, devices and logs
+  for server administrators.
+- **Extensions.** Add features for your own setup with a JSON manifest. No extension code runs in
+  the app. See [docs/extensions.md](docs/extensions.md).
+- **Search, playlists and a design system.** One look on every platform, with a dark and a light
+  theme and Arabic text rules.
+
+The [feature details](#feature-details) below describe each part.
+
+### Platforms
+
+| Platform | State |
+|---|---|
+| iPhone and iPad | Beta on TestFlight |
+| Mac (Apple silicon, macOS 13 or later) | Signed and notarized DMG, with automatic updates |
+| Web | Build it yourself and host it (see below) |
+| Android | Coming soon |
+
+Every feature is meant to work on every platform. Where a feature is not on a platform yet,
+the feature details say so (for example, downloads are not on the web).
+
 ## Download
 
-- **Mac** (Apple silicon, macOS 13 or later): [Zoggyfin-arm64.dmg](https://releases.zog-tech.com/zoggyfin/latest/Zoggyfin-arm64.dmg),
-  signed and notarized. The app updates itself. All versions and notes:
-  [zoggyfin.zog-tech.com/download](https://zoggyfin.zog-tech.com/download) and the GitHub releases.
-- **iPhone and iPad:** the beta on [TestFlight](https://testflight.apple.com/join/qRFABNBJ).
+- **iPhone and iPad:** join the beta on [TestFlight](https://testflight.apple.com/join/qRFABNBJ).
+- **Mac** (Apple silicon, macOS 13 or later): [Zoggyfin-arm64.dmg](https://releases.zog-tech.com/zoggyfin/latest/Zoggyfin-arm64.dmg).
+  The app is signed and notarized, and it updates itself. All versions and notes are on
+  [zoggyfin.zog-tech.com/download](https://zoggyfin.zog-tech.com/download).
+- **Android:** coming soon.
+- **Website:** [zoggyfin.zog-tech.com](https://zoggyfin.zog-tech.com).
 
-## Status
+You need a Jellyfin server (10.11 or later) and a user account on it.
+To try the app first, use the public demo server `https://demo.jellyfin.org/stable`,
+user name `demo`, no password.
 
-Early development. Phase 1 ("Foundation") is in place:
+## Feature details
+
+Zoggyfin is in early development. The sections below describe what exists today, in the order it was built.
+
+Phase 1 ("Foundation"):
 
 - Sign in with a server address and a username and password, or with Quick Connect.
 - Home: Continue Watching, Next Up, Continue Listening, Recently Added per library.
@@ -214,9 +289,9 @@ server for the host's file and a loopback relay for Apple guests). The Mac app u
 same Swift code through `desktop/src-tauri/swift/`.
 It builds with the app.
 
-## Run a development build
+## Build from source
 
-You need Node 22 or later, pnpm 10, and Xcode for iOS.
+You need Node 22 or later and pnpm 10. For iOS you also need Xcode.
 
 ```sh
 pnpm install
@@ -231,8 +306,8 @@ Checks:
 
 ```sh
 pnpm typecheck
-pnpm test
 pnpm lint
+pnpm test
 ```
 
 ### Web build
@@ -248,6 +323,47 @@ when no server is saved. See `public/config.example.json`. The Jellyfin server m
 the web app's origin (CORS). A web app served over https cannot use http server addresses
 (the browser blocks mixed content); the app shows a message for them.
 
+### Desktop app (macOS)
+
+You need Rust (stable) and Homebrew libmpv for development.
+
+```sh
+brew install mpv
+pnpm install
+pnpm expo start --web --port 8082   # Metro web, in one terminal
+pnpm desktop:dev                    # the desktop app, in another terminal
+```
+
+`pnpm desktop:build` makes an app for testing. `pnpm desktop:release` builds an LGPL libmpv,
+signs the app and makes a notarized DMG. The release needs signing keys that only the
+maintainer has. See [desktop/README.md](desktop/README.md).
+
+## Project structure
+
+| Path | What it holds |
+|---|---|
+| `src/app/` | Screens and routes (Expo Router) |
+| `src/api/`, `src/auth/`, `src/servers/` | The Jellyfin API layer, sign-in, saved servers and accounts |
+| `src/player/` | Video and audio engines, the device profile and the playback session |
+| `src/downloads/` | The download manager, the state machine and the offline outbox |
+| `src/together/` | Watch and listen together: nearby sessions and SyncPlay |
+| `src/features/`, `src/components/`, `src/theme/` | Feature screens, shared UI and the design tokens |
+| `src/extensions/`, `src/invite/` | Extensions and invites |
+| `modules/` | Local native modules (Swift and Kotlin): decoders, discovery, nearby transport, sharing |
+| `desktop/` | The Tauri 2 Mac app with libmpv |
+| `site/` | The website at zoggyfin.zog-tech.com |
+| `docs/` | The design spec, the design system and the extension guide |
+| `store/` | Store listing text and graphics |
+| `scripts/` | Test helpers |
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+Every feature must work on every platform. Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+For help, see [SUPPORT.md](SUPPORT.md). To report a security problem, see [SECURITY.md](SECURITY.md).
+
 ## License
 
-[Mozilla Public License 2.0](LICENSE).
+Zoggyfin is under the [Mozilla Public License 2.0](LICENSE).
+The Mac app bundles an LGPL build of libmpv and FFmpeg. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

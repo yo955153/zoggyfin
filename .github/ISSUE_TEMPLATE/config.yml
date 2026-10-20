@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question or share an idea
+    url: https://github.com/zog-tech/zoggyfin/discussions
+    about: Use GitHub Discussions for questions and open ideas.
+  - name: Get support
+    url: https://github.com/zog-tech/zoggyfin/blob/main/SUPPORT.md
+    about: Read how to get help, and where to send what.
+  - name: Report a security problem
+    url: https://github.com/zog-tech/zoggyfin/security/advisories/new
+    about: Report security problems in private. Do not open a public issue.
