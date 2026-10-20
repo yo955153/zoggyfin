@@ -120,6 +120,19 @@ describe('desktop download files', () => {
     expect(calls[1][1]).toEqual({ path: 'downloads/a/item.json', text: '{}' });
   });
 
+  it('reads a file size from the disk through Rust, after the queued writes', async () => {
+    const { invoke, calls } = fakeInvoke({ files_size: 0 });
+    const f = createDesktopFiles(invoke, '/data', pageUrl);
+    await f.ready;
+    calls.length = 0;
+    f.remove('downloads/a/media.mkv');
+    await expect(f.statSize('downloads/a/media.mkv')).resolves.toBe(0);
+    expect(calls).toEqual([
+      ['files_remove', { path: 'downloads/a/media.mkv' }],
+      ['files_size', { path: 'downloads/a/media.mkv' }],
+    ]);
+  });
+
   it('has the folder list and the disk space after the start', async () => {
     const f = createDesktopFiles(fakeInvoke({ files_list_dirs: ['a', 'b'], files_disk_space: { free: 5, total: 9 } }).invoke, '/data', pageUrl);
     await f.ready;

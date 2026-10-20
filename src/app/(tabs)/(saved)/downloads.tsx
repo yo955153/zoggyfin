@@ -17,6 +17,7 @@ import {
   downloadsSupported,
   etaSeconds,
   fraction,
+  isFileMissing,
   useDiskSpace,
   removeServerDownloads,
   type ServerSection,
@@ -184,6 +185,7 @@ function statusLine(r: DownloadRecord): string {
     case 'paused':
       return r.method === 'transcode' && r.bytesDone === 0 ? 'Paused. Starts again when you resume' : ['Paused', sizes].filter(Boolean).join(' · ');
     case 'failed':
+      if (isFileMissing(r)) return 'The downloaded file is missing. Download it again';
       return `Failed. ${r.error ?? 'The download stopped'}${r.retryAt ? '. Tries again soon' : ''}`;
     default:
       return '';
@@ -244,9 +246,9 @@ function ProgressRow({ record: r, last }: { record: DownloadRecord; last: boolea
             ) : null}
           </View>
           {failed ? (
-            <Touchable onPress={() => downloads.retry(r.itemId)} radius={radius.pill} accessibilityRole="button" accessibilityLabel="Retry">
+            <Touchable onPress={() => downloads.retry(r.itemId)} radius={radius.pill} accessibilityRole="button" accessibilityLabel={isFileMissing(r) ? 'Download again' : 'Retry'}>
               <View style={s.retry}>
-                <Text style={s.retryText}>Retry</Text>
+                <Text style={s.retryText}>{isFileMissing(r) ? 'Download again' : 'Retry'}</Text>
               </View>
             </Touchable>
           ) : r.state === 'paused' ? (

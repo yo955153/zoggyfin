@@ -78,6 +78,7 @@ export function registerBuiltinItemActions(): void {
     titleFor: ({ item, app }) => {
       const st = app.downloadStatus?.(item);
       if (!st || st.state === 'none' || st.state === 'completed') return 'Downloading';
+      if (st.state === 'failed' && st.missing) return 'Download again';
       const pct = `${Math.round(st.progress * 100)}%`;
       return st.state === 'failed' ? 'Download failed, see Downloads' : st.state === 'paused' ? `Download paused at ${pct}` : `Downloading ${pct}`;
     },
@@ -87,7 +88,12 @@ export function registerBuiltinItemActions(): void {
       const st = app.downloadStatus?.(item).state;
       return !!st && st !== 'none' && st !== 'completed';
     },
-    run: ({ app }) => app.openDownloads?.(),
+    // A download whose file is gone downloads again; the others open the Downloads tab.
+    run: ({ item, app }) => {
+      const st = app.downloadStatus?.(item);
+      if (st?.state === 'failed' && st.missing) app.download?.(item);
+      else app.openDownloads?.();
+    },
   });
   itemActions.register({
     id: 'builtin.removeDownload',

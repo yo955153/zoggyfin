@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { readJson, writeJson } from '@/storage/json';
 
 import { EMPTY_SNAPSHOT, migrateSnapshot } from './migrate';
-import { fraction } from './state-machine';
+import { fraction, isFileMissing } from './state-machine';
 import {
   DOWNLOAD_SCHEMA_VERSION,
   type DownloadCollection,
@@ -117,6 +117,7 @@ function pct(f: number): number {
 export function recordStatus(r: DownloadRecord | undefined): DownloadStatus {
   if (!r || r.state === 'cancelled') return { state: 'none' };
   if (r.state === 'completed') return { state: 'completed' };
+  if (isFileMissing(r)) return { state: 'failed', progress: 0, missing: true };
   return { state: r.state, progress: pct(fraction(r)) };
 }
 

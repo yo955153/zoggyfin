@@ -38,6 +38,7 @@ export const files: DownloadFiles = {
       return 0;
     }
   },
+  statSize: async (relative) => files.size(relative),
   remove(relative) {
     try {
       const d = new Directory(uriOf(relative));

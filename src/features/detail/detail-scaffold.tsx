@@ -165,6 +165,8 @@ export function DetailScaffold<Row>({
       secondary.push({ icon: 'arrow.down.circle.fill', label: 'Downloaded', tint: c.success, a11y: 'Downloaded. Remove the download', onPress: () => run(dlAction) });
     } else if (download.state === 'none') {
       secondary.push({ icon: 'arrow.down.circle', label: 'Download', onPress: () => run(dlAction) });
+    } else if (download.state === 'failed' && download.missing) {
+      secondary.push({ icon: 'arrow.down.circle', label: 'Download again', tint: c.danger, a11y: 'The downloaded file is missing. Download it again', onPress: () => run(dlAction) });
     } else if (download.state === 'failed') {
       secondary.push({ icon: 'exclamationmark.triangle', label: 'Failed', tint: c.danger, a11y: 'Download failed. Open Downloads', onPress: () => run(dlAction) });
     } else {

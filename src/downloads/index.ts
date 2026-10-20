@@ -15,7 +15,7 @@ import { features } from '@/platform/tv';
 
 import { files } from './files';
 import { fileUri, localImageUri, localMediaUri } from './local';
-import { downloadManager } from './manager';
+import { downloadManager, offerDownloadAgain } from './manager';
 import { isDownloadable } from './plan';
 import { downloadsState, statusOf, useDownloadsStore } from './store';
 import { buildLists, buildServerSections, type DownloadGroupView, forServer, onServer, type ServerSection } from './lists';
@@ -26,7 +26,7 @@ export { DOWNLOAD_SCHEMA_VERSION } from './types';
 export { buildLists, buildServerSections, type DownloadGroupView, onServer, type ServerSection, searchDownloads } from './lists';
 
 export { DOWNLOAD_QUALITY_OPTIONS, isDownloadable } from './plan';
-export { etaSeconds, fraction } from './state-machine';
+export { etaSeconds, fraction, isFileMissing } from './state-machine';
 export { chooseMedia, fileUri, localImageUri, localMediaUri } from './local';
 export { isNetworkError, serverOrLocal } from './fallback';
 
@@ -50,7 +50,21 @@ export const downloads = {
   pauseAll: () => downloadManager.pauseAll(),
   resumeAll: () => downloadManager.resumeAll(),
   move: (id: string, toIndex: number) => downloadManager.move(id, toIndex),
+  downloadAgain: (ids: readonly string[]) => downloadManager.downloadAgain(ids),
 };
+
+/**
+ * Before play: true when the downloaded files of these items are there.
+ * A completed download whose file is gone becomes "not downloaded", and a
+ * toast offers to download it again. The item then plays from the server.
+ */
+export async function checkDownloadedFiles(ids: readonly (string | null | undefined)[]): Promise<boolean> {
+  const list = ids.filter((id): id is string => !!id && downloadsState().records[id]?.state === 'completed');
+  if (!list.length || !downloadManager.supported) return true;
+  const missing = await downloadManager.checkFiles(list);
+  if (missing.length) offerDownloadAgain(missing);
+  return missing.length === 0;
+}
 
 // ---- Lookups (synchronous, for the players) --------------------------------------
 

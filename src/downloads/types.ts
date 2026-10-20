@@ -106,7 +106,9 @@ export interface DownloadsSnapshot {
 /** What a row or a button shows for one item or container. */
 export type DownloadStatus =
   | { state: 'none' }
-  | { state: 'queued' | 'downloading' | 'paused' | 'failed'; progress: number }
+  | { state: 'queued' | 'downloading' | 'paused'; progress: number }
+  /** `missing`: it was downloaded, but the file is gone; a retry downloads it again. */
+  | { state: 'failed'; progress: number; missing?: boolean }
   | { state: 'completed' };
 
 /** Download quality: 0 is the original file; other values are a maximum video height. */

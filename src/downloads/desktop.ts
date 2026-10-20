@@ -110,6 +110,11 @@ export function createDesktopFiles(invoke: Invoke, dataDir: string, pageUrl: (pa
     // Not known without a wait: the manager then uses the byte count of the download.
     exists: () => false,
     size: () => 0,
+    async statSize(relative) {
+      // After the writes that the manager asked for before.
+      await chain;
+      return invoke<number>('files_size', { path: relative });
+    },
     remove: (relative) => queue('files_remove', { path: relative }),
     writeText: (relative, text) => queue('files_write_text', { path: relative, text }),
     readText: () => null,

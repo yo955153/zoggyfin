@@ -10,6 +10,8 @@
  *     └────resume───────┘                              │
  *     └────────────retry / autoRetry───────────────────┘
  *   cancel: any state but completed ──▶ cancelled
+ *   missing: completed, but the file is gone ──▶ failed (no automatic retry;
+ *            a retry downloads it again)
  */
 import type { DownloadRecord, DownloadState } from './types';
 
@@ -22,7 +24,16 @@ export type DownloadEvent =
   | { type: 'fail'; error: string; now: number }
   | { type: 'retry' }
   | { type: 'autoRetry'; now: number }
-  | { type: 'cancel' };
+  | { type: 'cancel' }
+  | { type: 'missing' };
+
+/** The error of a completed download whose file is gone. */
+export const FILE_MISSING = 'The downloaded file is missing';
+
+/** True for a record that was downloaded, but its file is gone. */
+export function isFileMissing(r: Pick<DownloadRecord, 'state' | 'error'>): boolean {
+  return r.state === 'failed' && r.error === FILE_MISSING;
+}
 
 /** Automatic retries after a failure. After that, the user retries by hand. */
 export const MAX_AUTO_RETRIES = 4;
@@ -93,6 +104,9 @@ export function transition(r: DownloadRecord, e: DownloadEvent): DownloadRecord 
     case 'cancel':
       if (r.state === 'completed' || r.state === 'cancelled') return r;
       return { ...r, state: 'cancelled', speed: 0 };
+    case 'missing':
+      if (r.state !== 'completed') return r;
+      return { ...r, state: 'failed', error: FILE_MISSING, bytesDone: 0, speed: 0, attempts: 0, retryAt: null, completedAt: null, validator: null };
   }
 }
 

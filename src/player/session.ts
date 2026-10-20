@@ -15,7 +15,7 @@ import { queryKeys } from '@/api/query-keys';
 import type { BaseItemDto } from '@/api/types';
 import { clientIdentity } from '@/auth/identity';
 import { useSessionStore } from '@/auth/session-store';
-import { type DownloadRecord, findDownload, localExtraUri, localFileFor, readLocalText } from '@/downloads';
+import { checkDownloadedFiles, type DownloadRecord, findDownload, localExtraUri, localFileFor, readLocalText } from '@/downloads';
 import { outboxPosition } from '@/downloads/outbox-store';
 import { resolveImage } from '@/images/resolve-image';
 import { isOffline } from '@/lib/online';
@@ -223,6 +223,9 @@ class VideoSession {
     this.lastRequest = request;
     setPlayerState({ ...initialPlayerState, status: 'loading', presentation: 'full' });
     try {
+      // A download whose file is gone becomes "not downloaded" here: the item then streams from the server.
+      await checkDownloadedFiles([request.item.Id]);
+      if (id !== this.loadId) return;
       const local = downloaded(request.item.Id);
       if (local) {
         await this.playLocal(id, local, request);

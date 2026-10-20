@@ -13,6 +13,7 @@ const none: DownloadFiles = {
   ensureDir: () => undefined,
   exists: () => false,
   size: () => 0,
+  statSize: async () => 0,
   remove: () => undefined,
   writeText: () => undefined,
   readText: () => null,

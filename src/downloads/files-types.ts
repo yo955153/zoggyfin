@@ -8,6 +8,8 @@ export interface DownloadFiles {
   exists(relative: string): boolean;
   /** Size in bytes of a file, or 0. */
   size(relative: string): number;
+  /** Size in bytes of a file, or 0, read from the disk (the desktop app cannot read it synchronously). */
+  statSize(relative: string): Promise<number>;
   remove(relative: string): void;
   writeText(relative: string, text: string): void;
   readText(relative: string): string | null;

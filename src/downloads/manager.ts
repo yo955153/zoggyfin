@@ -33,7 +33,7 @@ import { engine } from './engine';
 import { files } from './files';
 import { audioPlan, groupFor, isContainer, mediaKindOf, type MediaPlan, slimForDownload, sortFor, subtitleFiles, videoPlan } from './plan';
 import { canResume, isWholeFile, resumeHint } from './resume';
-import { type DownloadEvent, dueForRetry, isActive, pickToStart, reorder, transition } from './state-machine';
+import { type DownloadEvent, dueForRetry, isActive, isFileMissing, pickToStart, reorder, transition } from './state-machine';
 import { downloadsState, dropCollection, dropRecord, patchRecord, putCollection, putRecord, useDownloadsStore } from './store';
 import { DOWNLOAD_SCHEMA_VERSION, type DownloadCollection, type DownloadRecord, type LocalImages } from './types';
 
@@ -166,7 +166,12 @@ class DownloadManager {
     }
     await this.reattach();
     this.cleanOrphans();
-    void this.fixFragmentedVideos();
+    // One after the other: the video fix rewrites files that the check reads.
+    void this.checkFiles()
+      .then((missing) => {
+        if (missing.length) offerDownloadAgain(missing);
+      })
+      .then(() => this.fixFragmentedVideos());
     this.tick();
     this.timer ??= setInterval(() => this.tick(), 5000);
   }
@@ -243,6 +248,40 @@ class DownloadManager {
         patchRecord(r.itemId, (x) => ({ ...x, bytesDone: after, bytesTotal: after }));
       }
     }
+  }
+
+  /**
+   * Finds completed downloads whose file is gone (deleted by hand, an old
+   * record from another install) and marks them as not downloaded. With no
+   * ids, it checks every completed download. Returns the ids that are missing.
+   */
+  async checkFiles(ids?: readonly string[]): Promise<string[]> {
+    const records = downloadsState().records;
+    const list = ids ? ids.map((id) => records[id]).filter((r): r is DownloadRecord => !!r) : Object.values(records);
+    const missing: string[] = [];
+    for (const r of list) {
+      if (r.state !== 'completed' || !r.mediaFile || this.finishing.has(r.itemId)) continue;
+      let size: number;
+      try {
+        size = await files.statSize(`${r.dir}/${r.mediaFile}`);
+      } catch {
+        // Not known: keep the record as it is.
+        continue;
+      }
+      if (size > 0) continue;
+      const next = apply(r.itemId, { type: 'missing' });
+      if (next && isFileMissing(next)) missing.push(r.itemId);
+    }
+    return missing;
+  }
+
+  /** Downloads again the downloads whose file is gone. */
+  downloadAgain(ids: readonly string[]): void {
+    for (const id of ids) {
+      const r = downloadsState().records[id];
+      if (r && isFileMissing(r)) apply(id, { type: 'retry' });
+    }
+    this.tick();
   }
 
   /** Folders with no record (a crash between delete steps) take space for nothing. */
@@ -606,6 +645,13 @@ class DownloadManager {
     const changes = reorder(Object.values(downloadsState().records), itemId, toIndex);
     for (const [id, order] of Object.entries(changes)) patchRecord(id, (r) => ({ ...r, order }), false);
   }
+}
+
+/** A toast that offers to download again the downloads whose file is gone. */
+export function offerDownloadAgain(ids: readonly string[]): void {
+  const one = ids.length === 1 ? downloadsState().records[ids[0]] : null;
+  const text = one ? `${one.item.Name ?? 'A download'} is no longer on this device` : `${ids.length} downloads are no longer on this device`;
+  toast(text, { icon: 'exclamationmark.triangle', action: { label: 'Download again', onPress: () => downloadManager.downloadAgain(ids) } });
 }
 
 function errorText(message: string, code: number): string {

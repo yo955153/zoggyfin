@@ -16,7 +16,7 @@ import { queryKeys } from '@/api/query-keys';
 import type { BaseItemDto, LyricDto } from '@/api/types';
 import { clientIdentity } from '@/auth/identity';
 import { useSessionStore } from '@/auth/session-store';
-import { chooseMedia, downloadedChildren, findDownload, localExtraUri, readLocalText, documentsDir, serverOrLocal } from '@/downloads';
+import { checkDownloadedFiles, chooseMedia, downloadedChildren, findDownload, localExtraUri, readLocalText, documentsDir, serverOrLocal } from '@/downloads';
 import { addToOutbox } from '@/downloads/outbox-store';
 import { resolveImage } from '@/images/resolve-image';
 import { isOffline } from '@/lib/online';
@@ -682,6 +682,9 @@ class AudioSession {
         toast('Nothing to play here yet.');
         return;
       }
+      // Downloads whose file is gone become "not downloaded": those tracks stream from the server.
+      await checkDownloadedFiles(playable.map((i) => i.Id));
+      if (id !== this.loadId) return;
       const startItem = items[start];
       const startIndex = Math.max(0, playable.findIndex((i) => i.Id === startItem?.Id));
       const source: QueueSource | null = ctxItem ? { name: ctxItem.Name ?? null, id: ctxItem.Id ?? null, type: ctxItem.Type ?? null } : null;
