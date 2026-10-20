@@ -43,7 +43,6 @@ import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
 import java.security.SecureRandom
-import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
@@ -62,7 +61,11 @@ private const val MAX_HEAD = 64 * 1024
 private const val BODY_CHUNK = 256 * 1024
 private const val CONNECT_TIMEOUT_MS = 10_000
 private const val FIRST_BYTES_TIMEOUT_MS = 15_000
-private const val HTTP_IDLE_TIMEOUT_MS = 300_000
+private const val HTTP_IDLE_TIMEOUT_MS = 30_000
+/** HTTP connections from one guest (one address) at most: a new one closes the oldest. */
+private const val MAX_HTTP_PER_GUEST = 3
+/** HTTP connections in all at most. */
+private const val MAX_HTTP_TOTAL = 32
 /** A paced response sends this many seconds of media at once (the player's start buffer), then `PACE_FACTOR` x the bitrate. */
 private const val PACE_BURST_SECONDS = 10.0
 private const val PACE_FACTOR = 1.5
@@ -109,7 +112,9 @@ class ZoggyfinTogetherModule : Module() {
   private var server: ServerSocket? = null
   private var registration: NsdManager.RegistrationListener? = null
   private val shares = ConcurrentHashMap<String, Share>()
-  private val httpSockets: MutableSet<Socket> = Collections.newSetFromMap(ConcurrentHashMap())
+  /** The open HTTP sockets, with their order of arrival (for the connection limit). */
+  private val httpSockets = ConcurrentHashMap<Socket, Long>()
+  private val httpSerial = AtomicLong(0)
   private val served = AtomicLong(0)
   private val requests = AtomicLong(0)
 
@@ -594,7 +599,7 @@ class ZoggyfinTogetherModule : Module() {
     } catch (_: RejectedExecutionException) {
     }
     shares.clear()
-    for (h in httpSockets.toList()) closeQuietly(h)
+    for (h in httpSockets.keys.toList()) closeQuietly(h)
     httpSockets.clear()
     for (c in sockets.values.toList()) {
       if (c.inbound) c.close(null)
@@ -735,7 +740,8 @@ class ZoggyfinTogetherModule : Module() {
 
   /** Serves requests one after the other on one connection (keep-alive). */
   private fun serveHttp(s: Socket, prefix: ByteArray) {
-    httpSockets.add(s)
+    limitHttp(s.inetAddress)
+    httpSockets[s] = httpSerial.incrementAndGet()
     try {
       s.soTimeout = HTTP_IDLE_TIMEOUT_MS
       val input = s.getInputStream()
@@ -764,6 +770,19 @@ class ZoggyfinTogetherModule : Module() {
       httpSockets.remove(s)
       closeQuietly(s)
     }
+  }
+
+  /**
+   * Makes room for one more HTTP connection from `remote`: closes the oldest one of that
+   * guest past MAX_HTTP_PER_GUEST, and the oldest of all past MAX_HTTP_TOTAL. A player that
+   * seeks opens a new connection and leaves the old one, so the oldest is the one to go.
+   */
+  private fun limitHttp(remote: InetAddress?) {
+    val live = httpSockets.entries.filter { !it.key.isClosed }.sortedBy { it.value }
+    val mine = live.filter { it.key.inetAddress == remote }
+    for (e in mine.take(maxOf(0, mine.size - (MAX_HTTP_PER_GUEST - 1)))) closeQuietly(e.key)
+    val rest = live.filter { !it.key.isClosed }
+    for (e in rest.take(maxOf(0, rest.size - (MAX_HTTP_TOTAL - 1)))) closeQuietly(e.key)
   }
 
   /** The index of "\r\n\r\n" in the first `len` bytes, or -1. */

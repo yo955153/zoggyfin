@@ -12,6 +12,10 @@ let nearbyServiceType = "_zgf-together._tcp"
 let controlPreface = Data("ZGF1".utf8)
 /// The largest frame that a control socket accepts.
 let maxFrame = 1_048_576
+/// HTTP connections from one guest (one address) at most: a new one closes the oldest.
+let maxHTTPPerGuest = 3
+/// HTTP connections in all at most.
+let maxHTTPTotal = 32
 
 /// TCP with peer-to-peer Wi-Fi (AWDL) and no Nagle delay.
 func nearbyParameters() -> NWParameters {
@@ -44,6 +48,7 @@ public final class NearbyCore {
   private var found: [String: [String: String]] = [:]
   private var sockets: [String: FrameSocket] = [:]
   private var http: [ObjectIdentifier: HTTPConnection] = [:]
+  private var httpSerial = 0
   private let files = SharedFiles()
   private let relay = MediaRelay()
 
@@ -150,13 +155,32 @@ public final class NearbyCore {
         self.emit("onSocketOpen", ["socketId": id, "inbound": true])
         s.startReading(initial: data.dropFirst(4))
       } else {
-        let h = HTTPConnection(connection: conn, initial: data, files: self.files, queue: self.queue) { [weak self] c in
+        self.httpSerial += 1
+        let h = HTTPConnection(connection: conn, initial: data, files: self.files, queue: self.queue, remote: Self.remoteHost(conn), serial: self.httpSerial) { [weak self] c in
           self?.http.removeValue(forKey: ObjectIdentifier(c))
         }
+        self.limitHTTP(for: h.remote)
         self.http[ObjectIdentifier(h)] = h
         h.start()
       }
     }
+  }
+
+  /// Makes room for one more HTTP connection from `remote`: closes the oldest one of that
+  /// guest past `maxHTTPPerGuest`, and the oldest of all past `maxHTTPTotal`. A player that
+  /// seeks opens a new connection and leaves the old one, so the oldest is the one to go.
+  private func limitHTTP(for remote: String) {
+    let live = http.values.filter { !$0.isClosed }
+    let mine = live.filter { $0.remote == remote }.sorted { $0.serial < $1.serial }
+    for c in mine.prefix(max(0, mine.count - (maxHTTPPerGuest - 1))) { c.cancel() }
+    let rest = live.filter { !$0.isClosed }.sorted { $0.serial < $1.serial }
+    for c in rest.prefix(max(0, rest.count - (maxHTTPTotal - 1))) { c.cancel() }
+  }
+
+  /// The remote address of a connection, without the port ("10.0.0.5", "fe80::1%awdl0").
+  static func remoteHost(_ conn: NWConnection) -> String {
+    if case .hostPort(let host, _) = conn.endpoint { return "\(host)" }
+    return "\(conn.endpoint)"
   }
 
   // MARK: Guest

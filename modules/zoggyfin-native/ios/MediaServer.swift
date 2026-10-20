@@ -62,13 +62,24 @@ final class HTTPConnection {
   /// The pace of the response in progress: bytes per second of the media, start (ms), bytes sent.
   private var pace: (rate: Double, start: Double, sent: Int64)?
 
-  init(connection: NWConnection, initial: Data, files: SharedFiles, queue: DispatchQueue, onClose: @escaping (HTTPConnection) -> Void) {
+  /// The guest's address (for the connection limit) and the order of arrival.
+  let remote: String
+  let serial: Int
+  /// An idle connection (no request) closes after this long, s.
+  static let idleTimeout = 30.0
+  private var idle: DispatchWorkItem?
+
+  init(connection: NWConnection, initial: Data, files: SharedFiles, queue: DispatchQueue, remote: String = "", serial: Int = 0, onClose: @escaping (HTTPConnection) -> Void) {
     self.connection = connection
     self.buffer = initial
     self.files = files
     self.queue = queue
+    self.remote = remote
+    self.serial = serial
     self.onClose = onClose
   }
+
+  var isClosed: Bool { closed }
 
   func start() {
     connection.stateUpdateHandler = { [weak self] state in
@@ -89,12 +100,16 @@ final class HTTPConnection {
   private func finish() {
     guard !closed else { return }
     closed = true
+    idle?.cancel()
+    idle = nil
     try? handle?.close()
     handle = nil
     onClose(self)
   }
 
   private func readRequest() {
+    idle?.cancel()
+    idle = nil
     if let range = buffer.range(of: Data("\r\n\r\n".utf8)) {
       let head = buffer.subdata(in: buffer.startIndex..<range.lowerBound)
       buffer.removeSubrange(buffer.startIndex..<range.upperBound)
@@ -105,6 +120,10 @@ final class HTTPConnection {
       connection.cancel()
       return
     }
+    // No request for a while: close, so an idle player does not keep a slot.
+    let w = DispatchWorkItem { [weak self] in self?.connection.cancel() }
+    idle = w
+    queue.asyncAfter(deadline: .now() + Self.idleTimeout, execute: w)
     connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, complete, error in
       guard let self else { return }
       if let data, !data.isEmpty { self.buffer.append(data) }
