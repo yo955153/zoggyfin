@@ -4,6 +4,11 @@ Each section is the notes of one release. `pnpm desktop:publish` puts the sectio
 version into `latest.json` (the update card shows it) and into the GitHub release.
 Write one short line per item.
 
+## 0.1.4 (2026-10-20)
+
+- Watch together: a pause, a seek or a speed change no longer starts the group again
+- Listen together: next, previous and a jump keep every device on the same track
+
 ## 0.1.3 (2026-10-20)
 
 - Together: one hub to join or start a session, and a clear flow from the invite to the room
