@@ -61,7 +61,7 @@ describe('room people', () => {
 describe('connection place', () => {
   const info = (url: string, kind: 'internal' | 'external') => ({ status: 'connected' as const, checking: false, url, kind, wanted: null, results: {}, checkedAt: 1 });
   it('names the network', () => {
-    expect(connectionPlace(info('http://192.168.1.5:8096', 'internal')).text).toBe('Home network');
+    expect(connectionPlace(info('http://10.0.0.5:8096', 'internal')).text).toBe('Home network');
     expect(connectionPlace(info('https://jf.example.com', 'external')).text).toBe('Internet');
     expect(connectionPlace(info('http://100.101.102.103:8096', 'external')).text).toBe('Tailscale');
     expect(connectionPlace({ ...info('x', 'external'), status: 'unreachable' }).tone).toBe('warning');
