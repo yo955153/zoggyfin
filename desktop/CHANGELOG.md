@@ -4,6 +4,11 @@ Each section is the notes of one release. `pnpm desktop:publish` puts the sectio
 version into `latest.json` (the update card shows it) and into the GitHub release.
 Write one short line per item.
 
+## 0.1.5 (2026-10-20)
+
+- Together: start a session, then pick anything in the app, and it plays for everyone
+- A Together bar shows who is in the session, and the Play buttons read "Play for everyone"
+
 ## 0.1.4 (2026-10-20)
 
 - Watch together: a pause, a seek or a speed change no longer starts the group again
