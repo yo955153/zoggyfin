@@ -1,4 +1,5 @@
 User-agent: *
 Disallow: /join
+Disallow: /play/
 
 Sitemap: https://zoggyfin.zog-tech.com/sitemap.xml
