@@ -12,19 +12,37 @@ export type GuestVideoSource =
   /** No copy, no host file and no sign-in to the item's server. */
   | { kind: 'none'; reason: 'no-access' | 'no-file' };
 
+export interface GuestSourceFacts {
+  /** The guest's own download of the item, or null. */
+  ownFile: string | null;
+  /** The URL base of the host's session port, or null. */
+  base: string | null;
+  /** The server that the guest is signed in to, or null. */
+  activeServerId: string | null;
+  /** The guest reaches that server now (false: offline, a plane, a hotspot with no internet). */
+  serverReachable: boolean;
+  /** Development (together lab): stream from the host even with a copy or a server. */
+  forceStream?: boolean;
+}
+
 /**
- * Picks the guest's video source, in this order: its own download, the
- * host's file on the session port, a stream from the item's server when the
- * guest is signed in to that server (same server Id). A server stream is
- * never relayed through the host. Pure: the caller gives the facts.
+ * Picks the guest's video source, in this order:
+ * 1. its own download;
+ * 2. the item's Jellyfin server, when the guest is signed in to that server
+ *    (the same server Id) and reaches it. The media then does not use the
+ *    host's upload, which is the limit of a nearby session;
+ * 3. the host's file on the session port.
+ * A server stream is never relayed through the host. Pure: the caller gives the facts.
  */
-export function chooseGuestVideoSource(
-  item: Pick<SharedItem, 'serverId' | 'path'>,
-  facts: { ownFile: string | null; base: string | null; activeServerId: string | null; forceStream?: boolean },
-): GuestVideoSource {
+export function chooseGuestVideoSource(item: Pick<SharedItem, 'serverId' | 'path'>, facts: GuestSourceFacts): GuestVideoSource {
+  const hostUri = facts.base && item.path ? `${facts.base}${item.path}` : null;
+  if (facts.forceStream && hostUri) return { kind: 'host', uri: hostUri };
   if (facts.ownFile && !facts.forceStream) return { kind: 'local', uri: facts.ownFile };
-  if (facts.base && item.path) return { kind: 'host', uri: `${facts.base}${item.path}` };
-  if (item.serverId && facts.activeServerId && item.serverId === facts.activeServerId) return { kind: 'server' };
+  const sameServer = !!item.serverId && !!facts.activeServerId && item.serverId === facts.activeServerId;
+  if (sameServer && facts.serverReachable) return { kind: 'server' };
+  if (hostUri) return { kind: 'host', uri: hostUri };
+  // The host streams from its server: a guest that is signed in there tries it even when the last check failed.
+  if (sameServer) return { kind: 'server' };
   return { kind: 'none', reason: item.serverId ? 'no-access' : 'no-file' };
 }
 

@@ -21,6 +21,7 @@ import { clientIdentity } from '@/auth/identity';
 import { useSessionStore } from '@/auth/session-store';
 import { localFileFor } from '@/downloads';
 import { randomId } from '@/lib/id';
+import { checkServer, useOnlineStore } from '@/lib/online';
 import { toast } from '@/lib/toast';
 import { features } from '@/platform/tv';
 import { audioSession } from '@/player/audio/session';
@@ -63,6 +64,13 @@ const SAVED_KEY = 'together.session.v1';
 function helpPlatform(): HelpPlatform {
   if (Platform.OS === 'android') return 'android';
   return Platform.OS === 'ios' ? 'ios' : 'mac';
+}
+
+/** True when this device reaches its server now (the last check, or a new one of at most 3 s). */
+async function serverReachable(): Promise<boolean> {
+  const st = useOnlineStore.getState();
+  if (st.reachable !== null && Date.now() - st.checkedAt < 60_000) return st.reachable;
+  return Promise.race([checkServer().catch(() => false), new Promise<boolean>((r) => setTimeout(() => r(false), 3000))]);
 }
 
 /** The host plays this video from its server (signed in to the item's server). */
@@ -796,17 +804,22 @@ class NearbyController {
     const token = ++this.loadToken;
     const base = this.mediaBase ?? (await this.resolveMediaBase());
     const own = guestSource(item, null, { forceStream: this.devForceStream });
+    const activeServerId = useSessionStore.getState().session?.serverId ?? null;
+    const sameServer = !!item.serverId && item.serverId === activeServerId;
     const src = chooseGuestVideoSource(item, {
       ownFile: own?.local ? own.uri : null,
       base,
-      activeServerId: useSessionStore.getState().session?.serverId ?? null,
+      activeServerId,
+      serverReachable: sameServer && !own?.local && !this.devForceStream ? await serverReachable() : false,
       forceStream: this.devForceStream,
     });
+    if (token !== this.loadToken || this.follower !== f) return;
     if (src.kind === 'none') {
       this.failGuest(src.reason === 'no-access' ? noAccessText(togetherState().hostName ?? 'The host') : item.path ? 'Could not open the stream from the host.' : 'The host cannot share this item.');
       return;
     }
-    const local = src.kind === 'local';
+    let local = src.kind === 'local';
+    let fromServer = src.kind === 'server';
     setTogether({ source: local ? 'local' : 'stream' });
     if (!(await this.closeOtherSheet(token))) return;
     if (playerState().now?.kind === 'audio') await audioSession().stopForVideo();
@@ -814,12 +827,20 @@ class NearbyController {
       // Signed in to the same server: stream straight from it, at the group position.
       void videoSession().play({ item: toBaseItem(item), startPositionTicks: Math.round(this.startPosition() * 10_000_000), autoplay: false });
     } else {
-      const record = local ? localRecord(item.id, item.serverId) : null;
-      void videoSession().playSource({ item: toBaseItem(item), uri: src.uri, startSeconds: this.startPosition(), autoplay: false, record });
+      this.playGuestFile(item, src.uri, local);
     }
     router.navigate('/player');
-    const ok = await whenPlayerReady(30_000);
+    let ok = await whenPlayerReady(30_000);
     if (token !== this.loadToken || this.follower !== f) return;
+    if (!ok && fromServer && base && item.path) {
+      // The server did not answer in time: read the host's file after all.
+      this.ev('server stream failed, use the host');
+      fromServer = false;
+      local = false;
+      this.playGuestFile(item, `${base}${item.path}`, false);
+      ok = await whenPlayerReady(30_000);
+      if (token !== this.loadToken || this.follower !== f) return;
+    }
     if (!ok) {
       this.failGuest('The video could not be played.');
       return;
@@ -827,15 +848,21 @@ class NearbyController {
     this.port = bindVideoPort((c) => {
       if (!f.request(c)) this.revertOutside(c);
     });
-    this.attachGuest(f, local);
+    this.attachGuest(f, local, fromServer);
   }
 
-  private attachGuest(f: Follower, local: boolean): void {
+  /** Plays the guest's own download, or the host's file (a short player read-ahead: the host's upload is shared). */
+  private playGuestFile(item: SharedItem, uri: string, local: boolean): void {
+    const record = local ? localRecord(item.id, item.serverId) : null;
+    void videoSession().playSource({ item: toBaseItem(item), uri, startSeconds: this.startPosition(), autoplay: false, record });
+  }
+
+  private attachGuest(f: Follower, local: boolean, fromServer = false): void {
     controlGate.set((c) => {
       f.request(c);
       return true;
     });
-    f.attach(this.port!, local);
+    f.attach(this.port!, local, fromServer);
     const fresh = !this.loaded;
     this.loaded = true;
     syncLog.start('guest', () => ({ pos: this.port?.position() ?? 0, playing: this.port?.isPlaying() ?? false, track: this.port?.track?.() ?? null }), this.now, fresh);
@@ -880,13 +907,19 @@ class NearbyController {
     const token = ++this.loadToken;
     const base = this.mediaBase ?? (await this.resolveMediaBase());
     const items = new Map(q.entries.map((e) => [e.item.id, e.item] as const));
+    const activeServerId = useSessionStore.getState().session?.serverId ?? null;
+    const onServer = !this.devForceStream && q.entries.some((e) => e.item.serverId && e.item.serverId === activeServerId);
+    const server = { activeServerId, reachable: onServer ? await serverReachable() : false };
+    if (token !== this.loadToken || this.follower !== f) return;
     let anyStream = false;
     let anyLocal = false;
+    let anyServer = false;
     const source = (item: { Id: string }) => {
       const s = items.get(item.Id);
-      const src = s ? guestSource(s, base, { forceStream: this.devForceStream }) : null;
+      const src = s ? guestSource(s, base, { forceStream: this.devForceStream, server }) : null;
       if (src?.local) anyLocal = true;
       else if (src) anyStream = true;
+      else if (s && server.reachable && s.serverId === activeServerId) anyServer = true;
       return src?.uri ?? null;
     };
     if (playerState().now?.kind === 'video') await videoSession().stop();
@@ -900,7 +933,7 @@ class NearbyController {
       this.port = bindAudioPort((c) => {
         if (!f.request(c)) this.revertOutside(c);
       });
-      this.attachGuest(f, !anyStream);
+      this.attachGuest(f, !anyStream && !anyServer, anyServer && !anyStream);
     }
     this.sendCanHost(q);
   }

@@ -212,6 +212,7 @@ export class HostRoom {
           ...m,
           buffering: message.buffering,
           local: message.local,
+          server: message.server ?? m.server,
           canHost: message.canHost ?? m.canHost,
           catchingUp: message.buffering ? m.catchingUp : false,
         });

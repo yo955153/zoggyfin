@@ -655,6 +655,13 @@ function SwitchRow({ title, detail, value, onChange }: { title: string; detail: 
   );
 }
 
+/** Where a member's media comes from. */
+function memberSource(m: Member, host: boolean): string {
+  if (m.local) return 'Own download';
+  if (m.server) return 'Streams from the server';
+  return host ? 'Streams from you' : 'Streams from the host';
+}
+
 /** A person in the session. The host can remove them, and block their device for this session. */
 function MemberRow({ member: m, host, last }: { member: Member; host: boolean; last: boolean }) {
   const s = useStyles(makeStyles);
@@ -668,7 +675,7 @@ function MemberRow({ member: m, host, last }: { member: Member; host: boolean; l
             {m.name}
           </Text>
           <Text style={s.rowDetail}>
-            {m.away ? 'Reconnecting…' : [m.local ? 'Own download' : 'Streams', m.buffering ? 'Loading' : null].filter(Boolean).join(' · ')}
+            {m.away ? 'Reconnecting…' : [memberSource(m, host), m.buffering ? 'Loading' : null].filter(Boolean).join(' · ')}
           </Text>
         </View>
         {host ? <Button title={open ? 'Cancel' : 'Remove'} variant="smallTonal" onPress={() => setOpen((o) => !o)} /> : null}

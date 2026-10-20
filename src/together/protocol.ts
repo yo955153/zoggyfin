@@ -89,6 +89,8 @@ export interface Member {
   away?: boolean;
   /** The member can make a Wi-Fi network (an Android local-only hotspot). */
   maker?: boolean;
+  /** The member streams from the item's Jellyfin server (not from the host). */
+  server?: boolean;
 }
 
 export type ControlAction =
@@ -148,7 +150,15 @@ export type Message =
   /** Guest to host: a control request. */
   | ({ t: 'control' } & ControlAction)
   /** Guest to host: the guest buffers (true) or is ready (false). */
-  | { t: 'buffering'; buffering: boolean; local: boolean; /** The guest has all the media now (audio: known after the welcome). */ canHost?: boolean }
+  | {
+      t: 'buffering';
+      buffering: boolean;
+      local: boolean;
+      /** The guest has all the media now (audio: known after the welcome). */
+      canHost?: boolean;
+      /** The guest streams from the item's Jellyfin server, not from the host. */
+      server?: boolean;
+    }
   /** Host to all. */
   | { t: 'members'; members: Member[]; onlyHostControls: boolean }
   /** Host to a guest: you may not control playback. */
@@ -182,7 +192,7 @@ const optBool = (x: unknown) => x === undefined || bool(x);
 const isRepeat = (x: unknown): x is 'off' | 'all' | 'one' => x === 'off' || x === 'all' || x === 'one';
 
 function isMember(x: unknown): x is Member {
-  return isObj(x) && str(x.id) && str(x.name) && bool(x.local) && bool(x.buffering) && optNum(x.joinedAt) && optBool(x.canHost) && optBool(x.away) && optBool(x.maker);
+  return isObj(x) && str(x.id) && str(x.name) && bool(x.local) && bool(x.buffering) && optNum(x.joinedAt) && optBool(x.canHost) && optBool(x.away) && optBool(x.maker) && optBool(x.server);
 }
 
 function isFullItem(x: unknown): x is SharedItem {
@@ -246,7 +256,7 @@ function valid(x: Record<string, unknown>): boolean {
           return false;
       }
     case 'buffering':
-      return bool(x.buffering) && bool(x.local) && optBool(x.canHost);
+      return bool(x.buffering) && bool(x.local) && optBool(x.canHost) && optBool(x.server);
     case 'members':
       return Array.isArray(x.members) && x.members.every(isMember) && bool(x.onlyHostControls);
     case 'denied':

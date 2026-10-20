@@ -115,11 +115,28 @@ export class HostShares {
   }
 }
 
-/** Where a guest reads an item: its own download, else the host's file, else null. */
-export function guestSource(item: SharedItem, base: string | null, opts: { forceStream?: boolean } = {}): { uri: string; local: boolean } | null {
+/** The guest's server facts: a track or video on this server (reached now) streams from it, not from the host. */
+export interface GuestServer {
+  activeServerId: string | null;
+  reachable: boolean;
+}
+
+/**
+ * Where a guest reads an item: its own download, else the host's file, else
+ * null. With `server`, an item of that server (when the guest reaches it)
+ * gives null too: the player then streams it from the server, so the host's
+ * upload stays free.
+ */
+export function guestSource(
+  item: SharedItem,
+  base: string | null,
+  opts: { forceStream?: boolean; server?: GuestServer } = {},
+): { uri: string; local: boolean } | null {
   const r = opts.forceStream ? null : localRecord(item.id, item.serverId);
   const own = r ? localFileFor(r.itemId) : null;
   if (own) return { uri: own, local: true };
+  const sv = opts.server;
+  if (!opts.forceStream && sv?.reachable && item.serverId && item.serverId === sv.activeServerId) return null;
   if (base && item.path) return { uri: `${base}${item.path}`, local: false };
   return null;
 }

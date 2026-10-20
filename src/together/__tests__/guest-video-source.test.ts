@@ -1,19 +1,36 @@
 import { chooseGuestVideoSource, noAccessText } from '../guest-source';
 
 const base = 'http://10.0.0.2:5000';
-const facts = { ownFile: null, base, activeServerId: null };
+const facts = { ownFile: null, base, activeServerId: null, serverReachable: true };
 
 describe('chooseGuestVideoSource', () => {
   it('plays the guest’s own download first', () => {
-    expect(chooseGuestVideoSource({ serverId: 'S1', path: '/t/1.mp4' }, { ...facts, ownFile: 'file:///d/1.mp4' })).toEqual({ kind: 'local', uri: 'file:///d/1.mp4' });
+    expect(chooseGuestVideoSource({ serverId: 'S1', path: '/t/1.mp4' }, { ...facts, ownFile: 'file:///d/1.mp4', activeServerId: 'S1' })).toEqual({ kind: 'local', uri: 'file:///d/1.mp4' });
   });
 
-  it('reads the host’s file when the host has a download', () => {
+  it('streams from the item’s server, not from the host, when the guest is signed in there', () => {
+    // The host has a download and shares it, but the guest reaches the same server: the host's upload stays free.
+    expect(chooseGuestVideoSource({ serverId: 'S1', path: '/t/1.mp4' }, { ...facts, activeServerId: 'S1' })).toEqual({ kind: 'server' });
+  });
+
+  it('reads the host’s file when the guest cannot reach the item’s server', () => {
+    expect(chooseGuestVideoSource({ serverId: 'S1', path: '/t/1.mp4' }, { ...facts, activeServerId: 'S1', serverReachable: false })).toEqual({ kind: 'host', uri: `${base}/t/1.mp4` });
+  });
+
+  it('reads the host’s file when the guest is signed in to another server', () => {
+    expect(chooseGuestVideoSource({ serverId: 'S1', path: '/t/1.mp4' }, { ...facts, activeServerId: 'S2' })).toEqual({ kind: 'host', uri: `${base}/t/1.mp4` });
+  });
+
+  it('reads the host’s file when the guest is not signed in', () => {
     expect(chooseGuestVideoSource({ serverId: 'S1', path: '/t/1.mp4' }, facts)).toEqual({ kind: 'host', uri: `${base}/t/1.mp4` });
   });
 
   it('streams from the same server when the host streams and the guest is signed in there', () => {
     expect(chooseGuestVideoSource({ serverId: 'S1', path: null }, { ...facts, activeServerId: 'S1' })).toEqual({ kind: 'server' });
+  });
+
+  it('tries the server when the host has no file, even after a failed check', () => {
+    expect(chooseGuestVideoSource({ serverId: 'S1', path: null }, { ...facts, activeServerId: 'S1', serverReachable: false })).toEqual({ kind: 'server' });
   });
 
   it('does not stream from another server', () => {
@@ -25,8 +42,8 @@ describe('chooseGuestVideoSource', () => {
     expect(chooseGuestVideoSource({ serverId: 'S1', path: null }, facts).kind).toBe('none');
   });
 
-  it('a forced stream (development) skips the own file', () => {
-    expect(chooseGuestVideoSource({ serverId: 'S1', path: '/t/1.mp4' }, { ...facts, ownFile: 'file:///d/1.mp4', forceStream: true }).kind).toBe('host');
+  it('a forced stream (development) skips the own file and the server', () => {
+    expect(chooseGuestVideoSource({ serverId: 'S1', path: '/t/1.mp4' }, { ...facts, ownFile: 'file:///d/1.mp4', activeServerId: 'S1', forceStream: true }).kind).toBe('host');
   });
 
   it('says plainly what to do', () => {

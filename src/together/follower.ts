@@ -67,6 +67,7 @@ export class Follower {
   private selfId: string | null = null;
   onlyHostControls = false;
   private local = false;
+  private server = false;
   private hello: { name: string; have: string[]; extra: { memberId?: string; canHost?: boolean; maker?: boolean } } | null = null;
 
   constructor(
@@ -91,13 +92,19 @@ export class Follower {
   /** The player is loaded and ready to follow. `local`: it plays its own copy. */
   private player: PlayerPort | null = null;
 
-  attach(player: PlayerPort, local: boolean): void {
+  /** `server`: the player streams from the item's Jellyfin server (the host counts who streams from it). */
+  attach(player: PlayerPort, local: boolean, server = false): void {
     this.unsubBuffering?.();
     this.player = player;
     this.local = local;
-    this.unsubBuffering = player.onBuffering((b) => this.deps.send({ t: 'buffering', buffering: b, local: this.local }));
-    this.deps.send({ t: 'buffering', buffering: player.isBuffering(), local });
+    this.server = server;
+    this.unsubBuffering = player.onBuffering((b) => this.deps.send(this.bufferingMessage(b)));
+    this.deps.send(this.bufferingMessage(player.isBuffering()));
     this.anchors.attach(player);
+  }
+
+  private bufferingMessage(buffering: boolean): Message {
+    return { t: 'buffering', buffering, local: this.local, server: this.server };
   }
 
   get stats(): FollowerStats {
@@ -129,7 +136,7 @@ export class Follower {
     if (newHost) this.clock = new ClockSync();
     if (this.hello) this.deps.send({ t: 'hello', name: this.hello.name, have: this.hello.have, ...this.hello.extra, ...extra });
     // The player plays already: tell the host at once, so the group does not wait for this device.
-    if (this.player) this.deps.send({ t: 'buffering', buffering: this.player.isBuffering(), local: this.local, ...(extra?.canHost !== undefined ? { canHost: extra.canHost } : {}) });
+    if (this.player) this.deps.send({ ...this.bufferingMessage(this.player.isBuffering()), ...(extra?.canHost !== undefined ? { canHost: extra.canHost } : {}) } as Message);
     for (let i = 0; i < BURST; i++) this.timers.push(this.deps.timers.setTimeout(() => this.ping(), i * BURST_GAP));
   }
 
