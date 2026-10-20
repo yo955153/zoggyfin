@@ -69,6 +69,8 @@ export interface DownloadRecord {
   /** File name of the media inside `dir`, once known. */
   mediaFile: string;
   mediaSourceId: string;
+  /** ETag or Last-Modified of the media response: a resume sends it as If-Range. */
+  validator?: string | null;
   /** Direct play keeps the original file; transcode is a server copy at the download quality. */
   method: 'original' | 'transcode';
   /** The download quality that was chosen (0 = original). */

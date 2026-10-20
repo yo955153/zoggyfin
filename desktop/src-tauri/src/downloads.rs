@@ -5,7 +5,10 @@
 //! on macOS), with the same layout as on iPhone: `downloads/<itemId>/...`.
 //! A download writes to `<destination>.part` and renames it at the end.
 //! The task list is saved to `download-tasks.json`, so paused downloads stay
-//! paused and running downloads continue (HTTP Range) after a restart.
+//! paused and running downloads continue (HTTP Range) after a restart. When
+//! the task list lost a task, the web app asks to resume and the partial file
+//! continues the same way. A range that does not fit the partial file (another
+//! start, another total, a changed file) starts over from 0.
 //!
 //! Events go to `window.__zoggyfinDesktop.download(event)` as JSON:
 //! `begin`, `progress`, `done` and `error`.
@@ -47,6 +50,9 @@ pub struct TaskMeta {
     pub bytes_done: u64,
     #[serde(default)]
     pub bytes_total: u64,
+    /// ETag or Last-Modified of the first response, sent as If-Range on a resume.
+    #[serde(default)]
+    pub validator: Option<String>,
 }
 
 struct Task {
@@ -215,26 +221,48 @@ impl Downloads {
             let _ = tokio::fs::remove_file(&part).await;
             0
         };
-        let mut req = self.client.get(&meta.url);
-        for (k, v) in &meta.headers {
-            req = req.header(k, v);
-        }
-        if offset > 0 {
-            req = req.header(reqwest::header::RANGE, format!("bytes={offset}-"));
-        }
-        let mut resp = req.send().await.map_err(|e| (e.to_string(), 0))?;
-        let status = resp.status().as_u16();
-        if status == 416 && offset > 0 {
-            // The partial file is already complete.
-            tokio::fs::rename(&part, &meta.destination).await.map_err(io)?;
-            return Ok(Outcome::Done(offset));
-        }
-        if !resp.status().is_success() {
-            return Err((format!("HTTP {status}"), status));
-        }
-        let ranged = status == 206;
+        let expected = (meta.bytes_total > 0).then_some(meta.bytes_total);
+        let (mut resp, ranged) = loop {
+            let mut req = self.client.get(&meta.url);
+            for (k, v) in &meta.headers {
+                req = req.header(k, v);
+            }
+            if offset > 0 {
+                req = req.header(reqwest::header::RANGE, format!("bytes={offset}-"));
+                if let Some(tag) = &meta.validator {
+                    req = req.header(reqwest::header::IF_RANGE, tag);
+                }
+            }
+            let resp = req.send().await.map_err(|e| (e.to_string(), 0))?;
+            let status = resp.status().as_u16();
+            if offset == 0 {
+                if !resp.status().is_success() {
+                    return Err((format!("HTTP {status}"), status));
+                }
+                break (resp, false);
+            }
+            match range_fit(
+                status,
+                header(resp.headers(), reqwest::header::CONTENT_RANGE),
+                offset,
+                expected,
+            ) {
+                RangeFit::Complete => {
+                    tokio::fs::rename(&part, &meta.destination).await.map_err(io)?;
+                    return Ok(Outcome::Done(offset));
+                }
+                RangeFit::Append => break (resp, true),
+                // The whole file again (no Range support, a transcode, or If-Range saw a change).
+                RangeFit::Whole => break (resp, false),
+                RangeFit::Restart => {
+                    // The range does not fit the partial file: ask again for the whole file.
+                    let _ = tokio::fs::remove_file(&part).await;
+                    offset = 0;
+                }
+                RangeFit::Failed => return Err((format!("HTTP {status}"), status)),
+            }
+        };
         if !ranged {
-            // The server sends the whole file (no Range support, or a transcode): start over.
             offset = 0;
         }
         let total = if ranged {
@@ -243,7 +271,20 @@ impl Downloads {
             resp.content_length()
         }
         .unwrap_or(0);
-        emit(app, json!({ "type": "begin", "id": meta.id, "expected": total }));
+        let validator = validator_of(resp.headers()).or_else(|| meta.validator.clone());
+        if validator != meta.validator || (total > 0 && total != meta.bytes_total) {
+            let tag = validator.clone();
+            self.update(&meta.id, |m| {
+                m.validator = tag;
+                if total > 0 {
+                    m.bytes_total = total;
+                }
+            });
+        }
+        emit(
+            app,
+            json!({ "type": "begin", "id": meta.id, "expected": total, "validator": validator }),
+        );
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .write(true)
@@ -314,6 +355,68 @@ fn content_range_total(headers: &reqwest::header::HeaderMap) -> Option<u64> {
     v.rsplit('/').next()?.trim().parse().ok()
 }
 
+fn header(headers: &reqwest::header::HeaderMap, name: reqwest::header::HeaderName) -> Option<&str> {
+    headers.get(name)?.to_str().ok()
+}
+
+/// A strong ETag, else Last-Modified: the values that If-Range accepts.
+fn validator_of(headers: &reqwest::header::HeaderMap) -> Option<String> {
+    header(headers, reqwest::header::ETAG)
+        .filter(|t| !t.starts_with("W/"))
+        .or_else(|| header(headers, reqwest::header::LAST_MODIFIED))
+        .map(str::to_owned)
+}
+
+/// How a server answered `Range: bytes=<offset>-`.
+#[derive(Debug, PartialEq, Eq)]
+enum RangeFit {
+    /// 206 from the offset, with the known total: append to the partial file.
+    Append,
+    /// 200: the whole file.
+    Whole,
+    /// 416 for a partial file that is the whole file.
+    Complete,
+    /// The range does not fit the partial file: start over from 0.
+    Restart,
+    /// An HTTP error that a new request does not fix.
+    Failed,
+}
+
+/// `Content-Range: bytes 100-199/1000` (or `bytes */1000` on a 416) → (start, total).
+fn parse_content_range(v: &str) -> Option<(Option<u64>, Option<u64>)> {
+    let rest = v.trim().strip_prefix("bytes")?.trim();
+    let (range, total) = rest.split_once('/')?;
+    let total = total.trim().parse().ok();
+    let start = match range.trim() {
+        "*" => None,
+        r => Some(r.split_once('-')?.0.trim().parse().ok()?),
+    };
+    Some((start, total))
+}
+
+fn range_fit(status: u16, content_range: Option<&str>, offset: u64, expected: Option<u64>) -> RangeFit {
+    let parsed = content_range.and_then(parse_content_range);
+    match status {
+        200 => RangeFit::Whole,
+        206 => match parsed {
+            Some((Some(start), total))
+                if start == offset
+                    && total.or(expected).is_some_and(|t| t > offset)
+                    && (expected.is_none() || total.is_none() || total == expected) =>
+            {
+                RangeFit::Append
+            }
+            _ => RangeFit::Restart,
+        },
+        416 => match parsed.and_then(|(_, total)| total).or(expected) {
+            Some(total) if total == offset => RangeFit::Complete,
+            _ => RangeFit::Restart,
+        },
+        s if (200..300).contains(&s) => RangeFit::Restart,
+        _ => RangeFit::Failed,
+    }
+}
+
 fn emit<R: Runtime>(app: &AppHandle<R>, event: Value) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.eval(format!(
@@ -333,6 +436,18 @@ pub struct StartArgs {
     destination: PathBuf,
     #[serde(default)]
     headers: HashMap<String, String>,
+    /// Set when the web app wants a partial file of an earlier try to continue.
+    #[serde(default)]
+    resume: Option<ResumeArgs>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResumeArgs {
+    #[serde(default)]
+    expected_bytes: Option<u64>,
+    #[serde(default)]
+    validator: Option<String>,
 }
 
 #[tauri::command]
@@ -344,10 +459,22 @@ pub fn download_start<R: Runtime>(
     let destination = inside(state.root(), &task.destination)?;
     let resume = {
         let mut tasks = state.tasks.lock().unwrap();
+        let old = tasks.get(&task.id).map(|t| &t.meta);
         // The same item failed before: continue its partial file.
-        let resume = tasks
-            .get(&task.id)
-            .is_some_and(|t| t.meta.destination == destination && t.meta.state == TaskState::Failed);
+        let failed = old.is_some_and(|m| m.destination == destination && m.state == TaskState::Failed);
+        let same = old.filter(|m| m.destination == destination);
+        let bytes_total = task
+            .resume
+            .as_ref()
+            .and_then(|r| r.expected_bytes)
+            .or_else(|| same.map(|m| m.bytes_total))
+            .unwrap_or(0);
+        let validator = task
+            .resume
+            .as_ref()
+            .and_then(|r| r.validator.clone())
+            .or_else(|| same.and_then(|m| m.validator.clone()));
+        let resume = failed || task.resume.is_some();
         if let Some(old) = tasks.get(&task.id).and_then(|t| t.flag.clone()) {
             old.store(STOP, Ordering::Release);
         }
@@ -361,7 +488,8 @@ pub fn download_start<R: Runtime>(
                     headers: task.headers,
                     state: TaskState::Downloading,
                     bytes_done: 0,
-                    bytes_total: 0,
+                    bytes_total: if resume { bytes_total } else { 0 },
+                    validator: if resume { validator } else { None },
                 },
                 flag: None,
             },
@@ -385,21 +513,27 @@ pub fn download_pause(state: State<'_, DownloadsState>, id: String) {
     }
 }
 
+/// Continues a paused task. False when there is no such task: the web app then starts it again.
 #[tauri::command]
-pub fn download_resume<R: Runtime>(app: AppHandle<R>, state: State<'_, DownloadsState>, id: String) {
-    let run = {
+pub fn download_resume<R: Runtime>(app: AppHandle<R>, state: State<'_, DownloadsState>, id: String) -> bool {
+    let (known, run) = {
         let tasks = state.tasks.lock().unwrap();
-        tasks.get(&id).is_some_and(|t| {
-            t.flag.is_none()
-                && matches!(
-                    t.meta.state,
-                    TaskState::Paused | TaskState::Failed | TaskState::Downloading
-                )
-        })
+        match tasks.get(&id) {
+            None => (false, false),
+            Some(t) => (
+                true,
+                t.flag.is_none()
+                    && matches!(
+                        t.meta.state,
+                        TaskState::Paused | TaskState::Failed | TaskState::Downloading
+                    ),
+            ),
+        }
     };
     if run {
         state.inner().spawn(&app, &id, true);
     }
+    known
 }
 
 #[tauri::command]
@@ -604,6 +738,52 @@ mod tests {
         assert!(inside(root, Path::new("/data/../etc/passwd")).is_err());
         assert!(inside(root, Path::new("/tmp/x")).is_err());
         assert!(inside(root, Path::new("data/x")).is_err());
+    }
+
+    #[test]
+    fn a_range_must_fit_the_partial_file() {
+        // 206 from the offset with the known total: append.
+        assert_eq!(
+            range_fit(206, Some("bytes 100-999/1000"), 100, Some(1000)),
+            RangeFit::Append
+        );
+        assert_eq!(range_fit(206, Some("bytes 100-999/1000"), 100, None), RangeFit::Append);
+        // Another start or another total: start over.
+        assert_eq!(
+            range_fit(206, Some("bytes 0-999/1000"), 100, Some(1000)),
+            RangeFit::Restart
+        );
+        assert_eq!(
+            range_fit(206, Some("bytes 100-1999/2000"), 100, Some(1000)),
+            RangeFit::Restart
+        );
+        assert_eq!(range_fit(206, None, 100, Some(1000)), RangeFit::Restart);
+        // 200: the whole file again.
+        assert_eq!(range_fit(200, None, 100, Some(1000)), RangeFit::Whole);
+        // 416: complete only when the partial file has every byte.
+        assert_eq!(range_fit(416, Some("bytes */1000"), 1000, None), RangeFit::Complete);
+        assert_eq!(range_fit(416, None, 1000, Some(1000)), RangeFit::Complete);
+        assert_eq!(
+            range_fit(416, Some("bytes */1000"), 1200, Some(1000)),
+            RangeFit::Restart
+        );
+        assert_eq!(range_fit(416, None, 100, None), RangeFit::Restart);
+        // Other errors stay errors.
+        assert_eq!(range_fit(404, None, 100, None), RangeFit::Failed);
+    }
+
+    #[test]
+    fn reads_the_validator() {
+        let mut h = reqwest::header::HeaderMap::new();
+        h.insert(
+            reqwest::header::LAST_MODIFIED,
+            "Tue, 01 Sep 2026 10:00:00 GMT".parse().unwrap(),
+        );
+        assert_eq!(validator_of(&h).as_deref(), Some("Tue, 01 Sep 2026 10:00:00 GMT"));
+        h.insert(reqwest::header::ETAG, "W/\"weak\"".parse().unwrap());
+        assert_eq!(validator_of(&h).as_deref(), Some("Tue, 01 Sep 2026 10:00:00 GMT"));
+        h.insert(reqwest::header::ETAG, "\"strong\"".parse().unwrap());
+        assert_eq!(validator_of(&h).as_deref(), Some("\"strong\""));
     }
 
     #[test]

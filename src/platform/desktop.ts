@@ -86,7 +86,7 @@ const mpvListeners = new Set<(e: MpvEvent) => void>();
 
 /** Download progress from the Rust downloader (`desktop/src-tauri/src/downloads.rs`). */
 export type DownloadEvent =
-  | { type: 'begin'; id: string; expected: number }
+  | { type: 'begin'; id: string; expected: number; validator?: string | null }
   | { type: 'progress'; id: string; done: number; total: number }
   | { type: 'done'; id: string; bytes: number }
   | { type: 'error'; id: string; message: string; code: number };

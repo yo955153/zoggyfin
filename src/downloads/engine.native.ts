@@ -1,91 +1,72 @@
 /**
  * The download engine on iOS and Android: @kesha-antonov/react-native-background-downloader
  * (a background NSURLSession on iOS). Downloads go on while the app is in
- * the background, and the system keeps them when it ends the app.
+ * the background, and the system keeps them when it ends the app. The engine
+ * logic is in `native-engine.ts`; this file passes the library and the files.
  */
 import {
-  type DownloadTask,
   completeHandler,
   createDownloadTask,
   getExistingDownloadTasks,
   setConfig,
 } from '@kesha-antonov/react-native-background-downloader';
+import { File, FileMode } from 'expo-file-system';
 import { Platform } from 'react-native';
 
-import type { DownloadEngine, EngineHandlers, ExistingTask } from './engine-types';
+import { createNativeEngine, type EngineFs, type NativeDownloader, type NativeTask } from './native-engine';
 
-let handlers: EngineHandlers | null = null;
-const tasks = new Map<string, DownloadTask>();
-
-function bind(task: DownloadTask): DownloadTask {
-  tasks.set(task.id, task);
-  return task
-    .begin(({ expectedBytes }) => handlers?.onBegin(task.id, expectedBytes))
-    .progress(({ bytesDownloaded, bytesTotal }) => handlers?.onProgress(task.id, bytesDownloaded, bytesTotal))
-    .done(({ bytesDownloaded }) => {
-      tasks.delete(task.id);
-      handlers?.onDone(task.id, bytesDownloaded);
-    })
-    .error(({ error, errorCode }) => {
-      tasks.delete(task.id);
-      handlers?.onError(task.id, error, errorCode);
-    });
+function fileAt(path: string): File {
+  return new File(`file://${encodeURI(path)}`);
 }
 
-function stateOf(t: DownloadTask): ExistingTask['state'] {
-  switch (t.state) {
-    case 'DOWNLOADING':
-    case 'PENDING':
-      return 'downloading';
-    case 'PAUSED':
-      return 'paused';
-    case 'DONE':
-      return 'done';
-    case 'FAILED':
-      return 'failed';
-    default:
-      return 'other';
-  }
-}
+/** Bytes per read when the engine joins two files. */
+const CHUNK = 4 * 1024 * 1024;
 
-export const engine: DownloadEngine = {
-  supported: !Platform.isTV,
-  configure(h, opts) {
-    handlers = h;
-    setConfig({
-      progressInterval: 1000,
-      progressMinBytes: 256 * 1024,
-      maxParallelDownloads: opts.maxParallel,
-      isLogsEnabled: false,
-    });
-  },
-  start({ id, url, destination, headers }) {
-    const task = createDownloadTask({ id, url, destination, headers, metadata: {} });
-    bind(task).start();
-  },
-  async pause(id) {
-    await tasks.get(id)?.pause();
-  },
-  async resume(id) {
-    await tasks.get(id)?.resume();
-  },
-  async stop(id) {
-    const t = tasks.get(id);
-    tasks.delete(id);
-    await t?.stop();
-  },
-  async existing() {
-    const found = await getExistingDownloadTasks();
-    return found.map((t) => {
-      bind(t);
-      return { id: t.id, state: stateOf(t), bytesDone: t.bytesDownloaded, bytesTotal: t.bytesTotal };
-    });
-  },
-  finish(id) {
+const fs: EngineFs = {
+  size(path) {
     try {
-      completeHandler(id);
+      const f = fileAt(path);
+      return f.exists ? (f.size ?? 0) : 0;
     } catch {
-      // Nothing to release.
+      return 0;
+    }
+  },
+  remove(path) {
+    try {
+      const f = fileAt(path);
+      if (f.exists) f.delete();
+    } catch {
+      // Already gone.
+    }
+  },
+  async replace(from, to) {
+    const target = fileAt(to);
+    if (target.exists) target.delete();
+    await fileAt(from).move(target);
+  },
+  async writeAt(from, to, offset) {
+    const src = fileAt(from).open(FileMode.ReadOnly);
+    const dst = fileAt(to).open(FileMode.ReadWrite);
+    try {
+      dst.offset = offset;
+      for (;;) {
+        const bytes = await src.readBytes(CHUNK);
+        if (!bytes.length) break;
+        await dst.writeBytes(bytes);
+      }
+    } finally {
+      src.close();
+      dst.close();
     }
   },
 };
+
+const lib: NativeDownloader = {
+  supported: !Platform.isTV,
+  createDownloadTask: (o) => createDownloadTask(o) as unknown as NativeTask,
+  getExistingDownloadTasks: async () => (await getExistingDownloadTasks()) as unknown as NativeTask[],
+  setConfig: (c) => setConfig(c),
+  completeHandler: (id) => completeHandler(id),
+};
+
+export const engine = createNativeEngine(lib, fs);

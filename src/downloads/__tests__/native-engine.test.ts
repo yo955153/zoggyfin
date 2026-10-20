@@ -1,0 +1,192 @@
+import type { EngineHandlers } from '../engine-types';
+import { createNativeEngine, type EngineFs, type NativeDownloader, type NativeTask, restPath } from '../native-engine';
+
+type Begin = Parameters<NativeTask['begin']>[0];
+type Progress = Parameters<NativeTask['progress']>[0];
+type Done = Parameters<NativeTask['done']>[0];
+type Fail = Parameters<NativeTask['error']>[0];
+
+interface FakeTask extends NativeTask {
+  options: { url: string; destination: string; headers?: Record<string, string>; metadata?: object };
+  started: boolean;
+  stopped: boolean;
+  fire: { begin?: Begin; progress?: Progress; done?: Done; error?: Fail };
+}
+
+function fakeTask(o: FakeTask['options'], state = 'PENDING', bytes = 0): FakeTask {
+  const t: FakeTask = {
+    id: (o as { id?: string }).id ?? 'a',
+    state,
+    bytesDownloaded: bytes,
+    bytesTotal: 0,
+    metadata: o.metadata as Record<string, unknown>,
+    options: o,
+    started: false,
+    stopped: false,
+    fire: {},
+    begin: (h) => ((t.fire.begin = h), t),
+    progress: (h) => ((t.fire.progress = h), t),
+    done: (h) => ((t.fire.done = h), t),
+    error: (h) => ((t.fire.error = h), t),
+    start: () => void (t.started = true),
+    pause: async () => undefined,
+    resume: async () => undefined,
+    stop: async () => void (t.stopped = true),
+  };
+  return t;
+}
+
+/** Files as byte strings, so a join can be checked. */
+function fakeFs(files: Record<string, string>): EngineFs {
+  return {
+    size: (p) => files[p]?.length ?? 0,
+    remove: (p) => void delete files[p],
+    replace: async (from, to) => {
+      files[to] = files[from];
+      delete files[from];
+    },
+    writeAt: async (from, to, offset) => {
+      const base = (files[to] ?? '').slice(0, offset);
+      files[to] = base + files[from];
+    },
+  };
+}
+
+function setup(files: Record<string, string>, existing: FakeTask[] = []) {
+  const created: FakeTask[] = [];
+  const lib: NativeDownloader = {
+    supported: true,
+    createDownloadTask: (o) => {
+      const t = fakeTask(o);
+      created.push(t);
+      return t;
+    },
+    getExistingDownloadTasks: async () => existing,
+    setConfig: () => undefined,
+    completeHandler: () => undefined,
+  };
+  const engine = createNativeEngine(lib, fakeFs(files));
+  const h: jest.Mocked<EngineHandlers> = { onBegin: jest.fn(), onProgress: jest.fn(), onDone: jest.fn(), onError: jest.fn() };
+  engine.configure(h, { maxParallel: 2 });
+  return { engine, created, h };
+}
+
+const DEST = '/docs/downloads/a/media.mkv';
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+describe('native engine: resume of a lost task', () => {
+  it('asks for the rest of the partial file and joins it at the end', async () => {
+    const files: Record<string, string> = { [DEST]: 'abcd' };
+    const { engine, created, h } = setup(files);
+    engine.start({ id: 'a', url: 'https://s/x', destination: DEST, headers: { Authorization: 'k' }, resume: { expectedBytes: 10, validator: '"v1"' } });
+    const t = created[0];
+    expect(t.options.destination).toBe(restPath(DEST));
+    expect(t.options.headers).toEqual({ Authorization: 'k', Range: 'bytes=4-', 'If-Range': '"v1"' });
+    expect(t.started).toBe(true);
+    t.fire.begin?.({ expectedBytes: 6, headers: { 'Content-Range': 'bytes 4-9/10', ETag: '"v1"' } });
+    expect(h.onBegin).toHaveBeenCalledWith('a', 10, '"v1"');
+    t.fire.progress?.({ bytesDownloaded: 3, bytesTotal: 6 });
+    expect(h.onProgress).toHaveBeenCalledWith('a', 7, 10);
+    files[restPath(DEST)] = 'efghij';
+    t.fire.done?.({ bytesDownloaded: 6 });
+    await flush();
+    expect(files[DEST]).toBe('abcdefghij');
+    expect(files[restPath(DEST)]).toBeUndefined();
+    expect(h.onDone).toHaveBeenCalledWith('a', 10);
+  });
+
+  it('keeps the whole file when the server answers 200', async () => {
+    const files: Record<string, string> = { [DEST]: 'abcd' };
+    const { engine, created, h } = setup(files);
+    engine.start({ id: 'a', url: 'u', destination: DEST, resume: { expectedBytes: 10, validator: null } });
+    const t = created[0];
+    t.fire.begin?.({ expectedBytes: 10, headers: {} });
+    t.fire.progress?.({ bytesDownloaded: 5, bytesTotal: 10 });
+    expect(h.onProgress).toHaveBeenCalledWith('a', 5, 10);
+    files[restPath(DEST)] = 'ABCDEFGHIJ';
+    t.fire.done?.({ bytesDownloaded: 10 });
+    await flush();
+    expect(files[DEST]).toBe('ABCDEFGHIJ');
+    expect(h.onDone).toHaveBeenCalledWith('a', 10);
+  });
+
+  it('starts over from 0 when the range does not fit', async () => {
+    const files: Record<string, string> = { [DEST]: 'abcd' };
+    const { engine, created, h } = setup(files);
+    engine.start({ id: 'a', url: 'u', destination: DEST, headers: { Authorization: 'k' }, resume: { expectedBytes: 10, validator: null } });
+    created[0].fire.begin?.({ expectedBytes: 16, headers: { 'Content-Range': 'bytes 4-19/20' } });
+    await flush();
+    expect(created[0].stopped).toBe(true);
+    expect(files[DEST]).toBeUndefined();
+    const again = created[1];
+    expect(again.options).toEqual({ id: 'a', url: 'u', destination: DEST, headers: { Authorization: 'k' }, metadata: {} });
+    expect(again.started).toBe(true);
+    // Events of the stopped task do not count.
+    created[0].fire.error?.({ error: 'cancelled', errorCode: -999 });
+    expect(h.onError).not.toHaveBeenCalled();
+  });
+
+  it('starts over from 0 when the sizes do not add up', async () => {
+    const files: Record<string, string> = { [DEST]: 'abcd' };
+    const { engine, created, h } = setup(files);
+    engine.start({ id: 'a', url: 'u', destination: DEST, resume: { expectedBytes: 10, validator: null } });
+    created[0].fire.begin?.({ expectedBytes: 6, headers: { 'Content-Range': 'bytes 4-9/10' } });
+    files[restPath(DEST)] = 'efghijklmn';
+    created[0].fire.done?.({ bytesDownloaded: 10 });
+    await flush();
+    expect(h.onDone).not.toHaveBeenCalled();
+    expect(created[1].options.destination).toBe(DEST);
+    expect(created[1].options.headers).toEqual({});
+  });
+
+  it('downloads from 0 when there is no partial file', () => {
+    const { engine, created } = setup({});
+    engine.start({ id: 'a', url: 'u', destination: DEST, resume: { expectedBytes: 10, validator: null } });
+    expect(created[0].options.destination).toBe(DEST);
+    expect(created[0].options.headers).toEqual({});
+  });
+
+  it('finishes at once when the partial file is the whole file', async () => {
+    const { engine, created, h } = setup({ [DEST]: 'abcdefghij' });
+    engine.start({ id: 'a', url: 'u', destination: DEST, resume: { expectedBytes: 10, validator: null } });
+    await flush();
+    expect(created).toHaveLength(0);
+    expect(h.onDone).toHaveBeenCalledWith('a', 10);
+  });
+
+  it('pauses a continued task by a stop, and a resume asks for the rest again', async () => {
+    const files: Record<string, string> = { [DEST]: 'abcd' };
+    const { engine, created } = setup(files);
+    engine.start({ id: 'a', url: 'u', destination: DEST, resume: { expectedBytes: 10, validator: null } });
+    files[restPath(DEST)] = 'ef';
+    await engine.pause('a');
+    expect(created[0].stopped).toBe(true);
+    expect(files[restPath(DEST)]).toBeUndefined();
+    expect(files[DEST]).toBe('abcd');
+    await expect(engine.resume('a')).resolves.toBe(true);
+    expect(created[1].options.headers).toEqual({ Range: 'bytes=4-' });
+  });
+
+  it('says when it has no task to resume', async () => {
+    const { engine } = setup({});
+    await expect(engine.resume('gone')).resolves.toBe(false);
+  });
+
+  it('joins a continued task that finished while the app was closed', async () => {
+    const files: Record<string, string> = { [DEST]: 'abcd', [restPath(DEST)]: 'efghij' };
+    const done = fakeTask({ url: 'u', destination: restPath(DEST), metadata: { zfJoin: { destination: DEST, offset: 4, total: 10 } } }, 'DONE', 6);
+    const { engine } = setup(files, [done]);
+    const tasks = await engine.existing();
+    expect(tasks).toEqual([{ id: 'a', state: 'done', bytesDone: 10, bytesTotal: 10 }]);
+    expect(files[DEST]).toBe('abcdefghij');
+  });
+
+  it('drops a paused continued task after a restart, so the manager starts it from the partial file', async () => {
+    const files: Record<string, string> = { [DEST]: 'abcd', [restPath(DEST)]: 'ef' };
+    const paused = fakeTask({ url: 'u', destination: restPath(DEST), metadata: { zfJoin: { destination: DEST, offset: 4, total: 10 } } }, 'PAUSED', 2);
+    const { engine } = setup(files, [paused]);
+    expect(await engine.existing()).toEqual([]);
+    expect(paused.stopped).toBe(true);
+    expect(files[DEST]).toBe('abcd');
+  });
+});

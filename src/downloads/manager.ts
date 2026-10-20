@@ -32,6 +32,7 @@ import { MAX_BITRATE, usePlaybackSettings } from '@/settings/playback';
 import { engine } from './engine';
 import { files } from './files';
 import { audioPlan, groupFor, isContainer, mediaKindOf, type MediaPlan, slimForDownload, sortFor, subtitleFiles, videoPlan } from './plan';
+import { canResume, isWholeFile, resumeHint } from './resume';
 import { type DownloadEvent, dueForRetry, isActive, pickToStart, reorder, transition } from './state-machine';
 import { downloadsState, dropCollection, dropRecord, patchRecord, putCollection, putRecord, useDownloadsStore } from './store';
 import { DOWNLOAD_SCHEMA_VERSION, type DownloadCollection, type DownloadRecord, type LocalImages } from './types';
@@ -128,8 +129,16 @@ class DownloadManager {
     useDownloadsStore.setState({ documentsDir: files.documentsDir() });
     engine.configure(
       {
-        onBegin: (id, expected) => {
-          if (expected > 0) patchRecord(id, (r) => (r.bytesTotal === expected ? r : { ...r, bytesTotal: expected }), false);
+        onBegin: (id, expected, validator) => {
+          patchRecord(
+            id,
+            (r) => {
+              const total = expected > 0 ? expected : r.bytesTotal;
+              const tag = validator ?? r.validator ?? null;
+              return r.bytesTotal === total && (r.validator ?? null) === tag ? r : { ...r, bytesTotal: total, validator: tag };
+            },
+            false,
+          );
         },
         onProgress: (id, done, total) => {
           apply(id, { type: 'progress', bytesDone: done, bytesTotal: total > 0 ? total : null, now: Date.now() }, false);
@@ -199,15 +208,22 @@ class DownloadManager {
           void engine.stop(t.id);
       }
     }
-    // Records that were running with no system task left: the file may have landed while the app was closed.
+    // Records with no system task left: the file may have landed while the app was closed.
     for (const r of Object.values(downloadsState().records)) {
       if (this.native.has(r.itemId) || r.state === 'completed') continue;
-      if ((r.state === 'queued' || r.state === 'paused') && r.mediaFile && files.size(`${r.dir}/${r.mediaFile}`) > 0 && r.bytesDone > 0) {
-        void this.finalize(r.itemId, files.size(`${r.dir}/${r.mediaFile}`));
-      } else if (r.state === 'paused' && r.bytesDone > 0) {
-        // The paused task is gone: a resume starts over.
+      const size = r.mediaFile ? files.size(`${r.dir}/${r.mediaFile}`) : 0;
+      if (r.state === 'downloading') {
+        // It ran when the app ended: queue it again. The start continues the partial file.
+        patchRecord(r.itemId, (x) => ({ ...x, state: 'queued', speed: 0 }));
+      }
+      const state = downloadsState().records[r.itemId]?.state;
+      if ((state === 'queued' || state === 'paused') && r.bytesDone > 0 && isWholeFile(size, r)) {
+        void this.finalize(r.itemId, size);
+      } else if (state === 'paused' && r.bytesDone > 0 && r.method === 'transcode') {
+        // A transcode has no byte ranges: a resume starts over.
         patchRecord(r.itemId, (x) => ({ ...x, bytesDone: 0 }));
       }
+      // Else a paused original file keeps its bytes: a resume continues it with an HTTP Range request.
     }
   }
 
@@ -258,8 +274,9 @@ class DownloadManager {
     const r = apply(itemId, { type: 'start', now: Date.now() });
     if (!r || r.state !== 'downloading') return;
     if (this.native.has(itemId)) {
-      await engine.resume(itemId);
-      return;
+      if (await engine.resume(itemId)) return;
+      // The engine lost the task: start it again below, from the partial file when it can.
+      this.native.delete(itemId);
     }
     this.preparing.add(itemId);
     try {
@@ -268,13 +285,18 @@ class DownloadManager {
       const cur = downloadsState().records[itemId];
       if (!cur || cur.state !== 'downloading') return;
       files.ensureDir(cur.dir);
-      // A partial file of an earlier try would block the move into place.
-      files.remove(`${cur.dir}/${plan.file}`);
+      const resume = canResume(r, plan);
+      // A partial file of an earlier try that cannot continue would block the move into place.
+      if (!resume) {
+        files.remove(`${cur.dir}/${plan.file}`);
+        if (cur.bytesDone > 0) patchRecord(itemId, (x) => ({ ...x, bytesDone: 0, validator: null }), false);
+      }
       engine.start({
         id: itemId,
         url: plan.url,
         destination: files.absolutePath(`${cur.dir}/${plan.file}`),
         headers: { Authorization: ctx.authHeader },
+        resume: resume ? resumeHint(cur) : undefined,
       });
       this.native.add(itemId);
     } catch (e) {

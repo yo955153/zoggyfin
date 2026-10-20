@@ -34,7 +34,7 @@ describe('desktop download engine', () => {
     emit({ type: 'progress', id: 'a', done: 50, total: 100 });
     emit({ type: 'done', id: 'a', bytes: 100 });
     emit({ type: 'error', id: 'b', message: 'HTTP 404', code: 404 });
-    expect(h.onBegin).toHaveBeenCalledWith('a', 100);
+    expect(h.onBegin).toHaveBeenCalledWith('a', 100, null);
     expect(h.onProgress).toHaveBeenCalledWith('a', 50, 100);
     expect(h.onDone).toHaveBeenCalledWith('a', 100);
     expect(h.onError).toHaveBeenCalledWith('b', 'HTTP 404', 404);
@@ -50,7 +50,23 @@ describe('desktop download engine', () => {
     engine.finish('a');
     await flush();
     expect(calls.map((c) => c[0])).toEqual(['download_start', 'download_pause', 'download_resume', 'download_stop', 'download_finish']);
-    expect(calls[0][1]).toEqual({ task: { id: 'a', url: 'https://s/x', destination: '/data/downloads/a/media.mkv', headers: { Authorization: 'k' } } });
+    expect(calls[0][1]).toEqual({ task: { id: 'a', url: 'https://s/x', destination: '/data/downloads/a/media.mkv', headers: { Authorization: 'k' }, resume: null } });
+  });
+
+  it('asks Rust to continue a partial file, and hears when a task is gone', async () => {
+    const { invoke, calls } = fakeInvoke({ download_resume: false });
+    let emit: (e: DownloadEvent) => void = () => undefined;
+    const engine = createDesktopEngine(invoke, (l) => {
+      emit = l;
+      return () => undefined;
+    });
+    const h = handlers();
+    engine.configure(h, { maxParallel: 2 });
+    engine.start({ id: 'a', url: 'u', destination: '/data/downloads/a/media.mkv', resume: { expectedBytes: 1000, validator: '"v1"' } });
+    expect(calls[0][1]).toEqual({ task: { id: 'a', url: 'u', destination: '/data/downloads/a/media.mkv', headers: {}, resume: { expectedBytes: 1000, validator: '"v1"' } } });
+    emit({ type: 'begin', id: 'a', expected: 1000, validator: '"v1"' });
+    expect(h.onBegin).toHaveBeenCalledWith('a', 1000, '"v1"');
+    await expect(engine.resume('b')).resolves.toBe(false);
   });
 
   it('reports a start that Rust refuses as a download error', async () => {

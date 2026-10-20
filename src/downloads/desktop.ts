@@ -27,7 +27,7 @@ export function createDesktopEngine(invoke: Invoke, subscribe: (l: (e: DownloadE
     if (!handlers) return;
     switch (e.type) {
       case 'begin':
-        handlers.onBegin(e.id, e.expected);
+        handlers.onBegin(e.id, e.expected, e.validator ?? null);
         break;
       case 'progress':
         handlers.onProgress(e.id, e.done, e.total);
@@ -47,13 +47,19 @@ export function createDesktopEngine(invoke: Invoke, subscribe: (l: (e: DownloadE
       // The manager starts at most `maxParallel` downloads; Rust runs what it is given.
       handlers = h;
     },
-    start({ id, url, destination, headers }) {
-      invoke('download_start', { task: { id, url, destination, headers: headers ?? {} } }).catch((err: unknown) =>
+    start({ id, url, destination, headers, resume }) {
+      invoke('download_start', { task: { id, url, destination, headers: headers ?? {}, resume: resume ?? null } }).catch((err: unknown) =>
         handlers?.onError(id, err instanceof Error ? err.message : String(err), 0),
       );
     },
     pause: (id) => quiet(invoke('download_pause', { id })),
-    resume: (id) => quiet(invoke('download_resume', { id })),
+    resume: (id) =>
+      invoke<boolean>('download_resume', { id })
+        .then((known) => known !== false)
+        .catch((err: unknown) => {
+          console.warn('[downloads]', err);
+          return true;
+        }),
     stop: (id) => quiet(invoke('download_stop', { id })),
     async existing() {
       const tasks = await invoke<ExistingTask[]>('download_existing');
