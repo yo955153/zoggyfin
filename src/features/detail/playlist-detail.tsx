@@ -30,7 +30,6 @@ const EDIT_ROW = 64;
 
 interface ViewProps {
   item: BaseItemDto;
-  refreshing: boolean;
   onRefresh: () => unknown;
 }
 
@@ -43,7 +42,7 @@ function shuffled<T>(list: readonly T[]): T[] {
   return out;
 }
 
-export function PlaylistDetail({ item, refreshing, onRefresh }: ViewProps) {
+export function PlaylistDetail({ item, onRefresh }: ViewProps) {
   const entries = useChildren(item.Id ?? undefined, 'playlist');
   const player = usePlayer();
   const s = useStyles(makeStyles);
@@ -85,11 +84,7 @@ export function PlaylistDetail({ item, refreshing, onRefresh }: ViewProps) {
         { icon: editing ? 'checkmark' : 'line.3.horizontal', label: editing ? 'Done' : 'Reorder', onPress: () => setEditing((e) => !e) },
         { icon: 'pencil', label: 'Rename', onPress: () => openRenamePlaylist(item) },
       ]}
-      refreshing={refreshing}
-      onRefresh={() => {
-        onRefresh();
-        entries.refetch();
-      }}
+      onRefresh={() => Promise.all([onRefresh(), entries.refetch()])}
       footer={<ItemActionSheet item={menu} visible={!!menu} onClose={() => setMenu(undefined)} />}
       beforeRows={
         <View style={{ marginTop: spacing.xl }}>

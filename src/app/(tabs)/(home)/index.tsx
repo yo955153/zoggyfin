@@ -12,6 +12,7 @@ import { ProfileMenu } from '@/features/profile/profile-menu';
 import { OfflineBanner } from '@/features/offline/offline-banner';
 import { HomeTogetherSheet, homeTogether, NearbyHomeCard, TogetherHeaderButton } from '@/features/together/home-entry';
 import { useRootScreenOptions } from '@/lib/stack-options';
+import { usePullRefresh } from '@/lib/use-pull-refresh';
 import { isTV } from '@/platform/tv';
 import { homeSections } from '@/registry/home-sections';
 import { createStyles, type AppTheme, sizes, spacing, useStyles, useTheme } from '@/theme';
@@ -27,14 +28,9 @@ export default function HomeScreen() {
   const { session, scope } = useApi();
   const qc = useQueryClient();
   const sections = useSyncExternalStore(homeSections.subscribe, homeSections.list, homeSections.list);
-  const [refreshing, setRefreshing] = useState(false);
   const [accounts, setAccounts] = useState(false);
 
-  const refresh = async () => {
-    setRefreshing(true);
-    await qc.invalidateQueries({ queryKey: queryKeys.all(scope) });
-    setRefreshing(false);
-  };
+  const pull = usePullRefresh(() => qc.invalidateQueries({ queryKey: queryKeys.all(scope) }));
 
   return (
     <>
@@ -63,7 +59,7 @@ export default function HomeScreen() {
         contentInsetAdjustmentBehavior="automatic"
         style={s.flex}
         contentContainerStyle={[s.content, { paddingBottom: bottomPad }]}
-        refreshControl={isTV ? undefined : <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={c.text2} />}>
+        refreshControl={isTV ? undefined : <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={c.text2} />}>
         <OfflineBanner entries />
         {homeTogether ? <NearbyHomeCard /> : null}
         {sections.map((sec) => (

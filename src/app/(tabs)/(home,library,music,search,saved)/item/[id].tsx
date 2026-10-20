@@ -31,7 +31,7 @@ export default function ItemScreen() {
   } else if (!item) {
     body = q.error ? <ErrorState error={q.error} onRetry={q.refetch} /> : <DetailSkeleton />;
   } else {
-    const props = { item, refreshing: q.isRefetching, onRefresh: q.refetch };
+    const props = { item, onRefresh: q.refetch };
     switch (item.Type) {
       case 'Series':
         body = <SeriesDetail {...props} />;

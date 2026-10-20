@@ -77,7 +77,6 @@ interface DetailScaffoldProps<Row> {
   beforeRows?: ReactNode;
   /** Shown after the rows: cast, similar items. */
   footer?: ReactNode;
-  refreshing?: boolean;
   /** May return a promise; the spinner shows until it settles. */
   onRefresh?: () => unknown;
 }

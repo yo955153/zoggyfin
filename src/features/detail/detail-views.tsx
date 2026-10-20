@@ -17,7 +17,6 @@ import { EpisodeRow, personToItem, TrackRow } from './rows';
 
 interface ViewProps {
   item: BaseItemDto;
-  refreshing: boolean;
   onRefresh: () => unknown;
 }
 
@@ -72,13 +71,12 @@ function Block({ children }: { children: ReactNode }) {
 
 // ---- Movie / video -------------------------------------------------------------
 
-export function MovieDetail({ item, refreshing, onRefresh }: ViewProps) {
+export function MovieDetail({ item, onRefresh }: ViewProps) {
   return (
     <DetailScaffold
       item={item}
       meta={[year(item), genre(item), formatDuration(item.RunTimeTicks), item.OfficialRating, ...videoFacts(item)]}
       playable
-      refreshing={refreshing}
       onRefresh={onRefresh}
       footer={<CastAndSimilar item={item} />}
     />
@@ -87,7 +85,7 @@ export function MovieDetail({ item, refreshing, onRefresh }: ViewProps) {
 
 // ---- Series -> seasons ---------------------------------------------------------
 
-export function SeriesDetail({ item, refreshing, onRefresh }: ViewProps) {
+export function SeriesDetail({ item, onRefresh }: ViewProps) {
   const seasons = useSeasons(item.Id ?? undefined);
   const nextUp = useNextUp(item.Id ?? undefined);
   const next = nextUp.data?.[0];
@@ -103,7 +101,6 @@ export function SeriesDetail({ item, refreshing, onRefresh }: ViewProps) {
       ]}
       playable
       playLabel={next ? `${next.UserData?.PlaybackPositionTicks ? 'Resume' : 'Play'} ${episodeLabel(next) ?? ''}`.trim() : 'Play'}
-      refreshing={refreshing}
       onRefresh={onRefresh}
       footer={
         <>
@@ -133,7 +130,7 @@ export function SeriesDetail({ item, refreshing, onRefresh }: ViewProps) {
 
 // ---- Season -> episodes --------------------------------------------------------
 
-export function SeasonDetail({ item, refreshing, onRefresh }: ViewProps) {
+export function SeasonDetail({ item, onRefresh }: ViewProps) {
   const seriesId = item.SeriesId ?? item.ParentId ?? undefined;
   const episodes = useEpisodes(seriesId, item.Id ?? undefined);
   const open = useOpenItem();
@@ -143,11 +140,7 @@ export function SeasonDetail({ item, refreshing, onRefresh }: ViewProps) {
       eyebrow={item.SeriesName}
       meta={[year(item), episodes.data ? `${episodes.data.length} ${episodes.data.length === 1 ? 'episode' : 'episodes'}` : null]}
       playable
-      refreshing={refreshing}
-      onRefresh={() => {
-        onRefresh();
-        episodes.refetch();
-      }}
+      onRefresh={() => Promise.all([onRefresh(), episodes.refetch()])}
       beforeRows={
         <Block>
           <RowHeader title="Episodes" />
@@ -165,7 +158,7 @@ export function SeasonDetail({ item, refreshing, onRefresh }: ViewProps) {
 
 // ---- Episode ---------------------------------------------------------------------
 
-export function EpisodeDetail({ item, refreshing, onRefresh }: ViewProps) {
+export function EpisodeDetail({ item, onRefresh }: ViewProps) {
   const seriesId = item.SeriesId ?? undefined;
   const episodes = useEpisodes(seriesId, item.SeasonId ?? undefined);
   const others = episodes.data?.filter((e) => e.Id !== item.Id);
@@ -175,7 +168,6 @@ export function EpisodeDetail({ item, refreshing, onRefresh }: ViewProps) {
       eyebrow={[item.SeriesName, episodeLabel(item)].filter(Boolean).join(' · ')}
       meta={[item.PremiereDate ? new Date(item.PremiereDate).getFullYear().toString() : null, formatDuration(item.RunTimeTicks), item.OfficialRating, ...videoFacts(item)]}
       playable
-      refreshing={refreshing}
       onRefresh={onRefresh}
       footer={
         <>
@@ -197,7 +189,7 @@ export function EpisodeDetail({ item, refreshing, onRefresh }: ViewProps) {
 
 // ---- Album / playlist -> tracks -------------------------------------------------
 
-function TrackListDetail({ item, refreshing, onRefresh, kind }: ViewProps & { kind: 'tracks' | 'playlist' }) {
+function TrackListDetail({ item, onRefresh, kind }: ViewProps & { kind: 'tracks' | 'playlist' }) {
   const tracks = useChildren(item.Id ?? undefined, kind);
   const player = usePlayer();
   const open = useOpenItem();
@@ -223,11 +215,7 @@ function TrackListDetail({ item, refreshing, onRefresh, kind }: ViewProps & { ki
       ]}
       playable
       onShuffle={() => player.play({ item, shuffle: true })}
-      refreshing={refreshing}
-      onRefresh={() => {
-        onRefresh();
-        tracks.refetch();
-      }}
+      onRefresh={() => Promise.all([onRefresh(), tracks.refetch()])}
       footer={<ItemActionSheet item={menu} visible={!!menu} onClose={() => setMenu(undefined)} />}
       beforeRows={
         <View style={{ marginTop: spacing.xl }}>
@@ -265,7 +253,7 @@ export { PlaylistDetail } from './playlist-detail';
 
 // ---- Artist ------------------------------------------------------------------------
 
-export function ArtistDetail({ item, refreshing, onRefresh }: ViewProps) {
+export function ArtistDetail({ item, onRefresh }: ViewProps) {
   const albums = useChildren(item.Id ?? undefined, 'artistAlbums');
   const songs = useChildren(item.Id ?? undefined, 'artistSongs');
   const player = usePlayer();
@@ -279,7 +267,6 @@ export function ArtistDetail({ item, refreshing, onRefresh }: ViewProps) {
       onShuffle={() => player.play({ item, shuffle: true })}
       extraActions={[{ icon: 'wand.and.stars', label: 'Instant mix', onPress: () => player.instantMix(item) }]}
       footer={<ItemActionSheet item={menu} visible={!!menu} onClose={() => setMenu(undefined)} />}
-      refreshing={refreshing}
       onRefresh={onRefresh}
       beforeRows={
         <>
@@ -311,7 +298,7 @@ export function ArtistDetail({ item, refreshing, onRefresh }: ViewProps) {
 
 // ---- Person ------------------------------------------------------------------------
 
-export function PersonDetail({ item, refreshing, onRefresh }: ViewProps) {
+export function PersonDetail({ item, onRefresh }: ViewProps) {
   const titles = useChildren(item.Id ?? undefined, 'personItems');
   const movies = titles.data?.filter((t) => t.Type === 'Movie');
   const shows = titles.data?.filter((t) => t.Type === 'Series');
@@ -320,7 +307,6 @@ export function PersonDetail({ item, refreshing, onRefresh }: ViewProps) {
     <DetailScaffold
       item={item}
       meta={[born ? `Born ${born}` : null, titles.data ? `${titles.data.length} ${titles.data.length === 1 ? 'title' : 'titles'}` : null]}
-      refreshing={refreshing}
       onRefresh={onRefresh}
       footer={
         titles.error && !titles.data ? (
@@ -341,7 +327,7 @@ export function PersonDetail({ item, refreshing, onRefresh }: ViewProps) {
 
 // ---- Collection (BoxSet) and folders ------------------------------------------------
 
-export function CollectionDetail({ item, refreshing, onRefresh }: ViewProps) {
+export function CollectionDetail({ item, onRefresh }: ViewProps) {
   const children = useChildren(item.Id ?? undefined, 'items');
   return (
     <DetailScaffold
@@ -349,7 +335,6 @@ export function CollectionDetail({ item, refreshing, onRefresh }: ViewProps) {
       eyebrow={item.Type === 'BoxSet' ? 'Collection' : undefined}
       meta={[children.data ? `${children.data.length} ${children.data.length === 1 ? 'item' : 'items'}` : null]}
       playable={item.Type === 'BoxSet'}
-      refreshing={refreshing}
       onRefresh={onRefresh}
       footer={
         children.error && !children.data ? (
