@@ -1,5 +1,5 @@
 diff --git a/android/src/main/java/com/eko/ResumableDownloadService.kt b/android/src/main/java/com/eko/ResumableDownloadService.kt
-index deaecd095ff9099218267f26840675341bbda8ce..13009d0094de42437b1adeccb3b9dc9b87f51afe 100644
+index deaecd095ff9099218267f26840675341bbda8ce..76a6ec51a941f3e68659e9e902e1aba1c2da8199 100644
 --- a/android/src/main/java/com/eko/ResumableDownloadService.kt
 +++ b/android/src/main/java/com/eko/ResumableDownloadService.kt
 @@ -3,6 +3,7 @@ package com.eko
@@ -76,7 +76,7 @@ index deaecd095ff9099218267f26840675341bbda8ce..13009d0094de42437b1adeccb3b9dc9b
        resumableDownloader.cancel(id)
      }
      stopServiceIfIdle()
-@@ -487,15 +512,33 @@ class ResumableDownloadService : Service() {
+@@ -487,15 +512,42 @@ class ResumableDownloadService : Service() {
        android.R.drawable.stat_sys_download_done
      }
  
@@ -87,12 +87,21 @@ index deaecd095ff9099218267f26840675341bbda8ce..13009d0094de42437b1adeccb3b9dc9b
 +    var done = 0L
 +    var total = 0L
 +    var unknown = false
-+    for (id in activeDownloads.keys) {
++    for ((id, job) in activeDownloads) {
 +      val p = progressBytes[id]
-+      if (p == null || p.second <= 0) unknown = true else { done += p.first; total += p.second }
++      done += p?.first ?: 0L
++      // The response may have no length: the size that the app gave at the start, if any
++      val size = if (p != null && p.second > 0) p.second else job.totalBytes
++      if (size > 0) total += size else unknown = true
 +    }
 +    val percent = if (total > 0) ((done * 100) / total).toInt().coerceIn(0, 100) else 0
-+    val text = if (runningCount > 0 && !unknown && total > 0) "$percent% · $contentText" else contentText
++    val mb = done / (1024 * 1024)
++    val text = when {
++      runningCount == 0 -> contentText
++      !unknown && total > 0 -> "$percent% · $contentText"
++      done > 0 -> "$mb MB · $contentText"
++      else -> contentText
++    }
 +
 +    val cancelIntent = Intent(this, ResumableDownloadService::class.java).setAction(ACTION_CANCEL_ALL)
 +    val cancelFlags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
