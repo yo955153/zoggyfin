@@ -125,7 +125,7 @@ function ctrlRates(s: any) {
 async function run(o: RunOpts) {
   const label = `${o.mode} N=${o.n}${o.uplinkMbps ? ` uplink=${o.uplinkMbps}Mbit/s` : ''}${o.joinOnly ? ' (join storm)' : ''}`;
   process.stderr.write(`\n== ${label}\n`);
-  const host = spawn('host.ts', { BENCH_FILE: FILE, BENCH_UPLINK_MBPS: String(o.uplinkMbps ?? 0) });
+  const host = spawn('host.ts', { BENCH_FILE: FILE, BENCH_UPLINK_MBPS: String(o.uplinkMbps ?? 0), BENCH_BITRATE_MBPS: String(BITRATE) });
   const procs: Proc[] = [];
   try {
     const { port, path: mediaPath, origin } = await host.readyMsg;
@@ -138,6 +138,7 @@ async function run(o: RunOpts) {
     await host.call('reset');
     await Promise.all(procs.map((p, i) => p.call('join', { opts, names: Array.from({ length: Math.min(GUESTS_PER_PROC, o.n - i * GUESTS_PER_PROC) }, (_, k) => `g${i * GUESTS_PER_PROC + k}`) })));
     const ready = await waitReady(host, o.n, 120_000);
+    if (!ready.ok) process.stderr.write(`   not all ready after the join storm\n`);
     const joinStats = (await host.call('stats')).stats;
     let gs = await guestReports(procs);
     const welcome = gs.map((g) => g.t.welcome - g.t.connect).filter(Number.isFinite);
@@ -151,7 +152,7 @@ async function run(o: RunOpts) {
       welcomeMax: r1(Math.max(...welcome)),
       ctrlBytesOut: joinStats.bytesOut,
       ctrlFramesOut: joinStats.framesOut,
-      membersBytesOut: joinStats.byType.members?.outBytes ?? 0,
+      membersBytesOut: (joinStats.byType.members?.outBytes ?? 0) + (joinStats.byType.memberDelta?.outBytes ?? 0),
       stateBytesOut: joinStats.byType.state?.outBytes ?? 0,
       firstMbP50: r0(pct(ttfMb, 50)),
       firstMbMax: r0(Math.max(...ttfMb)),
@@ -197,6 +198,7 @@ async function run(o: RunOpts) {
     await host.call('control', { action: { action: 'play' } });
     await sleep(50);
     const seekReady = await waitReady(host, o.n, 60_000);
+    if (!seekReady.ok) process.stderr.write(`   not all ready after the seek\n`);
     const seekToPlayMs = performance.now() - tPlay;
     await sleep(5000);
     await host.call('control', { action: { action: 'rate', rate: 1.5 } });
@@ -227,7 +229,8 @@ async function run(o: RunOpts) {
 /** Max media throughput of the host: N guests each download `mb` MB at once. */
 async function throughput(n: number, mb: number) {
   process.stderr.write(`\n== throughput N=${n}\n`);
-  const host = spawn('host.ts', { BENCH_FILE: FILE });
+  // Max throughput: no pace (the app paces a file only when it knows its bitrate).
+  const host = spawn('host.ts', { BENCH_FILE: FILE, BENCH_PACE: '0' });
   const procs: Proc[] = [];
   try {
     const { port, path: mediaPath, origin } = await host.readyMsg;

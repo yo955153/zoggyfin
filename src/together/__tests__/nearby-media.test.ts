@@ -1,3 +1,5 @@
+import { guestSource, HostShares, mediaBytesPerSecond } from '../nearby-media';
+
 const records: Record<string, unknown> = {};
 
 jest.mock('@/downloads', () => ({
@@ -5,8 +7,6 @@ jest.mock('@/downloads', () => ({
   localFileFor: (id: string) => (records[id] ? `file:///d/${id}.mp4` : null),
   localExtraUri: () => null,
 }));
-
-import { guestSource, HostShares, mediaBytesPerSecond } from '../nearby-media';
 
 const film = { itemId: 'f1', serverId: 'S1', state: 'completed', mediaFile: 'film.mp4', bytesTotal: 3_600_000_000, bytesDone: 3_600_000_000, item: { RunTimeTicks: 36_000_000_000 }, images: {} };
 

@@ -2,6 +2,7 @@
 
 Date: 2026-10-20. Code state: `main` at `45b8a4b`.
 The bench and this report do not change product code.
+Section 8 has the numbers after the fixes of section 5 (`main` at `dc90e13`).
 
 ## Summary
 
@@ -311,3 +312,95 @@ The 16-guest cap is right for guests with a copy. It is too high for streaming g
 - The Mac Tauri path (invoke and `window.eval`). It needs the app; it is analysed from the code.
 - Android and iOS native servers on the devices. The Swift server was run on macOS; the Kotlin server was analysed from the code.
 - Audio sessions. A `queue` message is up to 300 entries and goes to all guests on each change (`room.ts:349-354`, `protocol.ts:57`); this is the same O(N) × size pattern as `members`, but rarer.
+
+## 8. After the fixes
+
+Run again on 2026-10-20 with the code at `dc90e13` (fixes 1 to 8 of section 5).
+Same machine, same file, same steps. Raw results: `docs/perf/together-bench-results-after.json`.
+
+The bench model changed with the code, so that it runs what the apps now do:
+
+- `node-link.ts` sends control frames from a voice queue first (the voice service class of fix 2; Wi-Fi WMM gives voice the radio first). Media goes out in 64 KB air frames, so one control frame waits for at most one media frame.
+- Each host stream is paced (fix 1c): a 10 s burst, then 1.5 × the bitrate.
+- The simulated player reads 15 s ahead and reads again under 10 s (fix 1c). Before, it was 50 s and 30 s.
+- `BENCH_LEGACY=1` turns off the voice queue and the pacing. `BENCH_PACE=0` turns off only the pacing. The media capacity test (8.4) runs with no pacing.
+- On the host side of Apple, the voice class is set on each frame (`NWProtocolIP.Metadata`). Its effect on a TCP connection is not proven. The guest side sets it on the connection.
+
+### 8.1 Control traffic and sync, steady state
+
+| guests | mode | ctrl out B/s before → after | ctrl in B/s before → after | sync p95 ms before → after | clock p95 ms before → after |
+| --- | --- | --- | --- | --- | --- |
+| 1 | local | 113 → 83 | 27 → 9 | 3.5 → 16 | 0.0 → 0.1 |
+| 8 | local | 896 → 661 | 213 → 72 | 35.6 → 39.6 | 0.1 → 0.2 |
+| 16 | local | 1788 → 1324 | 431 → 143 | 36.8 → 34.2 | 0.1 → 0.1 |
+| 32 | local | 3593 → 2636 | 857 → 287 | 38.5 → 37.9 | 0.1 → 0.2 |
+| 16 | stream | 1791 → 1323 | 428 → 143 | 28.3 → 38.3 | 0.1 → 0.1 |
+| 32 | stream | 3595 → 2647 | 859 → 286 | 38.1 → 38.8 | 0.2 → 0.2 |
+
+After the clock converges, a guest pings every 10 s, not every 2 s (fix 2). Control in goes down by two thirds, control out by a quarter.
+On loopback the sync error stays under the 40 ms "fine" threshold, as before. The single guest at N = 1 is one sample (16 ms); it is not a trend.
+
+### 8.2 Join storm
+
+| guests | ctrl bytes out before → after | of it members before → after | frames before → after |
+| --- | --- | --- | --- |
+| 4 | 15.7 KB → 5.9 KB | 12.7 KB → 1.9 KB | 46 → 24 |
+| 8 | 96 KB → 16.7 KB | 91 KB → 7.0 KB | 140 → 48 |
+| 16 | 700 KB → 53 KB | 688 KB → 27 KB | 472 → 96 |
+| 30 | 4.47 MB → 164 KB | 4.44 MB → 94 KB | 1515 → 180 |
+| 32 | 5.41 MB → 185 KB | 5.39 MB → 107 KB | 1712 → 192 |
+
+(Local mode. The welcome now carries the members, then `memberDelta` messages go out at most each 250 ms. In stream mode the bench takes its count at 53 ms, before the first delta, so those rows are left out here.)
+
+The members cost of a storm is now about O(N²), not O(N³): 30 guests cost 94 KB, not 4.4 MB. The welcome time stays under 13 ms at 32 guests. A new guest no longer pauses the group (fix 3).
+
+### 8.3 Commands
+
+| guests | mode | sync p95 ms before → after | seek→play ms before → after |
+| --- | --- | --- | --- |
+| 16 | local | 32.1 → 31.5 | 54 → 54 |
+| 32 | local | 38.9 → 32.9 | 53 → 54 |
+| 16 | stream | 34.2 → 27.9 | 53 → 54 |
+| 32 | stream | 32.5 → 25.8 | 54 → 54 |
+
+No change in the command path, as expected.
+
+### 8.4 The app's Swift media server (each guest downloads 32 MB at once, loopback)
+
+| guests | total Mbit/s before → after | CPU % before → after | peak RSS MB before → after |
+| --- | --- | --- | --- |
+| 1 | 21 798 → 22 641 | 78 → 85 | 10 → 10 |
+| 4 | 34 029 → 35 060 | 108 → 109 | 20 → 14 |
+| 8 | 52 145 → 52 378 | 171 → 168 | 68 → 17 |
+| 16 | 53 635 → 65 620 | 172 → 215 | 220 → 24 |
+| 32 | 37 612 → 67 762 | 146 → 215 | 366 → 35 |
+
+The memory growth of about 11 MB per stream is gone (fix 5). Its cause was the file reads: each `FileHandle.read` made an autoreleased buffer, and the serial queue did not drain the pool until the queue went idle. The reads now run in an `autoreleasepool`, on a queue for each connection, and the control frames have their own queue.
+A second check with 32 MB per client: the old code peaked at 527 MB with 16 streams and 1040 MB with 32 streams. The new code peaks at 22 MB and 35 MB.
+
+### 8.5 Wi-Fi model: streaming guests with a limited host upload
+
+| uplink Mbit/s | guests | sync p95 ms before → after | clock p95 ms before → after | rtt p50 ms before → after | seek→play ms before → after | stalled s before → after |
+| --- | --- | --- | --- | --- | --- | --- |
+| 200 | 4 | 124 → 37.6 | 24 → 1.9 | 23 → 3.3 | 52 → 52 | 0 → 0 |
+| 200 | 8 | 152 → 30.6 | 49 → 1.0 | 94 → 1.4 | 105 → 54 | 0 → 0 |
+| 200 | 16 | 108 → 35.4 | 102 → 0.8 | 196 → 0.8 | 1704 → 1095 | 0 → 0 |
+| 100 | 4 | 136 → 22.0 | 46 → 0.8 | 91 → 0.5 | 51 → 52 | 0 → 0 |
+| 100 | 8 | 131 → 10.3 | 99 → 1.0 | 193 → 1.4 | 1388 → 1092 | 0 → 0 |
+| 100 | 16 | 234 → 38.4 | 197 → 1.5 | 381 → 2.2 | 3818 → 3214 | 47.8 → 13.7 |
+| 40 | 4 | 150 → 28.5 | 117 → 2.9 | 233 → 3.8 | 1602 → 1504 | 0 → 0 |
+| 40 | 8 | 263 → 39.0 | 235 → 2.6 | 457 → 0.8 | 4314 → 3953 | 8.1 → 20.9 |
+| 40 | 16 | 468 → 64.3 | 458 → 2.6 | 911 → 3.5 | 9656 → 8981 | 278 → 58.6 |
+
+What this shows:
+
+- The clock holds under load. Before, the clock error was about half the media queue delay (up to 458 ms). Now it stays under 3 ms in every row, and the sync error stays near or under 40 ms. The voice queue, the round-trip filter and the slower pings do this together.
+- Below the budget (N × bitrate under 80 % of the upload), playback has no stalls, as before. The seek takes up to 0.6 s less, because each player asks for 15 s, not 50 s.
+- Above the budget, guests still stall. The 40 Mbit/s rows with 8 and 16 guests need 64 and 128 Mbit/s. No pacing can make this fit. With 8 guests the total stall time went up (8.1 s to 20.9 s), because each player now keeps a shorter buffer. With 16 guests it went down (278 s to 59 s). For these cases the host now sees the warning of fix 1b, and guests on the item's server stream from the server (fix 1a).
+
+### 8.6 What the bench cannot show
+
+- Fix 4 (the Mac app bridge) needs the Tauri app. The unit test checks one bridge call per tick; the bench does not run the app.
+- Fix 6 (seekable MP4 on Apple) and fix 7 (block by device key) are functions, not load. Their unit tests and a manual check of the rewritten file cover them.
+- Fix 8 was checked with `dns-sd -B`: a code-only session does not show.
+- The Android server (fix 5, the write-queue limit) was not run in the bench.

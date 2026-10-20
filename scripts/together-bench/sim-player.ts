@@ -6,7 +6,8 @@
  * starts 15–130 ms late, a seek holds the position for ~100 ms, a rate change
  * holds it for ~20 ms. A streaming player waits for data like ExoPlayer: it
  * starts with 2.5 s of media, stalls at the end of the buffer, and the reader
- * stops reading (TCP back-pressure) at 50 s ahead and reads again under 30 s.
+ * stops reading (TCP back-pressure) at MAX_BUFFER ahead and reads again under
+ * RESUME_BUFFER (first report: 50 s and 30 s, the ExoPlayer defaults).
  */
 import net from 'node:net';
 import { performance } from 'node:perf_hooks';
@@ -26,8 +27,13 @@ export const REAL_TIMING: PlayerTiming = {
 };
 
 const START_BUFFER = 2.5;
-const MAX_BUFFER = 50;
-const RESUME_BUFFER = 30;
+/**
+ * The read-ahead of a player that streams from the host: 15 s since the fix
+ * (HOST_READ_AHEAD in src/together/nearby.ts; the players' default is 50 s).
+ * BENCH_READ_AHEAD sets it; it reads again under 2/3 of it.
+ */
+const MAX_BUFFER = Number(process.env.BENCH_READ_AHEAD ?? '15');
+const RESUME_BUFFER = (MAX_BUFFER * 2) / 3;
 
 export class SimPlayer implements PlayerPort {
   private base = 0;

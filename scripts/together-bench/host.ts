@@ -16,6 +16,8 @@ import { NodeLinkNative, Shaper } from './node-link';
 import { SimPlayer } from './sim-player';
 
 const file = process.env.BENCH_FILE ?? '';
+const bitrateMbps = Number(process.env.BENCH_BITRATE_MBPS ?? '8');
+const legacy = process.env.BENCH_LEGACY === '1';
 const uplink = Number(process.env.BENCH_UPLINK_MBPS ?? '0');
 const shaper = uplink > 0 ? new Shaper(uplink * 1e6) : null;
 const native = new NodeLinkNative(0, shaper);
@@ -88,8 +90,10 @@ async function main(): Promise<void> {
   link.open();
   const { port } = await native.startServer('zgf-bench', {});
   native.shareFile(MEDIA_PATH, file, 'video/mp4');
+  // The app paces the host's file to its bitrate (nearby-media.ts). The throughput test has no pace.
+  if (process.env.BENCH_PACE !== '0') native.setPace(MEDIA_PATH, (bitrateMbps * 1e6) / 8);
   room = new HostRoom(
-    { send: (m, to) => link.send(m, to ?? null), now, player, timers: realTimers },
+    { send: (m, to) => link.send(m, to ?? null), now, player, timers: realTimers, ...(legacy ? {} : { pong: (peer: string, id: number, t0: number, t1: number) => link.sendPong(peer, id, t0, t1) }) },
     {
       sessionId: 'bench-session',
       item: { id: 'item-1', serverId: 'srv', name: 'Bench film', type: 'Movie', runTimeTicks: 2_000_000_000, container: 'mp4', path: MEDIA_PATH, art: null },

@@ -9,7 +9,15 @@
  *   MediaServer.swift does with `.contentProcessed`).
  *
  * It also counts every frame and every media byte, and it can shape the
- * host's upload (a model of a Wi-Fi radio: one FIFO queue at a fixed bit rate).
+ * host's upload (a model of a Wi-Fi radio: one queue at a fixed bit rate).
+ *
+ * Since the fixes of the report it also does what the native servers do now:
+ * control frames go in the radio's voice queue (served first: the WMM voice
+ * class of the control sockets), each media response is paced (setPace:
+ * 10 s of media at once, then 1.5 x the bitrate), the pong's t2 is stamped
+ * when the frame goes out (sendPong), and a broadcast is one call (sendMany).
+ * BENCH_LEGACY=1 turns off the voice queue and the pace (the transport of
+ * the first report; the protocol code is the code of this tree).
  */
 import fs from 'node:fs';
 import net from 'node:net';
@@ -18,6 +26,10 @@ import { performance } from 'node:perf_hooks';
 import type { LinkEvents, MediaStats, NearbyLinkNative } from '../../src/together/link-native-types';
 
 const PREFACE = Buffer.from('ZGF1');
+const LEGACY = process.env.BENCH_LEGACY === '1';
+const PACE_BURST_SECONDS = 10;
+const PACE_FACTOR = 1.5;
+const AIR_FRAME = 64 * 1024;
 const MAX_FRAME = 1_048_576;
 const CHUNK = 256 * 1024;
 
@@ -53,9 +65,14 @@ export class Counters {
   }
 }
 
-/** One FIFO queue that sends at a fixed bit rate: a model of a radio's upload. */
+/**
+ * A queue that sends at a fixed bit rate: a model of a radio's upload. With
+ * `voice`, a frame goes in the voice queue, which the radio serves first
+ * (WMM): it waits only for the frame on the air, not for the media queue.
+ */
 export class Shaper {
   private queue: { sock: net.Socket; buf: Buffer; cb?: () => void }[] = [];
+  private voiceQueue: { sock: net.Socket; buf: Buffer; cb?: () => void }[] = [];
   private nextFree = 0;
   private timer: NodeJS.Timeout | null = null;
   /** The largest queue delay seen, ms. */
@@ -64,24 +81,38 @@ export class Shaper {
 
   constructor(private readonly bitsPerSecond: number) {}
 
-  send(sock: net.Socket, buf: Buffer, cb?: () => void): void {
-    this.enq.set(buf, performance.now());
-    this.queue.push({ sock, buf, cb });
+  send(sock: net.Socket, buf: Buffer, cb?: () => void, voice = false): void {
+    const now = performance.now();
+    if (voice && !LEGACY) {
+      this.enq.set(buf, now);
+      this.voiceQueue.push({ sock, buf, cb });
+    } else {
+      // The air carries frames of at most ~64 KB (an A-MPDU): a voice frame waits for one, not for a 256 KB chunk.
+      for (let i = 0; i < buf.length; i += AIR_FRAME) {
+        const part = buf.subarray(i, Math.min(buf.length, i + AIR_FRAME));
+        this.enq.set(part, now);
+        this.queue.push({ sock, buf: part, cb: i + AIR_FRAME >= buf.length ? cb : undefined });
+      }
+    }
+    if (voice && !LEGACY && this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
     this.pump();
   }
 
   private pump(): void {
     if (this.timer) return;
     const now = performance.now();
-    while (this.queue.length && now >= this.nextFree) {
-      const item = this.queue.shift()!;
+    while ((this.voiceQueue.length || this.queue.length) && now >= this.nextFree) {
+      const item = this.voiceQueue.length ? this.voiceQueue.shift()! : this.queue.shift()!;
       const d = now - (this.enq.get(item.buf) ?? now);
       if (d > this.maxDelay) this.maxDelay = d;
       if (!item.sock.destroyed) item.sock.write(item.buf);
       this.nextFree = Math.max(this.nextFree, now) + ((item.buf.length * 8) / this.bitsPerSecond) * 1000;
       item.cb?.();
     }
-    if (this.queue.length) {
+    if (this.queue.length || this.voiceQueue.length) {
       this.timer = setTimeout(
         () => {
           this.timer = null;
@@ -95,6 +126,7 @@ export class Shaper {
   stop(): void {
     if (this.timer) clearTimeout(this.timer);
     this.queue = [];
+    this.voiceQueue = [];
   }
 }
 
@@ -115,6 +147,7 @@ export class NodeLinkNative implements NearbyLinkNative {
   private sockets = new Map<string, FrameSock>();
   private http = new Set<net.Socket>();
   private files = new Map<string, { path: string; mime: string }>();
+  private paces = new Map<string, number>();
   private n = 0;
 
   /**
@@ -165,8 +198,15 @@ export class NodeLinkNative implements NearbyLinkNative {
     this.files.set(urlPath, { path: filePath, mime: mimeType });
   }
 
+  setPace(urlPath: string, bytesPerSecond: number): void {
+    if (LEGACY) return;
+    if (bytesPerSecond > 0) this.paces.set(urlPath, bytesPerSecond);
+    else this.paces.delete(urlPath);
+  }
+
   unshareAll(): void {
     this.files.clear();
+    this.paces.clear();
   }
 
   stopServer(): void {
@@ -264,10 +304,22 @@ export class NodeLinkNative implements NearbyLinkNative {
         fd ??= fs.openSync(file.path, 'r');
         let pos = start;
         let remaining = length;
+        const rate = this.paces.get(path) ?? 0;
+        const t0 = performance.now();
+        let sent = 0;
         const pump = () => {
           if (sock.destroyed || fd === null) return;
           if (remaining <= 0) return finish();
           const n = Math.min(CHUNK, remaining);
+          if (rate > 0) {
+            // The token bucket of MediaServer.swift and the Android server.
+            const over = sent + n - (rate * PACE_BURST_SECONDS + rate * PACE_FACTOR * ((performance.now() - t0) / 1000));
+            if (over > 0) {
+              setTimeout(pump, (over / (rate * PACE_FACTOR)) * 1000);
+              return;
+            }
+          }
+          sent += n;
           const chunk = Buffer.allocUnsafe(n);
           fs.read(fd, chunk, 0, n, pos, (err, got) => {
             if (err || got <= 0) return sock.destroy();
@@ -366,9 +418,19 @@ export class NodeLinkNative implements NearbyLinkNative {
     const t = c.type(text);
     t.out += 1;
     t.outBytes += frame.length;
-    if (this.shaper) this.shaper.send(f.sock, frame);
+    if (this.shaper) this.shaper.send(f.sock, frame, undefined, true);
     else f.sock.write(frame);
     return true;
+  }
+
+  /** One text to several sockets (the native sendMany). */
+  sendMany(socketIds: string[], text: string): void {
+    for (const id of socketIds) this.send(id, text);
+  }
+
+  /** The native pong: t2 is stamped when the frame goes to the socket. */
+  sendPong(socketId: string, id: number, t0: number, t1: number): boolean {
+    return this.send(socketId, JSON.stringify({ v: 1, t: 'pong', id, t0, t1, t2: this.monotonicNow() }));
   }
 
   close(socketId: string): void {
