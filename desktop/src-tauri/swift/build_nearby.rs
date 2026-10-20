@@ -7,12 +7,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// The shared Swift files, relative to `CARGO_MANIFEST_DIR`.
-const SHARED: [&str; 5] = [
+const SHARED: [&str; 6] = [
     "../../modules/zoggyfin-native/ios/NearbyEvents.swift",
     "../../modules/zoggyfin-native/ios/NearbyCore.swift",
     "../../modules/zoggyfin-native/ios/MediaServer.swift",
     "../../modules/zoggyfin-native/ios/NearbyBle.swift",
     "../../modules/zoggyfin-native/ios/WifiJoin.swift",
+    "../../modules/zoggyfin-native/ios/SeekableMp4.swift",
 ];
 const BRIDGE: &str = "swift/NearbyBridge.swift";
 const LIB: &str = "ZgfNearby";
@@ -90,6 +91,7 @@ pub fn build() {
     println!("cargo:rustc-link-lib=static={LIB}");
     for fw in [
         "Foundation",
+        "AVFoundation",
         "Network",
         "CoreBluetooth",
         "CoreWLAN",

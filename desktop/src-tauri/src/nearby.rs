@@ -42,6 +42,8 @@ mod imp {
 
     /// The longest wait for an answer (a Bluetooth or Wi-Fi prompt can take long).
     const TIMEOUT: Duration = Duration::from_secs(60);
+    /// The rewrite of a large download (`makeSeekableMp4`) can take minutes.
+    const LONG_TIMEOUT: Duration = Duration::from_secs(1800);
 
     fn pending() -> &'static Mutex<HashMap<u64, mpsc::Sender<Reply>>> {
         PENDING.get_or_init(|| Mutex::new(HashMap::new()))
@@ -134,7 +136,11 @@ mod imp {
         tauri::async_runtime::spawn_blocking(move || {
             // SAFETY: `request` is a valid C string; Swift copies it before it returns.
             unsafe { zgf_nearby_call(request.as_ptr()) };
-            let reply = rx.recv_timeout(TIMEOUT);
+            let reply = rx.recv_timeout(if cmd == "makeSeekableMp4" {
+                LONG_TIMEOUT
+            } else {
+                TIMEOUT
+            });
             if let Ok(mut p) = pending().lock() {
                 p.remove(&id);
             }

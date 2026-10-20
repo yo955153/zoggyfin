@@ -7,8 +7,8 @@ import ExpoModulesCore
 import VideoToolbox
 
 /// Decoder capabilities for the device profile, the backup flag for
-/// downloads, and a view that receives hardware keyboard presses (iPad and
-/// Mac keyboards).
+/// downloads, the rewrite of a fragmented MP4 download (SeekableMp4.swift),
+/// and a view that receives hardware keyboard presses (iPad and Mac keyboards).
 public class ZoggyfinNativeModule: Module {
   public func definition() -> ModuleDefinition {
     Name("ZoggyfinNative")
@@ -46,6 +46,11 @@ public class ZoggyfinNativeModule: Module {
       } catch {
         return false
       }
+    }
+
+    /// "done" (rewritten as a plain MP4), "skipped" (not fragmented) or "failed" (the file stays).
+    AsyncFunction("makeSeekableMp4") { (path: String, promise: Promise) in
+      SeekableMp4.run(path: path) { promise.resolve($0) }
     }
 
     View(KeyInputView.self) {

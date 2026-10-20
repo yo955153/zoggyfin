@@ -9,6 +9,8 @@ import type { AndroidDecoders, DecoderInfo } from '@/player/device-profile';
 interface ZoggyfinNativeModule {
   isHardwareDecodeSupported(codec: string): boolean;
   excludeFromBackup?(path: string): boolean;
+  /** iOS: AVFoundation passthrough export (SeekableMp4.swift). */
+  makeSeekableMp4?(path: string): Promise<string>;
 }
 
 const mod = requireOptionalNativeModule<ZoggyfinNativeModule>('ZoggyfinNative');
@@ -77,15 +79,18 @@ export function setAutoPictureInPicture(enabled: boolean): void {
 }
 
 /**
- * Android: rewrites a fragmented MP4 with no index (a transcoded download)
- * as a plain MP4, because ExoPlayer cannot seek in the fragmented one.
+ * Rewrites a fragmented MP4 with no index (a transcoded download) as a
+ * plain MP4 with the index at the front. ExoPlayer cannot seek in the
+ * fragmented one, and a nearby host shares its download with Android
+ * guests. Android: MediaMuxer; iOS: AVFoundation passthrough export.
  * "skipped" when the file is not fragmented or the build has no function.
  */
 export async function makeSeekableMp4(path: string): Promise<'done' | 'skipped' | 'failed'> {
-  const fn = android?.makeSeekableMp4;
-  if (typeof fn !== 'function') return 'skipped';
+  const owner = typeof android?.makeSeekableMp4 === 'function' ? android : typeof mod?.makeSeekableMp4 === 'function' ? mod : null;
+  const fn = owner?.makeSeekableMp4;
+  if (!owner || typeof fn !== 'function') return 'skipped';
   try {
-    const r = await fn.call(android, path);
+    const r = await fn.call(owner, path);
     return r === 'done' || r === 'failed' ? r : 'skipped';
   } catch {
     return 'failed';

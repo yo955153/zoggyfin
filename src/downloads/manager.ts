@@ -9,7 +9,6 @@
  * Collections (albums, playlists, seasons): <documents>/downloads/collections/<id>/.
  */
 import type { Api } from '@jellyfin/sdk';
-import { Platform } from 'react-native';
 
 import { buildAuthHeader } from '@/api/auth-header';
 import { getApi } from '@/api/client';
@@ -233,12 +232,12 @@ class DownloadManager {
   }
 
   /**
-   * Android: video downloads from builds before the fix are fragmented MP4
-   * files that ExoPlayer cannot seek in. Rewrites them one at a time. A file
-   * that is already plain is skipped after a short header read.
+   * Video downloads from builds before the fix are fragmented MP4 files that
+   * ExoPlayer cannot seek in (on Android, and as a nearby host's file for
+   * Android guests). Rewrites them one at a time. A file that is already
+   * plain is skipped after a short header read.
    */
   private async fixFragmentedVideos(): Promise<void> {
-    if (Platform.OS !== 'android') return;
     for (const r of Object.values(downloadsState().records)) {
       if (r.state !== 'completed' || r.kind !== 'video' || !r.mediaFile || !/\.mp4$/i.test(r.mediaFile)) continue;
       const before = files.size(`${r.dir}/${r.mediaFile}`);
@@ -396,8 +395,9 @@ class DownloadManager {
         engine.finish(itemId);
         return;
       }
-      if (Platform.OS === 'android' && r.kind === 'video' && r.mediaFile && /\.mp4$/i.test(r.mediaFile)) {
-        // ExoPlayer cannot seek in the fragmented MP4 of a transcode: make it a plain MP4.
+      if (r.kind === 'video' && r.mediaFile && /\.mp4$/i.test(r.mediaFile)) {
+        // ExoPlayer cannot seek in the fragmented MP4 of a transcode, and a nearby host shares
+        // the file with Android guests: make it a plain MP4 (Android, iOS and the Mac app).
         const fixed = await makeSeekableMp4(files.absolutePath(`${r.dir}/${r.mediaFile}`));
         if (fixed === 'failed') console.warn('[downloads] could not make the file seekable', itemId);
       }

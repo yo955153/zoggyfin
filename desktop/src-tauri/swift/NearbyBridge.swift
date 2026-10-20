@@ -277,6 +277,10 @@ private final class NearbyBridge: NearbyEventSink {
       return .later
     case "leaveWifi":
       wifi.leave(ssid: try a.string(0))
+    // Downloads (not nearby, but the same Swift library): a fragmented MP4 becomes a plain one.
+    case "makeSeekableMp4":
+      SeekableMp4.run(path: try a.string(0)) { self.reply(id, $0) }
+      return .later
     case "openSettings":
       DispatchQueue.main.async {
         let page = "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork"
