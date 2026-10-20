@@ -34,6 +34,7 @@ import { readJson, writeJson } from '@/storage/json';
 import { storage } from '@/storage/kv';
 
 import { bindAudioPort, fromSharedQueue, hostQueue, sharedAudioItem, waitForGapless } from './audio-binding';
+import { fileBitrateMbps, hostPath, streamingFromHost, streamWarning, type TransportPath } from './budget';
 import { positionAt } from './drift';
 import { Follower } from './follower';
 import { keyMatches, joinLink, newSessionKey, type JoinPayload, parseJoinLink, parseShortCode, pickCodeAddress, shortCode, shortSession } from './join-code';
@@ -166,6 +167,13 @@ class NearbyController {
   private miscSubs: { remove(): void }[] = [];
   /** Development (together-lab): stream from the host even with a local copy. */
   devForceStream = false;
+  // Host: the upload budget (budget.ts).
+  private path: TransportPath = 'wifi-phone';
+  /** The bitrate of the shared file, Mbit/s; null when unknown. */
+  private fileMbps: number | null = null;
+  /** The host shares a video file that guests can stream. */
+  private streamable = false;
+  private lastWarning: string | null = null;
 
   // ---- Helpers ----------------------------------------------------------------------
 
@@ -356,6 +364,7 @@ class NearbyController {
         art: shares.artPath(r.itemId),
       };
       if (path) stream = { service: this.serviceName, path };
+      this.fileMbps = fileBitrateMbps(r.bytesTotal ?? r.bytesDone, it.RunTimeTicks ?? r.item.RunTimeTicks);
     } else if (streamedVideo) {
       const it = streamedVideo;
       shared = {
@@ -380,6 +389,8 @@ class NearbyController {
         ? hostQueue((e) => sharedAudioItem(e.item, { path: shares.mediaPath(e.item.Id, e.item.ServerId), art: shares.artPath(e.item.AlbumId ?? e.item.Id) }))
         : undefined;
     this.hostQueueBinding = queue ?? null;
+    this.streamable = opts.kind === 'video' && stream !== null;
+    this.lastWarning = null;
 
     this.port = opts.port;
     this.gate = new JoinGate(this.now);
@@ -425,7 +436,10 @@ class NearbyController {
     const s = this.session;
     if (!n || !s || !this.room) return;
     try {
-      const addrs = pickCodeAddress(await n.addresses());
+      const all = await n.addresses();
+      this.path = hostPath({ platform: helpPlatform(), addresses: all, hotspot: !!togetherState().hotspot });
+      this.publishHost();
+      const addrs = pickCodeAddress(all);
       if (addrs.length && this.codeKey) {
         const payload: JoinPayload = { v: 1, addrs: addrs.map((a) => a.address), port: this.serverPort, session: shortSession(s.id), key: this.codeKey, name: displayName().slice(0, 30) };
         setTogether({ joinCode: { link: joinLink(payload), short: shortCode(payload) } });
@@ -449,10 +463,21 @@ class NearbyController {
     const room = this.room;
     if (!room) return;
     setTogether({ members: room.memberList, waiting: room.state.waiting, onlyHostControls: room.onlyHostControls });
+    this.checkBudget(room.memberList);
     // A host with every member away looks for a newer host of the same session (it took over while this device was gone).
     const anyUp = room.memberList.some((m) => !m.away);
     if (!anyUp && room.memberList.length && !this.demoteWatch) this.watchForNewerHost();
     if (anyUp && this.demoteWatch) this.stopDemoteWatch();
+  }
+
+  /** Warns the host when more guests stream from it than its path can carry (budget.ts). */
+  private checkBudget(members: Member[]): void {
+    const w = this.streamable ? streamWarning({ path: this.path, bitrateMbps: this.fileMbps, streaming: streamingFromHost(members) }) : null;
+    const cur = togetherState().streamWarning;
+    if (w?.text !== cur?.text) setTogether({ streamWarning: w });
+    // A toast once for each new warning (not for the notes, and not again on each heartbeat).
+    if (w?.tone === 'warning' && w.text !== this.lastWarning) toast(w.text, { icon: 'exclamationmark.triangle' });
+    this.lastWarning = w?.tone === 'warning' ? w.text : null;
   }
 
   private onRequest(peerId: string, ctx: JoinContext, code: boolean): void {

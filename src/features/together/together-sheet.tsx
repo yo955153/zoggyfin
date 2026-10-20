@@ -537,6 +537,13 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
 
       {host && st.rendezvous ? <RendezvousRow st={st} /> : null}
 
+      {host && st.streamWarning ? (
+        <View style={[s.group, s.row]}>
+          <Icon name={st.streamWarning.tone === 'warning' ? 'exclamationmark.triangle' : 'info.circle'} size={18} color={st.streamWarning.tone === 'warning' ? c.warning : c.text2} />
+          <Text style={[s.rowDetail, s.rowText, st.streamWarning.tone === 'warning' && { color: c.warning }]}>{st.streamWarning.text}</Text>
+        </View>
+      ) : null}
+
       <Section title={sessionHeadline(st, null) ?? 'People'} footer={peopleFooter(st)}>
         <View style={s.group}>
           {reconnecting ? (

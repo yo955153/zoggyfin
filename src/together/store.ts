@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import type { BaseItemDto } from '@/api/types';
 
 import { IDLE, type Phase } from './machine';
+import type { StreamWarning } from './budget';
 import type { BleState } from './link-native-types';
 import type { Advert, MediaKind, Member, SharedItem } from './protocol';
 
@@ -127,6 +128,8 @@ export interface TogetherState {
   ble: BleState | null;
   /** A session from before an app restart that can be joined again. */
   rejoin: SavedSession | null;
+  /** Host: too many guests stream from this device, or advice for its path (budget.ts). */
+  streamWarning: StreamWarning | null;
 }
 
 export const initialTogether: TogetherState = {
@@ -156,6 +159,7 @@ export const initialTogether: TogetherState = {
   localNetwork: 'unknown',
   ble: null,
   rejoin: null,
+  streamWarning: null,
 };
 
 export const useTogetherStore = create<TogetherState>(() => initialTogether);
