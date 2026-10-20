@@ -151,6 +151,7 @@ function makeLink(): NearbyLinkNative {
     startServer: (serviceName, txt) => afterQueue<{ port: number; service: string }>('startServer', [serviceName, txt]),
     startServerUnlisted: (serviceName) => afterQueue<{ port: number; service: string }>('startServerUnlisted', [serviceName]),
     stopAdvertising: () => post('stopAdvertising'),
+    updateAdvert: (txt) => post('updateAdvert', [txt]),
     shareFile: (urlPath, filePath, mimeType) => post('shareFile', [urlPath, filePath, mimeType]),
     setPace: (urlPath, bytesPerSecond) => post('setPace', [urlPath, bytesPerSecond]),
     unshareAll: () => post('unshareAll'),

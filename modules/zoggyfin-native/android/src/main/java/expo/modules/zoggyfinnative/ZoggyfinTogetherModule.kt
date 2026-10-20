@@ -49,6 +49,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -56,6 +57,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 private const val SERVICE_TYPE = "_zgf-together._tcp"
+/** NSD cannot change a TXT record: a new advert registers again once the changes stop for this long. */
+private const val ADVERT_DEBOUNCE_MS = 1_000L
+/** While browsing, the found services resolve again this often: a host can change its TXT record in place. */
+private const val REFRESH_FOUND_SECONDS = 4L
 private const val MAX_FRAME = 1_048_576L
 private const val MAX_HEAD = 64 * 1024
 private const val BODY_CHUNK = 256 * 1024
@@ -117,6 +122,12 @@ class ZoggyfinTogetherModule : Module() {
   private val serverLock = Any()
   private var server: ServerSocket? = null
   private var registration: NsdManager.RegistrationListener? = null
+  // The advert now (these change only on `state`): what a new registration needs.
+  private var advertName: String? = null
+  private var advertPort = 0
+  private var advertTxt: Map<String, String> = emptyMap()
+  private var pendingTxt: Map<String, String>? = null
+  private var advertTask: ScheduledFuture<*>? = null
   private val shares = ConcurrentHashMap<String, Share>()
   /** The open HTTP sockets, with their order of arrival (for the connection limit). */
   private val httpSockets = ConcurrentHashMap<Socket, Long>()
@@ -135,6 +146,9 @@ class ZoggyfinTogetherModule : Module() {
   private var resolvingName: String? = null
   private val reported = HashSet<String>()
   private val resolved = ConcurrentHashMap<String, Resolved>()
+  /** The services that discovery found (by name), to resolve again (`REFRESH_FOUND_SECONDS`). */
+  private val discovered = HashMap<String, NsdServiceInfo>()
+  private var refreshTask: ScheduledFuture<*>? = null
   private var multicastLock: WifiManager.MulticastLock? = null
 
   // Hotspot (main thread). The types are API 26, so the fields keep `Any`.
@@ -200,6 +214,11 @@ class ZoggyfinTogetherModule : Module() {
 
     Function("stopAdvertising") {
       state.execute { unregisterAdvert() }
+    }
+
+    /** The room's item changed: a new TXT record (see `scheduleAdvertUpdate`). */
+    Function("updateAdvert") { txt: Map<String, String> ->
+      state.execute { scheduleAdvertUpdate(txt) }
     }
 
     Function("shareFile") { urlPath: String, filePath: String, mimeType: String ->
@@ -520,6 +539,8 @@ class ZoggyfinTogetherModule : Module() {
       override fun onServiceRegistered(registered: NsdServiceInfo) {
         // NSD can change the name when the name is in use.
         val real = registered.serviceName ?: name
+        val me = this
+        state.execute { if (registration === me) advertName = real }
         if (done.compareAndSet(false, true)) promise.resolve(mapOf("port" to port, "service" to real))
       }
 
@@ -542,6 +563,9 @@ class ZoggyfinTogetherModule : Module() {
     state.execute {
       unregisterAdvert()
       registration = listener
+      advertName = name
+      advertPort = port
+      advertTxt = txt
       try {
         nsd.registerService(info, NsdManager.PROTOCOL_DNS_SD, listener)
       } catch (e: Exception) {
@@ -553,6 +577,67 @@ class ZoggyfinTogetherModule : Module() {
           promise.reject("ERR_SERVER", "The session advert did not start in time.", null)
         }
       }, 15, TimeUnit.SECONDS)
+    }
+  }
+
+  /**
+   * Call on `state`. NSD cannot change the TXT record of a registered service,
+   * so a new record registers the service again, with the same name and port.
+   * A burst of changes (the player loads the next item) gives one new
+   * registration, ADVERT_DEBOUNCE_MS after the last change. No effect when the
+   * session does not advertise.
+   */
+  private fun scheduleAdvertUpdate(txt: Map<String, String>) {
+    if (registration == null || advertName == null) return
+    if (txt == advertTxt && pendingTxt == null) return
+    pendingTxt = txt
+    advertTask?.cancel(false)
+    advertTask = state.schedule(Runnable { registerAgain() }, ADVERT_DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+  }
+
+  /** Call on `state`. */
+  private fun registerAgain() {
+    advertTask = null
+    val txt = pendingTxt ?: return
+    pendingTxt = null
+    val name = advertName ?: return
+    val nsd = nsd() ?: return
+    // Stopped meanwhile ("Only with my code", the session ended), or back to the record it has.
+    if (registration == null || txt == advertTxt) return
+    val info = NsdServiceInfo()
+    info.serviceName = name
+    info.serviceType = SERVICE_TYPE
+    info.port = advertPort
+    try {
+      for ((k, v) in txt) info.setAttribute(k, v)
+    } catch (e: IllegalArgumentException) {
+      emitError("A TXT record entry is not correct: ${e.message}", "server")
+      return
+    }
+    unregisterAdvert()
+    val listener = object : NsdManager.RegistrationListener {
+      override fun onServiceRegistered(registered: NsdServiceInfo) {
+        val me = this
+        state.execute { if (registration === me) advertName = registered.serviceName ?: name }
+      }
+
+      override fun onRegistrationFailed(failed: NsdServiceInfo, errorCode: Int) {
+        val me = this
+        state.execute { if (registration === me) registration = null }
+        emitError("Could not change the session advert (NSD error $errorCode).", "server")
+      }
+
+      override fun onServiceUnregistered(unregistered: NsdServiceInfo) {}
+
+      override fun onUnregistrationFailed(unregistered: NsdServiceInfo, errorCode: Int) {}
+    }
+    registration = listener
+    advertTxt = txt
+    try {
+      nsd.registerService(info, NsdManager.PROTOCOL_DNS_SD, listener)
+    } catch (e: Exception) {
+      registration = null
+      emitError("Could not change the session advert: ${e.message}", "server")
     }
   }
 
@@ -1017,7 +1102,12 @@ class ZoggyfinTogetherModule : Module() {
       override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
 
       override fun onServiceFound(info: NsdServiceInfo) {
-        state.execute { if (generation == browseGeneration) enqueueResolve(info) }
+        state.execute {
+          if (generation == browseGeneration) {
+            info.serviceName?.let { discovered[it] = info }
+            enqueueResolve(info)
+          }
+        }
       }
 
       override fun onServiceLost(info: NsdServiceInfo) {
@@ -1025,6 +1115,10 @@ class ZoggyfinTogetherModule : Module() {
       }
     }
     discovery = listener
+    // A host can change its TXT record in place (Apple): resolve the found services again now and then.
+    refreshTask = state.scheduleWithFixedDelay(Runnable {
+      if (generation == browseGeneration) for (found in discovered.values.toList()) enqueueResolve(found)
+    }, REFRESH_FOUND_SECONDS, REFRESH_FOUND_SECONDS, TimeUnit.SECONDS)
     try {
       nsd.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
     } catch (e: Exception) {
@@ -1045,6 +1139,9 @@ class ZoggyfinTogetherModule : Module() {
         // Discovery is not active.
       }
     }
+    refreshTask?.cancel(false)
+    refreshTask = null
+    discovered.clear()
     resolveQueue.clear()
     resolvingToken = null
     resolvingName = null
@@ -1140,12 +1237,16 @@ class ZoggyfinTogetherModule : Module() {
     val txt = HashMap<String, String>()
     val attributes: Map<String, ByteArray?> = info.attributes ?: emptyMap()
     for ((k, v) in attributes) txt[k] = if (v == null) "" else String(v, Charsets.UTF_8)
+    val before = resolved[name]
     resolved[name] = Resolved(name, addresses, info.port, txt)
-    reported.add(name)
-    emit("onServiceFound", mapOf("serviceId" to name, "name" to name, "txt" to txt))
+    // A resolve again (REFRESH_FOUND_SECONDS) tells JavaScript only about a new record.
+    if (reported.add(name) || before?.txt != txt) {
+      emit("onServiceFound", mapOf("serviceId" to name, "name" to name, "txt" to txt))
+    }
   }
 
   private fun serviceLost(name: String) {
+    discovered.remove(name)
     resolveQueue.removeAll { it.info.serviceName == name }
     // The address stays: a lost advert does not close an open session.
     if (reported.remove(name)) emit("onServiceLost", mapOf("serviceId" to name))

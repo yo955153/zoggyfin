@@ -128,6 +128,17 @@ export interface NearbyLinkNative {
   startServerUnlisted?(serviceName: string): Promise<{ port: number; service: string }>;
   /** Stops the advert; the port and the open sockets stay. */
   stopAdvertising(): void;
+  /**
+   * Changes the TXT record of the advert (the room's item changed). No effect
+   * when the session does not advertise (unlisted, or after `stopAdvertising`).
+   * Apple: the listener's service changes in place. Android: NSD cannot change
+   * a TXT record, so the service registers again, once for each burst of
+   * changes (a debounce of about 1 s), with the same name and port. Browsers
+   * report the new record as `onServiceFound` for the same service id (on
+   * Android a guest resolves each found service again every few seconds).
+   * Optional: an older build keeps its first advert.
+   */
+  updateAdvert?(txt: Record<string, string>): void;
   /** Adds a file at a URL path ("/<token>/track-3.m4a"). The path is the secret. */
   shareFile(urlPath: string, filePath: string, mimeType: string): void;
   /**

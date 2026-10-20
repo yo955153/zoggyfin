@@ -197,6 +197,8 @@ private final class NearbyBridge: NearbyEventSink {
       return .later
     case "stopAdvertising":
       core.stopAdvertising()
+    case "updateAdvert":
+      core.updateAdvert(txt: try a.stringMap(0))
     case "shareFile":
       core.share(urlPath: try a.string(0), filePath: try a.string(1), mimeType: try a.string(2))
     case "setPace":

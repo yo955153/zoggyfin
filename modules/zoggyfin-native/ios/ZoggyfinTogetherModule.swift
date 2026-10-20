@@ -82,6 +82,10 @@ public class ZoggyfinTogetherModule: Module {
 
     Function("stopAdvertising") { self.core.stopAdvertising() }
 
+    Function("updateAdvert") { (txt: [String: String]) in
+      self.core.updateAdvert(txt: txt)
+    }
+
     Function("shareFile") { (urlPath: String, filePath: String, mimeType: String) in
       self.core.share(urlPath: urlPath, filePath: filePath, mimeType: mimeType)
     }

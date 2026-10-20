@@ -133,6 +133,17 @@ public final class NearbyCore {
     queue.async { self.listener?.service = nil }
   }
 
+  /// Changes the TXT record of the advert in place (the room's item changed). No effect when
+  /// the listener does not advertise ("Only with my code", or after `stopAdvertising`).
+  /// Browsers with `.bonjourWithTXTRecord` get a changed result for the same name.
+  public func updateAdvert(txt: [String: String]) {
+    queue.async {
+      guard let l = self.listener, l.service != nil, txt != self.txt else { return }
+      self.txt = txt
+      l.service = NWListener.Service(name: self.serviceName, type: nearbyServiceType, domain: nil, txtRecord: NWTXTRecord(txt).data)
+    }
+  }
+
   public func share(urlPath: String, filePath: String, mimeType: String) {
     queue.async { self.files.share(urlPath: urlPath, filePath: filePath, mimeType: mimeType) }
   }

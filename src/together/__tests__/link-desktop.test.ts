@@ -47,6 +47,13 @@ describe('desktop link', () => {
     ]);
   });
 
+  it('sends a new advert as a short command', async () => {
+    desktopLink!.updateAdvert!({ v: '1', s: 's1', i: 'room', n: '' });
+    await flushPromises();
+    const posts = invoke.mock.calls.filter((c) => c[0] === 'nearby_post');
+    expect((posts[0][1] as unknown as { calls: unknown[] }).calls).toEqual([{ cmd: 'updateAdvert', args: [{ v: '1', s: 's1', i: 'room', n: '' }] }]);
+  });
+
   it('does not send to a socket that is not open', async () => {
     expect(desktopLink!.send('nope', 'x')).toBe(false);
     await flushPromises();

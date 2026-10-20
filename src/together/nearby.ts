@@ -53,6 +53,7 @@ import { realTimers } from './player-port';
 import {
   type Advert,
   type Anchor,
+  bleAdvert,
   decodeAdvert,
   encodeAdvert,
   type JoinContext,
@@ -60,6 +61,7 @@ import {
   type Member,
   type Message,
   type PickRequest,
+  roomAdvert,
   type SharedItem,
   type SharedQueue,
   type StreamRef,
@@ -83,6 +85,8 @@ const HOST_READ_AHEAD = 15;
 const SAVED_KEY = 'together.session.v1';
 /** Nothing plays this long on the host: the room has no item, ms. */
 const EMPTY_AFTER = 4000;
+/** A lost nearby service leaves the list after this wait, ms (an advert that changes can drop off for a moment). */
+const LOST_AFTER = 3000;
 
 function helpPlatform(): HelpPlatform {
   if (Platform.OS === 'android') return 'android';
@@ -202,6 +206,14 @@ class NearbyController {
   private lastWarning: string | null = null;
   /** Host: the device key of each member's join (by member id), for "Remove and block". */
   private memberDevices = new Map<string, string>();
+  /** Host: the TXT record that the network advert has now (JSON), or null with no advert. */
+  private advertKey: string | null = null;
+  /** Host: the Bluetooth INFO is published. */
+  private bleAdvertising = false;
+  /** Host: the Bluetooth centrals that are subscribed now; each gets the new INFO when the room changes. */
+  private bleCentrals = new Set<string>();
+  /** Guest: a lost service goes from the list after a moment (a host that changes its advert can drop off for a moment). */
+  private lostTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   // ---- Helpers ----------------------------------------------------------------------
 
@@ -413,6 +425,7 @@ class NearbyController {
       const server = unlisted && n.startServerUnlisted ? await n.startServerUnlisted(this.serviceName) : await n.startServer(this.serviceName, advert);
       this.serverPort = server.port;
       this.serviceName = server.service;
+      this.advertKey = unlisted ? null : JSON.stringify(advert);
       setTogether({ findable: this.nextFindable, locked: false });
       // An older build has no unlisted start: stop its advert at once.
       if (unlisted && !n.startServerUnlisted) n.stopAdvertising();
@@ -587,6 +600,38 @@ class NearbyController {
     setTogether({ kind, item });
     this.save('host', displayName());
     this.publishHost();
+    this.refreshAdvert(item);
+  }
+
+  /**
+   * Host: the advert (Bonjour TXT and Bluetooth INFO) says what the room has
+   * now, so the nearby list on other devices shows the new title, or that
+   * the host picks something. The native layer changes the TXT record in
+   * place (Apple) or registers it again after a short wait (Android).
+   */
+  private refreshAdvert(item: SharedItem | null): void {
+    const n = this.native;
+    const s = this.session;
+    if (!n || !s || !this.room || togetherState().findable === 'code') return;
+    const activeServerId = useSessionStore.getState().session?.serverId ?? null;
+    const serverId = item ? (item.serverId ?? (localRecord(item.id)?.serverId || null) ?? activeServerId) : activeServerId;
+    const advert = roomAdvert({ sessionId: s.id, hostName: displayName(), epoch: s.epoch, kind: s.kind, itemId: item?.id ?? null, title: s.title, serverId });
+    const txt = encodeAdvert(advert);
+    const key = JSON.stringify(txt);
+    if (this.advertKey !== null && key !== this.advertKey && n.updateAdvert) {
+      this.advertKey = key;
+      n.updateAdvert(txt);
+      this.ev('advert', { title: advert.itemName, item: advert.itemId });
+    }
+    if (this.bleAdvertising && n.bleAdvertise) {
+      const info = this.bleInfoText();
+      if (info && info !== this.lastBleInfo) {
+        this.lastBleInfo = info;
+        n.bleAdvertise(info, 'Zoggyfin');
+        // A central reads INFO once: the subscribed ones get the new INFO as a message (an older guest ignores it).
+        for (const peer of this.bleCentrals) n.bleSend?.(peer, info);
+      }
+    }
   }
 
   /** Where the session sheet opens now: on the player that shows, else over the app. */
@@ -759,6 +804,8 @@ class NearbyController {
     if (value === 'code') {
       this.native?.stopAdvertising();
       this.native?.bleStopAdvertising?.();
+      this.advertKey = null;
+      this.bleAdvertising = false;
       setTogether({ findable: 'code' });
       void this.refreshHostFacts();
     }
@@ -820,6 +867,9 @@ class NearbyController {
   private onServiceFound(serviceId: string, txt: Record<string, string>): void {
     const advert = decodeAdvert(txt);
     if (!advert) return;
+    const lost = this.lostTimers.get(serviceId);
+    if (lost) clearTimeout(lost);
+    this.lostTimers.delete(serviceId);
     setTogether({ localNetwork: 'ok' });
     if (this.reconnect) {
       this.reconnectTo(serviceId, advert);
@@ -829,12 +879,22 @@ class NearbyController {
       this.maybeDemote(serviceId, advert);
       return;
     }
-    const hosts = togetherState().hosts.filter((h) => h.peerId !== serviceId && !(h.via === 'ble' && shortSession(h.advert.sessionId) === shortSession(advert.sessionId)));
-    setTogether({ hosts: [...hosts, { peerId: serviceId, advert, via: 'network' }] });
+    // A known host keeps its place in the list: a new advert changes its row (the title), not the order.
+    const row = { peerId: serviceId, advert, via: 'network' as const };
+    const others = togetherState().hosts.filter((h) => !(h.via === 'ble' && shortSession(h.advert.sessionId) === shortSession(advert.sessionId)));
+    const at = others.findIndex((h) => h.peerId === serviceId);
+    setTogether({ hosts: at >= 0 ? others.map((h, i) => (i === at ? row : h)) : [...others, row] });
   }
 
   private onServiceLost(serviceId: string): void {
-    setTogether({ hosts: togetherState().hosts.filter((h) => h.peerId !== serviceId) });
+    if (this.lostTimers.has(serviceId)) return;
+    this.lostTimers.set(
+      serviceId,
+      setTimeout(() => {
+        this.lostTimers.delete(serviceId);
+        setTogether({ hosts: togetherState().hosts.filter((h) => h.peerId !== serviceId) });
+      }, LOST_AFTER),
+    );
   }
 
   /** Sends a join request to a host found nearby (on the network or over Bluetooth). */
@@ -1612,10 +1672,16 @@ class NearbyController {
         setTogether({ hosts: togetherState().hosts.filter((h) => !(h.via === 'ble' && h.peerId === e.peerId)) });
       }),
       n.on('onBleConnected', (e) => {
+        if (e.role === 'peripheral') this.bleCentrals.add(e.peerId);
         if (e.role === 'peripheral' && this.room) this.bleHostPeer(e.peerId);
       }),
-      n.on('onBleMessage', (e) => this.bleHandle(e.peerId, { type: 'MESSAGE', text: e.text })),
-      n.on('onBleDisconnected', (e) => this.bleHandle(e.peerId, { type: 'LINK_LOST' })),
+      n.on('onBleMessage', (e) => {
+        if (!this.onBleInfo(e.peerId, e.text)) this.bleHandle(e.peerId, { type: 'MESSAGE', text: e.text });
+      }),
+      n.on('onBleDisconnected', (e) => {
+        this.bleCentrals.delete(e.peerId);
+        this.bleHandle(e.peerId, { type: 'LINK_LOST' });
+      }),
     ];
   }
 
@@ -1648,12 +1714,27 @@ class NearbyController {
 
   private async startBleHost(): Promise<void> {
     const n = this.native;
-    const s = this.session;
-    if (!n?.bleAdvertise || !s) return;
+    if (!n?.bleAdvertise || !this.session) return;
     const state = await this.bleCheck(true);
     if (state !== 'on' || !this.room) return;
     this.listenBle();
-    const info = encodeInfo({
+    const info = this.bleInfoText();
+    if (!info) return;
+    this.lastBleInfo = info;
+    this.bleAdvertising = true;
+    n.bleAdvertise(info, 'Zoggyfin');
+    void this.refreshHostFacts();
+  }
+
+  /** The last INFO that the host published over Bluetooth. */
+  private lastBleInfo: string | null = null;
+
+  /** The Bluetooth INFO of the room now (the title is empty in an empty room). */
+  private bleInfoText(): string | null {
+    const n = this.native;
+    const s = this.session;
+    if (!n || !s) return null;
+    return encodeInfo({
       v: 1,
       session: shortSession(s.id),
       host: displayName(),
@@ -1663,8 +1744,24 @@ class NearbyController {
       canHotspot: this.canMakeHotspot(),
       canJoinWifi: typeof n.joinWifi === 'function',
     });
-    n.bleAdvertise(info, 'Zoggyfin');
-    void this.refreshHostFacts();
+  }
+
+  /**
+   * Guest: a host sends its INFO again when its room changes. True when the
+   * text is an INFO: the row of that host changes in place, and the
+   * rendezvous does not see the text.
+   */
+  private onBleInfo(peerId: string, text: string): boolean {
+    const info = decodeInfo(text);
+    if (!info) return false;
+    const old = this.bleInfo.get(peerId);
+    if (old && old.session !== info.session) return true;
+    this.bleInfo.set(peerId, info);
+    const hosts = togetherState().hosts;
+    if (hosts.some((h) => h.via === 'ble' && h.peerId === peerId)) {
+      setTogether({ hosts: hosts.map((h) => (h.via === 'ble' && h.peerId === peerId ? { ...h, advert: bleAdvert(info) } : h)) });
+    }
+    return true;
   }
 
   private onBlePeer(peerId: string, text: string): void {
@@ -1679,8 +1776,9 @@ class NearbyController {
     }
     // Skip a session that the network already shows.
     if (st.hosts.some((h) => h.via === 'network' && shortSession(h.advert.sessionId) === info.session)) return;
-    const advert: Advert = { sessionId: info.session, hostName: info.host, itemId: '', itemName: info.title, serverId: null, kind: info.kind };
-    setTogether({ hosts: [...st.hosts.filter((h) => h.peerId !== peerId), { peerId, advert, via: 'ble' }] });
+    const row = { peerId, advert: bleAdvert(info), via: 'ble' as const };
+    const at = st.hosts.findIndex((h) => h.peerId === peerId);
+    setTogether({ hosts: at >= 0 ? st.hosts.map((h, i) => (i === at ? row : h)) : [...st.hosts, row] });
   }
 
   private ensureKeyPair() {
@@ -1888,6 +1986,9 @@ class NearbyController {
   private stopBle(): void {
     for (const t of this.bleTimers.values()) clearTimeout(t);
     this.bleTimers.clear();
+    this.bleAdvertising = false;
+    this.lastBleInfo = null;
+    this.bleCentrals.clear();
     this.ble.clear();
     this.bleInfo.clear();
     this.bleSubs.forEach((s) => s.remove());
@@ -1900,6 +2001,9 @@ class NearbyController {
     this.ev('stop all');
     const n = this.native;
     this.stopGate();
+    this.advertKey = null;
+    for (const t of this.lostTimers.values()) clearTimeout(t);
+    this.lostTimers.clear();
     if (this.room) {
       this.room.end();
       this.room = null;

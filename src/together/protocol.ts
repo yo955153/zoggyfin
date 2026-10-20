@@ -510,6 +510,40 @@ export interface Advert {
   epoch?: number;
 }
 
+/**
+ * The advert of a room now. A room with an item names it; an empty room has
+ * the item id "room" and no title, and the nearby list says the host picks
+ * something. The host sends a new advert each time the room's item changes.
+ */
+export function roomAdvert(r: {
+  sessionId: string;
+  hostName: string;
+  epoch: number;
+  kind: MediaKind;
+  /** The room's item, or null for an empty room. */
+  itemId: string | null;
+  title: string;
+  serverId: string | null;
+}): Advert {
+  return {
+    sessionId: r.sessionId,
+    hostName: r.hostName,
+    itemId: r.itemId || 'room',
+    itemName: r.itemId ? r.title : '',
+    serverId: r.serverId,
+    kind: r.kind,
+    epoch: r.epoch,
+  };
+}
+
+/**
+ * A host found over Bluetooth, as an advert for the nearby list. The INFO
+ * has no item id: an empty title is an empty room.
+ */
+export function bleAdvert(info: { session: string; host: string; title: string; kind: MediaKind }): Advert {
+  return { sessionId: info.session, hostName: info.host, itemId: info.title ? '' : 'room', itemName: info.title, serverId: null, kind: info.kind };
+}
+
 const MAX_ADVERT_VALUE = 60;
 
 export function encodeAdvert(a: Advert): Record<string, string> {
