@@ -1211,9 +1211,9 @@ class ZoggyfinTogetherModule : Module() {
     hotspotCallback = cb
     // Some devices drop the request with no callback: give up after a time.
     main.postDelayed({
-      if (hotspotCallback === cb) {
-        hotspotCallback = null
-        cb.giveUp(if (airplaneModeOn()) AIRPLANE_MESSAGE else "The hotspot did not start. Try again, or turn Wi-Fi off and on.")
+      if (hotspotCallback === cb && hotspotReservation == null) {
+        val message = if (airplaneModeOn()) AIRPLANE_MESSAGE else "The hotspot did not start. Try again, or turn Wi-Fi off and on."
+        if (cb.giveUp(message)) hotspotCallback = null
       }
     }, HOTSPOT_TIMEOUT_MS)
     try {
@@ -1271,10 +1271,12 @@ class ZoggyfinTogetherModule : Module() {
   private inner class HotspotCallback(private val promise: Promise) : WifiManager.LocalOnlyHotspotCallback() {
     private val done = AtomicBoolean(false)
 
-    /** No answer from Android in time. */
-    fun giveUp(message: String) {
-      if (done.compareAndSet(false, true)) promise.reject("ERR_HOTSPOT", message, null)
+    /** No answer from Android in time. False when the answer came already. */
+    fun giveUp(message: String): Boolean {
+      if (!done.compareAndSet(false, true)) return false
+      promise.reject("ERR_HOTSPOT", message, null)
       emit("onHotspot", mapOf("state" to "failed", "message" to message))
+      return true
     }
 
     override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation?) {
