@@ -149,8 +149,8 @@ function TogetherSheet() {
   const base = sheetTitle(st, item);
   const title = group ? group.name : nearbySession ? (st.item?.name ?? base) : base;
   return (
-    <Sheet visible title={title} onClose={close} doneLabel="Done">
-      <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: spacing.xl, paddingBottom: spacing.md }} keyboardShouldPersistTaps="handled">
+    <Sheet visible title={title} onClose={close} doneLabel="Done" fixedHeight>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: spacing.xl, paddingBottom: spacing.md }} keyboardShouldPersistTaps="handled">
         <TogetherSheetContent st={st} item={item} signedIn={signedIn} offline={offline} env={env} />
       </ScrollView>
     </Sheet>
@@ -268,8 +268,6 @@ function Lobby({ st, item, signedIn, offline, env }: { st: TogetherState; item: 
             )}
           </View>
           {st.notice ? <Text style={s.notice}>{st.notice}</Text> : null}
-          <HelpCard st={st} env={env} />
-          {st.hotspot && st.role !== 'host' ? <HotspotCard st={st} env={env} guest /> : null}
         </Section>
       ) : null}
 
@@ -329,6 +327,14 @@ function Lobby({ st, item, signedIn, offline, env }: { st: TogetherState; item: 
             </>
           )}
         </Section>
+      ) : null}
+
+      {/* Last, so that the help card shows below every start and join button and moves none of them. */}
+      {env.nearbyOn ? (
+        <View style={s.section}>
+          <HelpCard st={st} env={env} />
+          {st.hotspot && st.role !== 'host' ? <HotspotCard st={st} env={env} guest /> : null}
+        </View>
       ) : null}
     </>
   );

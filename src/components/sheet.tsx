@@ -19,6 +19,7 @@ export function Sheet({
   title,
   onClose,
   doneLabel,
+  fixedHeight = false,
   children,
 }: {
   visible: boolean;
@@ -26,6 +27,13 @@ export function Sheet({
   onClose: () => void;
   /** A trailing text button in the header (for example "Done"). */
   doneLabel?: string;
+  /**
+   * Keep the panel at its full height. The panel grows up from the bottom
+   * edge, so a sheet whose content changes while it is open (a list that
+   * fills in, a help card that shows later) would move every button under
+   * the finger. A fixed height keeps the top of the content still.
+   */
+  fixedHeight?: boolean;
   children: ReactNode;
 }) {
   const s = useStyles(makeStyles);
@@ -39,7 +47,7 @@ export function Sheet({
         <Animated.View
           entering={SlideInDown.duration(motion.duration.base).easing(ENTER)}
           exiting={SlideOutDown.duration(motion.duration.fast)}
-          style={[s.panel, isTV ? s.panelTV : { paddingBottom: insets.bottom + spacing.md }]}
+          style={[s.panel, isTV ? s.panelTV : { paddingBottom: insets.bottom + spacing.md }, fixedHeight && !isTV && s.panelFixed]}
           accessibilityViewIsModal>
           {isTV ? null : <View style={s.grabber} />}
           {title || doneLabel ? (
@@ -115,6 +123,7 @@ const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
     borderCurve: 'continuous' as const,
     ...shadow('overlay'),
   },
+  panelFixed: { height: '80%' as const },
   panelTV: { maxWidth: scaled(sizes.sheetMaxWidth), borderRadius: radius.xxl, padding: scaled(spacing.xxl) },
   grabber: { alignSelf: 'center' as const, width: 36, height: 5, borderRadius: 3, backgroundColor: c.surface3, marginTop: spacing.sm, marginBottom: spacing.sm },
   header: {
