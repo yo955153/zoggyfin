@@ -30,7 +30,8 @@ export interface RoomQueue {
   onTrack(listener: (key: string) => void): () => void;
   /** The order, the entries or the play modes changed. */
   onQueue(listener: () => void): () => void;
-  apply(c: QueueAction): void;
+  /** `playing`: the group plays, so a new track starts; else it loads paused. */
+  apply(c: QueueAction, playing: boolean): void;
 }
 
 export function isQueueAction(c: ControlAction): c is QueueAction {
@@ -306,8 +307,13 @@ export class HostRoom {
     const p = this.deps.player;
     const now = this.deps.now();
     if (isQueueAction(c)) {
+      const q = this.queue;
+      if (!q) return;
       // The queue changes the player; the track and queue listeners tell the group.
-      this.queue?.apply(c);
+      const before = q.track();
+      q.apply(c, this.wantPlaying);
+      // "Previous" late in a track (or on the first track) goes back to its start: a seek for the group.
+      if (c.action === 'previous' && q.track() === before) this.apply({ action: 'seek', position: 0 });
       return;
     }
     switch (c.action) {
@@ -384,7 +390,11 @@ export class HostRoom {
 
   /** Audio: the host's player moved to another queue entry. The new track starts at 0 now. */
   private trackChanged(): void {
-    if (this.startTimer !== null) return;
+    if (this.startTimer !== null) {
+      // A planned start was for the track before: plan it again at the start of this one.
+      this.scheduleStart(0);
+      return;
+    }
     this.anchor = { ...this.anchor, hostTime: this.deps.now(), position: 0 };
     this.broadcastState();
   }

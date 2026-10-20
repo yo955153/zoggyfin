@@ -189,17 +189,17 @@ export function hostQueue(item: (entry: { key: string; item: AudioItem }) => Sha
       unsubs.push(u);
       return u;
     },
-    apply: (c: QueueAction) => {
+    apply: (c: QueueAction, playing: boolean) => {
       const d = session.direct;
       switch (c.action) {
         case 'next':
-          d.next();
+          d.next(playing);
           return;
         case 'previous':
-          d.previous();
+          d.previous(playing);
           return;
         case 'jump':
-          d.jump(c.key);
+          d.jump(c.key, playing);
           return;
         case 'shuffle':
           d.shuffle(c.on);

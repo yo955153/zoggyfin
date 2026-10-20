@@ -818,7 +818,7 @@ class AudioSession {
     this.doNext();
   }
 
-  private doNext(): void {
+  private doNext(autoplay = true): void {
     const q = audioState().queue;
     const nq = advance(q, true);
     if (!nq) return;
@@ -829,7 +829,7 @@ class AudioSession {
       return;
     }
     setAudioState({ queue: nq });
-    void this.startCurrent({ autoplay: true, startSeconds: 0 });
+    void this.startCurrent({ autoplay, startSeconds: 0 });
   }
 
   previous(): void {
@@ -837,7 +837,7 @@ class AudioSession {
     this.doPrevious();
   }
 
-  private doPrevious(): void {
+  private doPrevious(autoplay = true): void {
     const position = this.engine.loaded ? this.engine.position : playerState().position;
     if (position > RESTART_SECONDS) {
       this.doSeek(0);
@@ -849,7 +849,7 @@ class AudioSession {
       return;
     }
     setAudioState({ queue: nq });
-    void this.startCurrent({ autoplay: true, startSeconds: 0 });
+    void this.startCurrent({ autoplay, startSeconds: 0 });
   }
 
   /** Long-form: the previous or next chapter, or the track when there are no chapters. */
@@ -880,12 +880,12 @@ class AudioSession {
     this.doJump(key);
   }
 
-  private doJump(key: string): void {
+  private doJump(key: string, autoplay = true): void {
     const q = audioState().queue;
     const nq = jumpTo(q, key);
     if (nq === q || nq.index === q.index) return;
     setAudioState({ queue: nq });
-    void this.startCurrent({ autoplay: true, startSeconds: 0 });
+    void this.startCurrent({ autoplay, startSeconds: 0 });
   }
 
   move(from: number, to: number): void {
@@ -983,9 +983,10 @@ class AudioSession {
       this.engine.setRate(rate);
       setPlayerState({ rate });
     },
-    next: () => this.doNext(),
-    previous: () => this.doPrevious(),
-    jump: (key: string) => this.doJump(key),
+    /** `autoplay`: the new track starts (else it loads paused: the group is paused). */
+    next: (autoplay = true) => this.doNext(autoplay),
+    previous: (autoplay = true) => this.doPrevious(autoplay),
+    jump: (key: string, autoplay = true) => this.doJump(key, autoplay),
     shuffle: (on: boolean) => this.doShuffle(on),
     repeat: (mode: QueueState<AudioItem>['repeat']) => this.doRepeat(mode),
     /** The position now (seconds): the last engine status moved on by the time since it came. */
