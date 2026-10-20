@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   var J = window.ZoggyfinJoin;
-  var config = window.ZOGGYFIN_JOIN_CONFIG || {};
+  var config = window.ZOGGYFIN_CONFIG || {};
   var $ = function (id) { return document.getElementById(id); };
 
   // A new invite link in the same tab changes only the fragment: read it again.

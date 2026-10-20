@@ -13,8 +13,14 @@ The static pages for `zoggyfin.zog-tech.com`. The App Store listing links to the
 | `/support` | `public/support/index.html` |
 | any other path | `public/404.html` |
 
-All pages use the one stylesheet `public/style.css`. The pages are plain HTML: no build
-step and no external requests. Scripts come from the same origin only. `public/download/download.js` reads
+All pages use the one stylesheet `public/style.css` (tokens from `docs/design/theme.ts`,
+dark and light from `prefers-color-scheme`, a toggle that `public/theme.js` and
+`public/site.js` keep in `localStorage`). The pages are plain HTML: no build step and no
+external requests. Fonts are self-hosted (`public/fonts/`, Inter, SIL OFL; used only where
+the system font is not SF). Screenshots are in `public/img/` as AVIF and WebP at two widths
+each; they show only public demo content (Blender films, demo music). `public/img/og.jpg`
+is the 1200 x 630 social card. `robots.txt`, `sitemap.xml` and `site.webmanifest` are in
+`public/`. Scripts come from the same origin only. `public/download/download.js` reads
 `/download/latest.json` and shows the newest Mac version and its notes. nginx serves that
 file from the update feed (`https://releases.zog-tech.com/zoggyfin/latest.json`), so the
 page needs no change for a new release. The Content-Security-Policy in `nginx.conf` allows
@@ -23,8 +29,12 @@ scripts and requests from the same origin only. Add a page as
 
 The `/join` page reads the invite from the URL fragment in the browser and sends
 nothing. `public/join/join-core.js` has the logic and has unit tests
-(`src/invite/__tests__/join-page.test.ts`). `public/join/config.js` has the store and
-download links: set `appStoreUrl` and `androidUrl` when they exist. `public/join/qrcode.js`
+(`src/invite/__tests__/join-page.test.ts`).
+
+`public/config.js` is the one place for store and download links on every page (`/`,
+`/download`, `/join`). Set `appStoreUrl` when the App Store listing exists, and `androidUrl`
+when an Android build exists. Links in the HTML default to TestFlight and "coming soon", so
+the pages work without the file. `public/join/qrcode.js`
 is qrcode-generator (MIT). `public/_headers` (and `nginx.conf`) serve the two
 `.well-known` files as `application/json` with no redirect.
 
