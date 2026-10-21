@@ -9,7 +9,7 @@
  */
 import type { UserControl } from '@/player/control-gate';
 import { videoSession } from '@/player/session';
-import { playerState, usePlayerStore } from '@/player/store';
+import { type NowPlaying, playerState, usePlayerStore } from '@/player/store';
 
 import { OUTSIDE_CONFIRM, type PlayerPort, realTimers, type Timers } from './player-port';
 
@@ -53,6 +53,14 @@ export function bindVideoPort(onOutside?: (control: UserControl) => void, opts: 
   };
 
   const unsub = usePlayerStore.subscribe((s, prev) => {
+    // A new load finished (the session loaded its item over what played before): the engine
+    // starts from its own state, so the app's old play or pause does not count. Else the
+    // follower would take a paused player for a playing one and never start it.
+    if (prev.status === 'loading' && s.status !== 'loading' && !busy(s.status)) {
+      intent = s.playing;
+      if (confirm) timers.clearTimeout(confirm);
+      confirm = null;
+    }
     if (s.status !== prev.status) {
       if (busy(s.status)) {
         if (!timer) timer = timers.setTimeout(() => ((timer = null), setBuffering(busy(playerState().status))), BUFFERING_DEBOUNCE);
@@ -100,8 +108,16 @@ export function bindVideoPort(onOutside?: (control: UserControl) => void, opts: 
   };
 }
 
-/** Resolves when the player has loaded (or failed). */
-export function whenPlayerReady(timeoutMs = 20_000): Promise<boolean> {
+/**
+ * Resolves when the player has loaded (or failed). `after`: the player's
+ * `now` before the caller started a new load. Only that new load counts:
+ * the old item is still "ready" until the player has stopped it (a network
+ * report first), and a port bound to it would follow the wrong player.
+ */
+export function whenPlayerReady(timeoutMs = 20_000, opts: { after?: NowPlaying | null } = {}): Promise<boolean> {
+  const fresh = 'after' in opts;
+  const before = opts.after ?? null;
+  let loading = !fresh;
   return new Promise((resolve) => {
     const done = (ok: boolean) => {
       unsub();
@@ -110,6 +126,10 @@ export function whenPlayerReady(timeoutMs = 20_000): Promise<boolean> {
     };
     const check = () => {
       const s = playerState();
+      if (!loading) {
+        if (s.status !== 'loading' || (s.now === before && before !== null)) return;
+        loading = true;
+      }
       if (s.status === 'ready' || s.status === 'buffering') done(true);
       else if (s.status === 'error') done(false);
     };

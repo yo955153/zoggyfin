@@ -1,4 +1,4 @@
-import { chooseGuestVideoSource, noAccessText } from '../guest-source';
+import { chooseGuestVideoSource, guestKeepsPlayer, noAccessText } from '../guest-source';
 
 const base = 'http://10.0.0.2:5000';
 const facts = { ownFile: null, base, activeServerId: null, serverReachable: true };
@@ -48,5 +48,28 @@ describe('chooseGuestVideoSource', () => {
 
   it('says plainly what to do', () => {
     expect(noAccessText('Sam · iPhone')).toBe('Sam · iPhone streams this from a server you are not signed in to. Ask them to download it first, or sign in to that server.');
+  });
+});
+
+describe('guestKeepsPlayer (the session ends, or the guest leaves)', () => {
+  it('keeps the player of a guest that streams from its own server: it plays on alone, and Continue Watching has the position', () => {
+    expect(guestKeepsPlayer('server', true)).toBe(true);
+  });
+
+  it('keeps the player of a guest that plays its own download', () => {
+    expect(guestKeepsPlayer('local', true)).toBe(true);
+  });
+
+  it('closes the player that reads the host’s file: the file is gone with the host', () => {
+    expect(guestKeepsPlayer('stream', true)).toBe(false);
+  });
+
+  it('closes the player of a guest with no account (it has no player outside the session)', () => {
+    expect(guestKeepsPlayer('local', false)).toBe(false);
+    expect(guestKeepsPlayer('server', false)).toBe(false);
+  });
+
+  it('has nothing to keep when nothing played', () => {
+    expect(guestKeepsPlayer(null, true)).toBe(false);
   });
 });

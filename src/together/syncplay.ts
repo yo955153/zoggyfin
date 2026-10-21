@@ -446,10 +446,11 @@ class SyncPlayController {
       if (this.audio) this.leaveAudio();
       setTogether({ kind: 'video', item: { id: item.Id ?? t.itemId, name: item.Name ?? 'Video', type: item.Type ?? 'Video' } });
       // While it loads, the group waits: the server holds a play until this device is ready.
+      // The player may still show what played before (the same film, alone): only the new load counts.
+      const before = playerState().now;
       void videoSession().play({ item, startPositionTicks: secondsToTicks(t.startSeconds), autoplay: false });
       router.navigate('/player');
-      await new Promise((r) => setTimeout(r, 50));
-      const ok = await whenPlayerReady(30_000);
+      const ok = await whenPlayerReady(30_000, { after: before });
       if (!ok) {
         toast('The group item could not be played here.');
         return;

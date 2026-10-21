@@ -14,6 +14,8 @@
  * for everyone; a guest asks the host).
  * Controls stress (scripts/together-bench/controls-stress.ts): toggle (the play button: returns
  * what it sent), watch (the desktop app logs each engine play state change to out.log).
+ * Checks: state (the player, the control gate and the session as JSON), sheet (open the session sheet,
+ * where=player|room|hub), spcreate (a server session with what plays now).
  * The desktop development build runs it too (see `__togetherLab`).
  * Release builds show nothing.
  */
@@ -29,13 +31,13 @@ import { getApi } from '@/api/client';
 import { getItem } from '@/api/jellyfin';
 import { useSessionStore } from '@/auth/session-store';
 import { activePlayback, playHere, playRouter } from '@/player';
-import { togglePauses } from '@/player/control-gate';
+import { controlGate, togglePauses, useGroupPlaying } from '@/player/control-gate';
 import { playerState, usePlayerStore } from '@/player/store';
 import { audioSession } from '@/player/audio/session';
 import { videoSession } from '@/player/session';
 import { nearby } from '@/together/nearby';
 import { syncPlay } from '@/together/syncplay';
-import { togetherState, useTogetherStore } from '@/together/store';
+import { openTogetherSheet, type SheetPlace, togetherState, useTogetherStore } from '@/together/store';
 
 let watchUnsub: (() => void) | null = null;
 
@@ -158,6 +160,10 @@ async function run(action: string, params: Record<string, string | undefined>): 
       if (!params.group) return 'no group';
       await syncPlay().join(params.group);
       return 'joined group';
+    case 'spcreate':
+      // A server session with what plays now, as "Start a session" > "Anyone on <server>" makes it.
+      await syncPlay().create(playerState().now?.item ?? null);
+      return 'group created';
     case 'spgroups':
       await syncPlay().refreshGroups();
       return JSON.stringify(togetherState().syncplay.groups);
@@ -175,6 +181,19 @@ async function run(action: string, params: Record<string, string | undefined>): 
     case 'stop':
       await n.stopAll();
       return 'stopped';
+    case 'state': {
+      // The player, the control gate and the session, for scripted checks.
+      const p = playerState();
+      const t = togetherState();
+      return JSON.stringify({
+        player: { id: p.now?.item.Id ?? null, kind: p.now?.kind ?? null, status: p.status, playing: p.playing, position: Math.round(p.position * 10) / 10, presentation: p.presentation },
+        gate: { active: controlGate.active, groupPlaying: useGroupPlaying.getState().playing, router: playRouter.active },
+        together: { mode: t.mode, role: t.role, phase: t.phase.name, onlyHostControls: t.onlyHostControls, members: t.members.length, group: t.syncplay.group?.id ?? null },
+      });
+    }
+    case 'sheet':
+      openTogetherSheet((params.where as SheetPlace | undefined) ?? 'player', null);
+      return 'sheet open';
     case 'stats': {
       const s = togetherState();
       const out = JSON.stringify({ phase: s.phase, sync: s.sync, members: s.members, source: s.source, media: n.mediaStats(), joinCode: s.joinCode, visibleTo: s.visibleTo, kind: s.kind, hosts: s.hosts.length });

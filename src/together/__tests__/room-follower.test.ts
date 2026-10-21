@@ -132,6 +132,56 @@ describe('nearby session (simulated)', () => {
     expect(gap(hostPlayer, guestPlayer)).toBeLessThan(0.06);
   });
 
+  it('the host turns "Only I control" on and off again: the guest’s controls follow each time', () => {
+    const { clock, room, follower, hostPlayer, guestPlayer, denied } = setup();
+    follower.attach(guestPlayer, false);
+    clock.advance(1000);
+    for (const only of [true, false, true, false]) {
+      room.setOnlyHostControls(only);
+      clock.advance(300);
+      expect(room.onlyHostControls).toBe(only);
+      expect(follower.onlyHostControls).toBe(only);
+      const before = denied.length;
+      const playing = hostPlayer.isPlaying();
+      expect(follower.request({ action: playing ? 'pause' : 'play' })).toBe(!only);
+      clock.advance(2000);
+      // Refused: the group plays on as before. Allowed: the group follows the guest.
+      expect(hostPlayer.isPlaying()).toBe(only ? playing : !playing);
+      expect(guestPlayer.isPlaying()).toBe(hostPlayer.isPlaying());
+      expect(denied.length).toBe(only ? before + 1 : before);
+    }
+  });
+
+  it('the guest pauses, then the host plays: both play again', () => {
+    const { clock, room, follower, hostPlayer, guestPlayer } = setup();
+    follower.attach(guestPlayer, false);
+    clock.advance(2000);
+    follower.request({ action: 'pause' });
+    clock.advance(500);
+    expect(room.state.wantPlaying).toBe(false);
+    expect(hostPlayer.isPlaying()).toBe(false);
+    room.apply({ action: 'play' });
+    clock.advance(2000);
+    expect(hostPlayer.isPlaying()).toBe(true);
+    expect(guestPlayer.isPlaying()).toBe(true);
+    expect(follower.wantsPlay).toBe(true);
+  });
+
+  it('the host pauses, then the guest plays: both play again', () => {
+    const { clock, room, follower, hostPlayer, guestPlayer } = setup();
+    follower.attach(guestPlayer, false);
+    clock.advance(2000);
+    room.apply({ action: 'pause' });
+    clock.advance(500);
+    expect(guestPlayer.isPlaying()).toBe(false);
+    expect(follower.wantsPlay).toBe(false);
+    expect(follower.request({ action: 'play' })).toBe(true);
+    clock.advance(2000);
+    expect(hostPlayer.isPlaying()).toBe(true);
+    expect(guestPlayer.isPlaying()).toBe(true);
+    expect(gap(hostPlayer, guestPlayer)).toBeLessThan(0.06);
+  });
+
   it('refuses guest controls when only the host controls', () => {
     const { clock, room, follower, hostPlayer, guestPlayer, denied } = setup();
     follower.attach(guestPlayer, false);

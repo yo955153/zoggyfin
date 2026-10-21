@@ -106,7 +106,8 @@ export interface TogetherState {
   /** The group waits for a member that buffers. */
   waiting: boolean;
   /** Guest: where the media comes from. */
-  source: 'local' | 'stream' | null;
+  /** The guest's video: its own download, its own server, or the host's file (`stream`). */
+  source: 'local' | 'server' | 'stream' | null;
   /** A short message for the session sheet ("Only the host controls playback."). */
   notice: string | null;
   /** The session sheet: open or closed, the screen that shows it and the item it starts with. */

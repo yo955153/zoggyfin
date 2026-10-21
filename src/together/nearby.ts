@@ -44,7 +44,7 @@ import { keyMatches, joinLink, newSessionKey, type JoinPayload, parseJoinLink, p
 import { NearbyLink } from './link';
 import type { BleState, NearbyLinkNative } from './link-native-types';
 import { IDLE, type PhaseEvent, transition } from './machine';
-import { chooseGuestVideoSource, noAccessText } from './guest-source';
+import { chooseGuestVideoSource, guestKeepsPlayer, noAccessText } from './guest-source';
 import { guestSource, HostShares, localRecord } from './nearby-media';
 import { linkNative } from './nearby-native';
 import { visibleTo, type HelpPlatform } from './nearby-help';
@@ -1260,7 +1260,7 @@ class NearbyController {
     }
     let local = src.kind === 'local';
     let fromServer = src.kind === 'server';
-    setTogether({ source: local ? 'local' : 'stream' });
+    setTogether({ source: local ? 'local' : fromServer ? 'server' : 'stream' });
     if (!(await this.closeOtherSheet(token))) return;
     if (playerState().now?.kind === 'audio') {
       queueGate.set(null);
@@ -1268,6 +1268,8 @@ class NearbyController {
       await audioSession().stopForVideo();
     }
     if (token !== this.loadToken || this.follower !== f) return;
+    // The player may still show what played before (the same film, alone): only the new load counts.
+    const before = playerState().now;
     if (src.kind === 'server') {
       // Signed in to the same server: stream straight from it, at the group position.
       void videoSession().play({ item: toBaseItem(item), startPositionTicks: Math.round(this.startPosition() * 10_000_000), autoplay: false });
@@ -1275,15 +1277,17 @@ class NearbyController {
       this.playGuestFile(item, src.uri, local);
     }
     router.navigate('/player');
-    let ok = await whenPlayerReady(30_000);
+    let ok = await whenPlayerReady(30_000, { after: before });
     if (token !== this.loadToken || this.follower !== f) return;
     if (!ok && fromServer && base && item.path) {
       // The server did not answer in time: read the host's file after all.
       this.ev('server stream failed, use the host');
       fromServer = false;
       local = false;
+      setTogether({ source: 'stream' });
+      const failed = playerState().now;
       this.playGuestFile(item, `${base}${item.path}`, false);
-      ok = await whenPlayerReady(30_000);
+      ok = await whenPlayerReady(30_000, { after: failed });
       if (token !== this.loadToken || this.follower !== f) return;
     }
     if (!ok) {
@@ -1935,7 +1939,7 @@ class NearbyController {
     this.ev('close guest', { message });
     const source = togetherState().source;
     const kind = this.session?.kind ?? 'video';
-    const keep = source === 'local' && !!useSessionStore.getState().session;
+    const keep = guestKeepsPlayer(source, !!useSessionStore.getState().session);
     if (keep) this.port?.pause();
     this.teardownGuest();
     this.port = null;
@@ -2030,7 +2034,8 @@ class NearbyController {
     } else if (this.follower) {
       const source = togetherState().source;
       const kind = this.session?.kind ?? 'video';
-      const close = source === 'stream' || (source === 'local' && !useSessionStore.getState().session);
+      // The guest's own download or server: it plays on alone. The host's file goes with the host.
+      const close = source !== null && !guestKeepsPlayer(source, !!useSessionStore.getState().session);
       this.follower.leave();
       await new Promise((r) => setTimeout(r, 200));
       this.teardownGuest();

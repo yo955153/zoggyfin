@@ -50,3 +50,20 @@ export function chooseGuestVideoSource(item: Pick<SharedItem, 'serverId' | 'path
 export function noAccessText(hostName: string): string {
   return `${hostName} streams this from a server you are not signed in to. Ask them to download it first, or sign in to that server.`;
 }
+
+/**
+ * Where the guest's player plays from: its own download, its own server, or
+ * the host's file (`stream`). Null: nothing plays.
+ */
+export type GuestPlaySource = 'local' | 'server' | 'stream' | null;
+
+/**
+ * True when the guest keeps its player after the session (the host ended it,
+ * the link was lost, or the guest left): it plays its own download, or it
+ * streams from its own server while signed in. It then plays on alone, and
+ * the server has its position. The host's file is gone with the host, and a
+ * guest with no account has no player outside the session: those close.
+ */
+export function guestKeepsPlayer(source: GuestPlaySource, signedIn: boolean): boolean {
+  return signedIn && (source === 'local' || source === 'server');
+}
