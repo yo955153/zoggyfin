@@ -4,6 +4,12 @@ Each section is the notes of one release. `pnpm desktop:publish` puts the sectio
 version into `latest.json` (the update card shows it) and into the GitHub release.
 Write one short line per item.
 
+## 0.1.8 (2026-10-20)
+
+- Together: a guest that already played the film no longer pauses everyone when it joins
+- Together: the video plays on after you leave the session or the host ends it, when it streams from your server
+- Server sessions say why "Only I control" is not available there, and how to get it
+
 ## 0.1.7 (2026-10-20)
 
 - Together: pause no longer plays again by itself half a second later
