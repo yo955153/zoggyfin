@@ -214,3 +214,25 @@ export function playForEveryone(st: Pick<TogetherState, 'mode' | 'role' | 'phase
   }
   return null;
 }
+
+/**
+ * The "who controls" row of the session sheet.
+ * - `switch`: the nearby host turns "Only I control" on or off.
+ * - `shown`: a nearby guest sees the host's choice.
+ * - `server`: a server session (Jellyfin SyncPlay). Jellyfin has no host and
+ *   lets every member play, pause and seek, so nobody can turn it off there.
+ *   The sheet says so, and offers a nearby session instead.
+ */
+export type ControlSetting = { kind: 'switch'; onlyHost: boolean } | { kind: 'shown'; onlyHost: boolean } | { kind: 'server' } | null;
+
+export function controlSetting(st: Pick<TogetherState, 'mode' | 'role' | 'onlyHostControls' | 'syncplay'>): ControlSetting {
+  if (st.syncplay.group) return { kind: 'server' };
+  if (st.mode !== 'nearby') return null;
+  if (st.role === 'host') return { kind: 'switch', onlyHost: st.onlyHostControls };
+  if (st.role === 'guest') return { kind: 'shown', onlyHost: st.onlyHostControls };
+  return null;
+}
+
+/** The text of a server session's control row. */
+export const SERVER_CONTROLS_TEXT =
+  'Everyone can play, pause and seek. Server sessions (Jellyfin SyncPlay) have no host, so this cannot be changed. For “Only I control”, move to a nearby session.';

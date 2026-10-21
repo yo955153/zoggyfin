@@ -137,7 +137,13 @@ export function WhoStep({
       ) : (
         <Section
           title="Who can join?"
-          footer={who.options.some((o) => o.id === 'server') ? 'Uses Jellyfin SyncPlay, so other Jellyfin apps can join too.' : undefined}>
+          footer={
+            who.options.some((o) => o.id === 'server')
+              ? choice === 'server'
+                ? 'Uses Jellyfin SyncPlay, so other Jellyfin apps can join too. Everyone in it can play, pause and seek. For “Only I control”, pick People near you.'
+                : 'Anyone on the server uses Jellyfin SyncPlay, so other Jellyfin apps can join too. There everyone controls.'
+              : undefined
+          }>
           <View style={s.group}>
             {who.options.map((o, i) => (
               <ChoiceRow

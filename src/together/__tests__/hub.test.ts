@@ -1,4 +1,4 @@
-import { joinTransport, mergeSessions, playForEveryone, roomLabel, sessionHeadline, whoCanJoin } from '../hub';
+import { controlSetting, joinTransport, mergeSessions, playForEveryone, roomLabel, sessionHeadline, whoCanJoin } from '../hub';
 import { decode, encode, type Message } from '../protocol';
 import { HostRoom } from '../room';
 import { initialTogether, type NearbyHost } from '../store';
@@ -138,5 +138,19 @@ describe('rooms in the hub', () => {
     const w = whoCanJoin({ nearbyOn: true, signedIn: true, offline: false, serverName: 'Home', onServer: true, downloaded: false, room: true });
     expect(w.options.map((o) => o.id)).toEqual(['nearby', 'server']);
     expect(w.initial).toBe('nearby');
+  });
+});
+
+describe('controlSetting', () => {
+  const group = { id: 'g', name: 'G', state: 'Playing', participants: [] };
+  it('the nearby host has the switch, with its value, both ways', () => {
+    expect(controlSetting({ ...initialTogether, mode: 'nearby', role: 'host', onlyHostControls: false })).toEqual({ kind: 'switch', onlyHost: false });
+    expect(controlSetting({ ...initialTogether, mode: 'nearby', role: 'host', onlyHostControls: true })).toEqual({ kind: 'switch', onlyHost: true });
+  });
+  it('a nearby guest sees the host’s choice', () => {
+    expect(controlSetting({ ...initialTogether, mode: 'nearby', role: 'guest', onlyHostControls: true })).toEqual({ kind: 'shown', onlyHost: true });
+  });
+  it('a server session says why it cannot change (Jellyfin lets everyone control), for the member who made it too', () => {
+    expect(controlSetting({ ...initialTogether, mode: 'syncplay', syncplay: { ...initialTogether.syncplay, group } })).toEqual({ kind: 'server' });
   });
 });

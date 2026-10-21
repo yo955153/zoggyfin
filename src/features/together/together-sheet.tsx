@@ -28,7 +28,7 @@ import { linkNative } from '@/together/nearby-native';
 import { closeTogetherSheet, openTogetherSheet, releaseTogetherSheet, setTogether, type SheetPlace, type TogetherState, useTogetherStore } from '@/together/store';
 import { canSyncPlay, syncPlay, syncPlaySupported } from '@/together/syncplay';
 import { groupStateLabel } from '@/together/syncplay-logic';
-import { joinTransport, mergeSessions, playForEveryone, type SessionRow, sessionHeadline, shortName } from '@/together/hub';
+import { joinTransport, mergeSessions, playForEveryone, SERVER_CONTROLS_TEXT, type SessionRow, sessionHeadline, shortName } from '@/together/hub';
 import { SHOWN_REQUESTS, visibleRequests } from '@/together/join-gate';
 import type { Member } from '@/together/protocol';
 
@@ -574,7 +574,7 @@ function NearbyView({ st, env }: { st: TogetherState; env: SheetEnv }) {
               <RowIcon name="person.fill" />
               <View style={s.rowText}>
                 <Text style={s.rowTitle}>You</Text>
-                <Text style={s.rowDetail}>{!st.item ? 'Waiting' : st.source === 'local' ? 'Plays your download' : st.source === 'stream' ? 'Streams' : 'Not playing'}</Text>
+                <Text style={s.rowDetail}>{!st.item ? 'Waiting' : st.source === 'local' ? 'Plays your download' : st.source === 'server' ? 'Streams from your server' : st.source === 'stream' ? 'Streams from the host' : 'Not playing'}</Text>
               </View>
             </View>
           )}
@@ -692,7 +692,7 @@ function RoomNow({ st }: { st: TogetherState }) {
 }
 
 /** A switch row in "Session settings". */
-function SwitchRow({ title, detail, value, onChange }: { title: string; detail: string; value: boolean; onChange: (v: boolean) => void }) {
+function SwitchRow({ title, detail, value, onChange, disabled = false }: { title: string; detail: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   const s = useStyles(makeStyles);
   const { c } = useTheme();
   return (
@@ -701,7 +701,7 @@ function SwitchRow({ title, detail, value, onChange }: { title: string; detail: 
         <Text style={s.rowTitle}>{title}</Text>
         <Text style={s.rowDetail}>{detail}</Text>
       </View>
-      <Switch value={value} onValueChange={onChange} trackColor={{ true: c.accent }} accessibilityLabel={title} />
+      <Switch value={value} onValueChange={onChange} disabled={disabled} trackColor={{ true: c.accent }} accessibilityLabel={title} />
     </View>
   );
 }
@@ -909,7 +909,6 @@ function peopleFooter(st: TogetherState): string | undefined {
 
 function GroupView({ st, item }: { st: TogetherState; item: BaseItemDto | null }) {
   const s = useStyles(makeStyles);
-  const { c } = useTheme();
   const group = st.syncplay.group!;
   const serverName = useSessionStore((x) => x.session?.serverName ?? null);
   const playing = usePlayerStore((x) => x.now?.item ?? null);
@@ -937,12 +936,9 @@ function GroupView({ st, item }: { st: TogetherState; item: BaseItemDto | null }
         </View>
       </Section>
       <Section title="Controls">
-        <View style={[s.group, s.row]}>
-          <View style={s.rowText}>
-            <Text style={s.rowTitle}>Everyone controls</Text>
-            <Text style={s.rowDetail}>Everyone can play, pause and seek.</Text>
-          </View>
-          <Icon name="person.2.fill" size={18} color={c.text2} />
+        <View style={s.group}>
+          {/* Jellyfin SyncPlay has no host: the switch shows, off, with the reason and the way out below. */}
+          <SwitchRow title="Only I control" detail={SERVER_CONTROLS_TEXT} value={false} onChange={() => undefined} disabled />
         </View>
       </Section>
       {item && canSyncPlay(item) && item.Id !== playingId ? (
@@ -956,7 +952,7 @@ function GroupView({ st, item }: { st: TogetherState; item: BaseItemDto | null }
         <Button title="Next" variant="tonal" icon="forward.fill" onPress={() => void syncPlay().next()} containerStyle={{ flex: 1 }} />
       </View>
       {canMove && moveTarget ? (
-        <Section title="Only people you choose" footer="Leaves the server session and starts a nearby one that only people with your code can join.">
+        <Section title="Only people you choose" footer="Leaves the server session and starts a nearby one that only people with your code can join. There you can turn on “Only I control”.">
           <Button
             title="Move to a nearby session with a code"
             variant="tonal"
