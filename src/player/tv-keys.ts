@@ -143,6 +143,41 @@ export type PlayerKeyAction =
  * What a remote key does in the player. Select is left to the focused
  * control (a button, or the full-screen layer while the controls are hidden).
  */
+/**
+ * Left and Right with the TV controls hidden. A first press does not show the
+ * controls at once: it waits out the double-press window. A second press of
+ * the same key in the window is a double press (seek 10 s, the controls stay
+ * hidden), and nothing is shown. With no second press, `due` turns true once
+ * the window is over, and the caller shows the controls. With the controls
+ * shown, presses pair as usual and never wait. Pure (the caller owns the timer).
+ */
+export function createTapGate(windowMs: number = DOUBLE_PRESS_MS) {
+  const pairs = createDoublePress(windowMs);
+  let pendingAt: number | null = null;
+  return {
+    press(key: string, now: number, hidden: boolean): { double: boolean; wait: boolean } {
+      const double = pairs.press(key, now);
+      if (double || !hidden) {
+        pendingAt = null;
+        return { double, wait: false };
+      }
+      pendingAt = now;
+      return { double: false, wait: true };
+    },
+    /** True once (then cleared) when a waiting single press must show the controls. */
+    due(now: number): boolean {
+      if (pendingAt === null || now - pendingAt < windowMs) return false;
+      pendingAt = null;
+      return true;
+    },
+    /** Another key came: forget the waiting press and the pair. */
+    cancel(): void {
+      pendingAt = null;
+      pairs.reset();
+    },
+  };
+}
+
 export function playerKeyAction(key: TvKey, double: boolean): PlayerKeyAction {
   switch (key) {
     case 'left':

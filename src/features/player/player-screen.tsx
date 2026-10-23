@@ -40,7 +40,9 @@ import { useTvBack } from '@/features/tv/use-tv-back';
 import { useTvRemote } from '@/features/tv/use-tv-remote';
 import { features, isNativeTV, isTV } from '@/platform/tv';
 import {
-  createDoublePress,
+  createTapGate,
+  DOUBLE_PRESS_MS,
+  DOUBLE_PRESS_SEEK,
   NO_RUN,
   nextRun,
   playerKeyAction,
@@ -137,6 +139,15 @@ export function PlayerScreen() {
   const [poke, setPoke] = useState(0);
   const [dismissal, setDismissal] = useState<{ itemId: string; at: number } | null>(null);
   const [ripple, setRipple] = useState<SeekFeedback | null>(null);
+  // TV: a double press with the controls hidden shows only the bubble and a thin progress line.
+  const [peek, setPeek] = useState(false);
+  const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (peekTimer.current) clearTimeout(peekTimer.current);
+    },
+    [],
+  );
 
   // With no account, a player with nothing to play (a link, a fallback route) goes to the sign-in screen.
   // A short wait: a play request sets the item just after the route opens.
@@ -159,6 +170,7 @@ export function PlayerScreen() {
 
   const wake = useCallback(() => {
     setVisible(true);
+    setPeek(false);
     setPoke((p) => p + 1);
   }, []);
 
@@ -185,7 +197,7 @@ export function PlayerScreen() {
   useEffect(() => {
     if (!ripple) return;
     // TV: a little longer, so a run of double presses adds up on screen.
-    const t = setTimeout(() => setRipple(null), isTV ? 1000 : 700);
+    const t = setTimeout(() => setRipple(null), isTV ? PEEK_MS : 700);
     return () => clearTimeout(t);
   }, [ripple]);
 
@@ -267,7 +279,15 @@ export function PlayerScreen() {
 
   // TV remote: a single Left or Right shows the controls (and the focus
   // moves as usual); a double press also seeks 10 s (player/tv-keys.ts).
-  const doublePress = useRef(createDoublePress()).current;
+  const tapGate = useRef(createTapGate()).current;
+  // Controls hidden: a single Left or Right shows them only after the double-press window.
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (revealTimer.current) clearTimeout(revealTimer.current);
+    },
+    [],
+  );
 
   // TV scrubbing on the focused seek bar: Left and Right move a target
   // (a tap 10 s, a hold faster) with the time and a thumbnail; it seeks
@@ -378,8 +398,36 @@ export function PlayerScreen() {
 
   const onTvKey = (key: TvKey) => {
     const side = key === 'left' || key === 'right';
-    // Every Left and Right counts toward a double press, also the press that shows the controls.
-    const double = side ? doublePress.press(key) : false;
+    // Every Left and Right counts toward a double press. With the controls hidden,
+    // a single press waits out the window before it shows them, so a double press
+    // seeks with the controls still hidden.
+    const hidden = isTV && !visible;
+    const gate = side ? tapGate.press(key, Date.now(), hidden) : { double: false, wait: false };
+    if (!side) tapGate.cancel();
+    const double = gate.double;
+    if (gate.wait) {
+      console.log(`[tvkeys] key=${key} wait (controls hidden)`);
+      if (revealTimer.current) clearTimeout(revealTimer.current);
+      revealTimer.current = setTimeout(() => {
+        revealTimer.current = null;
+        if (tapGate.due(Date.now())) {
+          console.log('[tvkeys] single press: show controls');
+          wake();
+        }
+      }, DOUBLE_PRESS_MS);
+      return;
+    }
+    if (double && hidden) {
+      // Seek with only the feedback bubble; the controls stay hidden.
+      const seconds = key === 'left' ? -DOUBLE_PRESS_SEEK : DOUBLE_PRESS_SEEK;
+      console.log(`[tvkeys] key=${key} double seek=${seconds} (controls hidden)`);
+      s.skip(seconds);
+      setRipple((r) => stackFeedback(r, seconds < 0 ? 'left' : 'right', seconds));
+      setPeek(true);
+      if (peekTimer.current) clearTimeout(peekTimer.current);
+      peekTimer.current = setTimeout(() => setPeek(false), PEEK_MS);
+      return;
+    }
     console.log(
       `[tvkeys] key=${key} double=${double} visible=${visible} bar=${barFocused} controls=${controlFocus.current} row=${focusRow.current.now} target=${scrubToRef.current}`,
     );
@@ -626,6 +674,23 @@ export function PlayerScreen() {
           </Animated.View>
         ) : null}
 
+        {/* TV, controls hidden: after a double press, a thin progress line with the times only. */}
+        {isTV && !visible && peek ? (
+          <Animated.View
+            entering={FadeIn.duration(motion.duration.fast)}
+            exiting={FadeOut.duration(motion.duration.slow)}
+            pointerEvents="none"
+            style={[styles.bottom, { paddingBottom: bottomPad, paddingLeft: sideInset, paddingRight: sideInset }]}>
+            <View style={styles.peekTrack}>
+              <View style={[styles.peekFill, { width: `${duration > 0 ? Math.min(100, (position / duration) * 100) : 0}%` }]} />
+            </View>
+            <View style={styles.peekTimes}>
+              <Text style={[styles.time, styles.peekShadow]}>{formatTime(position)}</Text>
+              <Text style={[styles.time, styles.peekShadow]}>{formatTime(-(Math.max(0, duration - position)))}</Text>
+            </View>
+          </Animated.View>
+        ) : null}
+
         {/* Controls */}
         <Animated.View style={[StyleSheet.absoluteFill, controlsStyle]} pointerEvents={visible ? 'box-none' : 'none'}>
           {/* TV: hidden controls are not mounted, so Select never presses an unseen button. */}
@@ -840,6 +905,9 @@ function PillButton({
   );
 }
 
+/** TV: how long the progress line stays after the last double press (ms). */
+const PEEK_MS = 1500;
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000000' },
   topScrim: { position: 'absolute', top: 0, left: 0, right: 0 },
@@ -863,6 +931,10 @@ const styles = StyleSheet.create({
   },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   times: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -spacing.xs },
+  peekTrack: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)', overflow: 'hidden' },
+  peekFill: { height: 4, backgroundColor: c.textOnMedia },
+  peekTimes: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
+  peekShadow: { textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } },
   time: { ...textStyle(type.mono), color: c.textOnMedia, fontVariant: ['tabular-nums'] },
   prompts: { position: 'absolute', alignItems: 'flex-end', left: spacing.lg },
   ripple: { position: 'absolute', top: '45%' },
