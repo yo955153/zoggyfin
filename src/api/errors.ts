@@ -28,7 +28,8 @@ export function describeError(e: unknown): DescribedError {
   const statusRaw = err.response?.status ?? err.status;
   const status = typeof statusRaw === 'number' ? statusRaw : undefined;
   const code = typeof err.code === 'string' ? err.code : undefined;
-  const message = typeof err.message === 'string' ? err.message : '';
+  // A Tauri command rejects with a plain string.
+  const message = typeof e === 'string' ? e : typeof err.message === 'string' ? err.message : '';
 
   if (code === 'ECONNABORTED' || code === 'ETIMEDOUT' || /timeout/i.test(message)) {
     return { kind: 'timeout', title: 'The server is slow to answer', message: 'The request took too long. Check the connection and try again.' };
@@ -52,4 +53,15 @@ export function describeError(e: unknown): DescribedError {
     return { kind: 'unknown', status, title: 'Request failed', message: `The server answered with HTTP ${status}.` };
   }
   return { kind: 'unknown', title: 'Request failed', message: message || 'Try again in a moment.' };
+}
+
+/**
+ * One line for a screen that has room for one (the player's error card):
+ * the title, but the error's own message when it is not a server or network
+ * error. "Request failed" alone does not say what went wrong.
+ */
+export function errorText(e: unknown): string {
+  const d = describeError(e);
+  const own = typeof e === 'string' ? e : typeof asErrorLike(e).message === 'string' ? (asErrorLike(e).message as string) : '';
+  return d.kind === 'unknown' && d.status === undefined && own.trim() ? own : d.title;
 }

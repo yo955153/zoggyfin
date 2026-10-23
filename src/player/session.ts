@@ -8,7 +8,7 @@ import * as Network from 'expo-network';
 import { AppState, type NativeEventSubscription } from 'react-native';
 
 import { getApi } from '@/api/client';
-import { describeError } from '@/api/errors';
+import { describeError, errorText } from '@/api/errors';
 import * as jf from '@/api/jellyfin';
 import { queryClient } from '@/api/query-client';
 import { queryKeys } from '@/api/query-keys';
@@ -248,7 +248,8 @@ class VideoSession {
       await this.load(id, item, request.queue ?? [], { startSeconds: start, autoplay: request.autoplay });
     } catch (e) {
       if (id !== this.loadId) return;
-      setPlayerState({ status: 'error', error: describeError(e).title });
+      console.warn('[player] play failed', e);
+      setPlayerState({ status: 'error', error: errorText(e) });
     }
   }
 
@@ -530,7 +531,8 @@ class VideoSession {
         forceStream: opts.forceStream,
       });
     } catch (e) {
-      if (id === this.loadId) setPlayerState({ status: 'error', error: describeError(e).title });
+      console.warn('[player] reload failed', e);
+      if (id === this.loadId) setPlayerState({ status: 'error', error: errorText(e) });
     }
   }
 

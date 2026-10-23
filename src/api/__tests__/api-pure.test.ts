@@ -1,5 +1,5 @@
 import { buildAuthHeader, withApiKey } from '../auth-header';
-import { describeError } from '../errors';
+import { describeError, errorText } from '../errors';
 import { normalizeLibraryQuery, queryKeys, type LibraryQuery } from '../query-keys';
 import { normalizeServerUrl, serverUrlCandidates } from '../server-url';
 
@@ -90,5 +90,23 @@ describe('describeError', () => {
     expect(describeError({ code: 'ECONNABORTED', message: 'timeout of 15000ms exceeded' }).kind).toBe('timeout');
     expect(describeError(new Error('boom')).message).toBe('boom');
     expect(describeError('weird').kind).toBe('unknown');
+  });
+
+  it('keeps the text of a thrown string (a Tauri command rejects with one)', () => {
+    expect(describeError('not a relative path: /x').message).toBe('not a relative path: /x');
+  });
+});
+
+describe('errorText', () => {
+  it('shows the own message of an error that is not from the server', () => {
+    expect(errorText(new Error('The downloaded file is missing. Download it again.'))).toBe('The downloaded file is missing. Download it again.');
+    expect(errorText('mpv is not running')).toBe('mpv is not running');
+  });
+
+  it('shows the title for server and network errors', () => {
+    expect(errorText({ response: { status: 404 }, message: 'Request failed with status code 404' })).toBe('Not found');
+    expect(errorText({ response: { status: 400 }, message: 'Request failed with status code 400' })).toBe('Request failed');
+    expect(errorText({ code: 'ERR_NETWORK', message: 'Network Error' })).toBe('Cannot reach the server');
+    expect(errorText({})).toBe('Request failed');
   });
 });
