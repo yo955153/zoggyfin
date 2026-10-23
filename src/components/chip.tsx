@@ -1,6 +1,7 @@
 import { Text } from 'react-native';
 
-import { createStyles, type AppTheme, font, iconSize, radius, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
+import { isTV } from '@/platform/tv';
+import { createStyles, type AppTheme, font, iconSize, radius, scaled, sizes, spacing, tvFocusBleed, type, useStyles, useTheme } from '@/theme';
 
 import { Icon, type IconName } from './icon';
 import { Touchable } from './touchable';
@@ -50,3 +51,12 @@ const makeStyles = createStyles((_: AppTheme) => ({
   },
   label: { ...font(type.subheadline), fontWeight: '500' as const },
 }));
+
+/**
+ * TV: room in a horizontal chip row (a clipping ScrollView) for the focus
+ * scale and ring of a chip: above, below and between the chips. Null elsewhere.
+ */
+export function chipRowTV(): { paddingVertical: number; gap: number } | null {
+  if (!isTV) return null;
+  return { paddingVertical: tvFocusBleed(scaled(sizes.chipHeight)), gap: spacing.xl };
+}

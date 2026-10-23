@@ -6,7 +6,7 @@ import type { SearchBarCommands } from 'react-native-screens';
 import { useSearch } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
 import { Button } from '@/components/button';
-import { Chip } from '@/components/chip';
+import { Chip, chipRowTV } from '@/components/chip';
 import { Icon } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
 import { ItemRow, RowHeader } from '@/components/item-row';
@@ -175,7 +175,7 @@ export default function SearchScreen() {
             horizontal
             showsHorizontalScrollIndicator={false}
             style={s.chips}
-            contentContainerStyle={[s.chipsContent, { paddingHorizontal: l.gutter }]}>
+            contentContainerStyle={[s.chipsContent, { paddingHorizontal: l.gutter }, chipRowTV()]}>
             {SEARCH_FILTERS.map((f) => (
               <Chip key={f.value} label={f.label} selected={filter === f.value} onPress={() => setFilter(f.value)} />
             ))}

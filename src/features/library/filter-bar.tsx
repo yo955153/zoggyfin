@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
 import { useFilters } from '@/api/queries';
-import { Chip } from '@/components/chip';
+import { Chip, chipRowTV } from '@/components/chip';
 import { OptionSheet } from '@/components/option-sheet';
 import { spacing, useLayout } from '@/theme';
 
@@ -27,7 +27,7 @@ export function FilterBar({ libraryId, itemTypes }: { libraryId: string; itemTyp
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.bar, { paddingHorizontal: l.gutter }]}
+        contentContainerStyle={[styles.bar, { paddingHorizontal: l.gutter }, chipRowTV()]}
         style={[styles.scroll, { marginHorizontal: -l.gutter }]}>
         <Chip
           label={sortLabel}

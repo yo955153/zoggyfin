@@ -7,17 +7,21 @@ import { DownloadBadge, downloadLabel } from '@/components/download-indicator';
 import { Icon } from '@/components/icon';
 import { useDownloadStatus } from '@/downloads';
 import { playedFraction, remainingLabel, subtitleFor } from '@/lib/format';
+import { isTV } from '@/platform/tv';
 import { createStyles,
   type AppTheme,
   font,
   iconSize,
   mediaColors,
+  motion,
   radius,
   scaled,
   scriptStyle,
   sizes,
   type,
   useStyles,
+  tv,
+  tvFocusBleed,
   useTheme,
 } from '@/theme';
 
@@ -91,7 +95,9 @@ export const Tile = memo(function Tile({
 
   return (
     <Touchable
-      kind="tile"
+      // A round tile (people, artists): press, hover and focus show on the circle only, not around the name.
+      kind={circle ? 'plain' : 'tile'}
+      ring={!circle}
       radius={r}
       onPress={() => onPress(item)}
       onLongPress={onLongPress ? () => onLongPress(item) : undefined}
@@ -100,9 +106,9 @@ export const Tile = memo(function Tile({
       accessibilityRole="button"
       accessibilityLabel={label}
       containerStyle={{ width }}>
-      {() => (
+      {({ pressed, hovered, focused }) => (
         <>
-          <View>
+          <View style={circle ? circleArt(focused, hovered) : undefined}>
             <ItemImage
               item={item}
               variant={shapeInfo.variant}
@@ -144,16 +150,18 @@ export const Tile = memo(function Tile({
                 <Text style={s.count}>{unplayed}</Text>
               </View>
             ) : null}
+            {circle ? <CircleFocus radius={r} pressed={pressed} hovered={hovered} focused={focused} /> : null}
           </View>
           {!titleOnArt && !artOnly ? (
             <>
               <Text
-                style={[s.title, circle && s.center, scriptStyle(titleText, circle ? s.center : s.title)]}
+                style={[s.title, circle && s.center, circle && isTV && { marginTop: tvFocusBleed(width) },
+                  circle && isTV && !focused && s.dim, scriptStyle(titleText, circle ? s.center : s.title)]}
                 numberOfLines={lines}>
                 {titleText}
               </Text>
               {sub ? (
-                <Text style={[s.meta, circle && s.center, scriptStyle(sub, circle ? s.center : s.meta)]} numberOfLines={1}>
+                <Text style={[s.meta, circle && s.center, circle && focused && s.metaFocused, scriptStyle(sub, circle ? s.center : s.meta)]} numberOfLines={1}>
                   {sub}
                 </Text>
               ) : null}
@@ -164,6 +172,47 @@ export const Tile = memo(function Tile({
     </Touchable>
   );
 });
+
+/** A round tile's art: TV grows it on focus; elsewhere it lifts a little on hover and focus. */
+function circleArt(focused: boolean, hovered: boolean) {
+  if (focused && isTV) return { transform: [{ scale: tv.focusScale }] };
+  if (focused || hovered) return { transform: [{ scale: motion.press.hoverScale }] };
+  return undefined;
+}
+
+/** The press and hover overlay and the focus ring of a round tile, on the circle only. */
+function CircleFocus({ radius: r, pressed, hovered, focused }: { radius: number; pressed: boolean; hovered: boolean; focused: boolean }) {
+  const { c } = useTheme();
+  const ringW = isTV ? tv.focusRingWidth : 2;
+  const gap = isTV ? tv.focusRingGap : 2;
+  return (
+    <>
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { borderRadius: r },
+          pressed ? { backgroundColor: mediaColors.pressOverlay } : hovered && !isTV ? { backgroundColor: mediaColors.hoverOverlay } : null,
+        ]}
+      />
+      {focused ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: -(gap + ringW),
+            left: -(gap + ringW),
+            right: -(gap + ringW),
+            bottom: -(gap + ringW),
+            borderRadius: r + gap + ringW,
+            borderWidth: ringW,
+            borderColor: isTV ? mediaColors.white : c.focusRing,
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
 
 function Progress({ fraction, inline }: { fraction: number; inline?: boolean }) {
   const s = useStyles(makeStyles);
@@ -189,6 +238,8 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   title: { ...font(type.tileTitle), color: c.text, marginTop: scaled(sizes.tileTitleGap) },
   meta: { ...font(type.caption1), color: c.text2, marginTop: sizes.tileMetaGap },
   center: { textAlign: 'center' as const },
+  dim: { color: c.text2 },
+  metaFocused: { color: c.text },
   artText: { overflow: 'hidden' as const, justifyContent: 'flex-end' as const, padding: scaled(sizes.progressInset) },
   onArtTitle: { ...font(type.tileTitle), fontSize: scaled(15), color: c.textOnMedia },
   onArtMeta: { ...font(type.caption1), color: c.textOnMediaSecondary, marginTop: sizes.tileMetaGap },

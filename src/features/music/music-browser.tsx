@@ -7,7 +7,7 @@ import { DEFAULT_MUSIC_OPTIONS, type MusicOptions, type MusicTab } from '@/api/j
 import { useMusicTab, usePlayedSongs } from '@/api/queries';
 import type { BaseItemDto, ItemSortBy } from '@/api/types';
 import { ItemActionSheet } from '@/components/action-sheet';
-import { Chip } from '@/components/chip';
+import { Chip, chipRowTV } from '@/components/chip';
 import { ItemGrid } from '@/components/item-grid';
 import { ItemRow } from '@/components/item-row';
 import { OptionSheet } from '@/components/option-sheet';
@@ -108,7 +108,7 @@ function SortBar({ tab, options, onChange }: { tab: MusicTab; options: MusicOpti
   const label = sorts.find((s) => s.value === options.sortBy)?.label ?? 'Name';
   return (
     <>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.bar, { paddingHorizontal: l.gutter }]}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.bar, { paddingHorizontal: l.gutter }, chipRowTV()]}>
         {sorts.length > 1 ? (
           <Chip label={label} icon="arrow.up.arrow.down" onPress={() => setOpen(true)} accessibilityLabel={`Sort by ${label}`} />
         ) : null}

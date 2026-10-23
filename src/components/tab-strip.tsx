@@ -2,7 +2,8 @@ import { type ComponentRef, useEffect, useRef, useState } from 'react';
 import { type LayoutChangeEvent, ScrollView, View } from 'react-native';
 import Animated, { Extrapolation, interpolate, interpolateColor, type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
-import { createStyles, type AppTheme, font, scaled, sizes, type, useLayout, useStyles, useTheme } from '@/theme';
+import { isTV } from '@/platform/tv';
+import { createStyles, type AppTheme, font, scaled, sizes, tv, type, useLayout, useStyles, useTheme } from '@/theme';
 
 import type { PagerTab } from './tab-pager-types';
 import { Touchable } from './touchable';
@@ -70,7 +71,8 @@ export function TabStrip({
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: l.gutter }}>
+        // TV: room above and below for the focus ring.
+        contentContainerStyle={{ paddingHorizontal: l.gutter, paddingVertical: isTV ? tv.focusRingWidth + tv.focusRingGap + 2 : 0 }}>
         <View style={s.inner}>
           {tabs.map((t, i) => (
             <Touchable
