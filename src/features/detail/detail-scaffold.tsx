@@ -345,7 +345,8 @@ export function DetailScaffold<Row>({
         ListHeaderComponent={header}
         ListFooterComponent={<View style={[s.page, s.footer, { width: pageWidth, paddingBottom: bottomPad }]}>{footer}</View>}
         contentInsetAdjustmentBehavior="never"
-        style={s.list}
+        // On a TV, react-native-tvos wraps a FlatList in a focus guide with no size, so a flex list collapses to 1 dp.
+        style={isTV ? [s.tvList, { height: l.height }] : s.list}
         scrollEventThrottle={16}
         refreshControl={
           pull.onRefresh && !isTV ? (
@@ -508,6 +509,7 @@ const styles = StyleSheet.create({
 const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
   flex: { flex: 1 },
   list: { flex: 1, backgroundColor: c.bg },
+  tvList: { backgroundColor: c.bg },
   page: { alignSelf: 'center' as const },
   body: { gap: spacing.lg },
   artBody: { alignItems: 'center' as const },
