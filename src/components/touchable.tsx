@@ -50,7 +50,7 @@ function pressScale(kind: TouchKind): number {
  * Press, hover and focus feedback for every control. Feedback starts on
  * press-in; the release settles with the `snappy` spring. Tiles lift on hover
  * and focus (scale + `raised` shadow); the focus ring is 2 pt `focusRing`
- * with a 2 pt gap. TV: a white ring with a glow and the focus scale; the
+ * with a 2 pt gap. TV: a white ring and the focus scale, no shadow; the
  * last focused control is remembered for the side menu (features/tv/focus).
  * Reduce Motion keeps the overlays and drops the scale.
  */
@@ -149,7 +149,8 @@ export function Touchable({
       accessibilityState={{ disabled: !!disabled, ...rest.accessibilityState }}
       style={[webPressable, disabled && styles.disabled, containerStyle]}
       {...rest}>
-      <Animated.View style={[inner, animated, lifted && t.shadow('raised'), isTV && showRing && styles.tvGlow]}>
+      {/* TV: no shadow; an elevation shadow under a scaling tile is slow on a TV stick. */}
+      <Animated.View style={[inner, animated, lifted && !isTV && t.shadow('raised')]}>
         {typeof children === 'function' ? children(state) : children}
         {kind === 'tile' || kind === 'button' || kind === 'icon' ? (
           <View
@@ -188,11 +189,4 @@ const styles = StyleSheet.create({
   pressOverlay: { backgroundColor: mediaColors.pressOverlay },
   hoverOverlay: { backgroundColor: mediaColors.hoverOverlay },
   ring: { position: 'absolute' },
-  // TV: a soft white glow around the focused control (10-foot focus).
-  tvGlow: {
-    shadowColor: mediaColors.white,
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
-  },
 });

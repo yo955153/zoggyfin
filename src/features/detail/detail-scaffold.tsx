@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
-import { type ReactElement, type ReactNode, useState } from 'react';
+import { type ReactElement, type ReactNode, useCallback, useState } from 'react';
 import { PixelRatio, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   interpolate,
@@ -23,6 +23,8 @@ import { Touchable } from '@/components/touchable';
 import { useItemActions } from '@/features/actions/use-item-actions';
 import { TogetherSheetHost, usePlayForEveryone, useTogetherEntry } from '@/features/together/together-sheet';
 import { buildImageUrl, imageSource } from '@/images/image-url';
+import type { FocusTarget } from '@/features/tv/focus';
+import { TvRowScroll } from '@/features/tv/shelf';
 import { formatClock, playedFraction } from '@/lib/format';
 import { isTV } from '@/platform/tv';
 import { usePlayer } from '@/player';
@@ -125,6 +127,16 @@ export function DetailScaffold<Row>({
   const pull = usePullRefresh(onRefresh);
   const scrollRef = useAnimatedRef<Animated.FlatList<Row>>();
   const offset = useScrollOffset(scrollRef);
+  // TV: a row that takes the focus scrolls to the upper third, so its tiles and focus ring show whole.
+  const scrollToRow = useCallback(
+    (row: FocusTarget | null) => {
+      row?.measureInWindow((_x, y) => {
+        const delta = y - l.height * 0.3;
+        if (Math.abs(delta) > 8) scrollRef.current?.scrollToOffset({ offset: Math.max(0, offset.get() + delta), animated: true });
+      });
+    },
+    [l.height, offset, scrollRef],
+  );
 
   const layout = heroLayout(item);
   const media = layout === 'backdrop' || layout === 'wide';
@@ -335,6 +347,7 @@ export function DetailScaffold<Row>({
           ),
         }}
       />
+      <TvRowScroll.Provider value={isTV ? scrollToRow : null}>
       <Animated.FlatList
         ref={scrollRef}
         data={rows ?? []}
@@ -354,6 +367,7 @@ export function DetailScaffold<Row>({
           ) : undefined
         }
       />
+      </TvRowScroll.Provider>
       <ItemActionSheet item={item} visible={sheet} onClose={() => setSheet(false)} />
       <TogetherSheetHost where="item" />
     </>

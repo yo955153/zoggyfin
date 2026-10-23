@@ -1,10 +1,11 @@
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useContext } from 'react';
+import { type ComponentRef, useCallback, useContext, useRef } from 'react';
 import { Text, View } from 'react-native';
 
 import type { BaseItemDto } from '@/api/types';
 import { Icon } from '@/components/icon';
 import { BillboardRows, showOnBillboard } from '@/features/tv/billboard';
+import { TvShelf } from '@/features/tv/shelf';
 import { useOpenItem } from '@/lib/navigation';
 import { createStyles, type AppTheme, font, iconSize, scaled, sizes, spacing, tvFocusBleed, type, useLayout, useStyles, useTheme } from '@/theme';
 
@@ -62,6 +63,7 @@ export function ItemRow({
   // TV Home: art-only tiles; the billboard above shows the focused one.
   const billboard = useContext(BillboardRows) && l.tv;
   const artOnly = billboard && !titleOnArt;
+  const section = useRef<ComponentRef<typeof View> | null>(null);
 
   const renderItem = useCallback(
     ({ item, index }: { item: BaseItemDto; index: number }) => (
@@ -75,12 +77,10 @@ export function ItemRow({
         subtitle={tileSubtitle ? tileSubtitle(item) : undefined}
         titleOnArt={titleOnArt}
         preferredFocus={preferredFocus && index === 0}
-        artOnly={artOnly}
-        onFocusItem={billboard ? showOnBillboard : undefined}
       />
       </View>
     ),
-    [width, shape, press, tileTitle, tileSubtitle, titleOnArt, preferredFocus, l.gap, artOnly, billboard],
+    [width, shape, press, tileTitle, tileSubtitle, titleOnArt, preferredFocus, l.gap],
   );
 
   if (error && !items?.length) {
@@ -97,7 +97,7 @@ export function ItemRow({
   // TV: room above and below for the focus scale and ring; a horizontal list clips at its edges.
   const padV = l.tv ? tvFocusBleed(tileHeight(shape, width, !titleOnArt && !artOnly)) : spacing.xs;
   return (
-    <View style={[s.section, { marginTop: l.sectionGap }]}>
+    <View ref={section} style={[s.section, { marginTop: l.sectionGap }]}>
       <RowHeader title={title} onSeeAll={onSeeAll} />
       {isLoading && !items ? (
         <Delayed>
@@ -110,6 +110,34 @@ export function ItemRow({
             ))}
           </View>
         </Delayed>
+      ) : l.tv ? (
+        <TvShelf
+          items={items ?? []}
+          keyOf={(it, i) => it.Id ?? String(i)}
+          tileWidth={width}
+          gap={l.gap}
+          gutter={l.gutter}
+          bleed={tvFocusBleed(width)}
+          padV={padV}
+          anchor={section}
+          renderTile={(item, index, onFocus) => (
+            <Tile
+              item={item}
+              width={width}
+              shape={shape}
+              onPress={press}
+              title={tileTitle?.(item)}
+              subtitle={tileSubtitle ? tileSubtitle(item) : undefined}
+              titleOnArt={titleOnArt}
+              preferredFocus={preferredFocus && index === 0}
+              artOnly={artOnly}
+              onFocusItem={(it) => {
+                if (billboard) showOnBillboard(it);
+                onFocus(index);
+              }}
+            />
+          )}
+        />
       ) : (
         <FlashList
           horizontal
@@ -138,7 +166,8 @@ export function RowHeader({ title, onSeeAll }: { title: string; onSeeAll?: () =>
       {onSeeAll ? <Icon name="chevron.right" size={scaled(iconSize.sm)} color={c.text3} weight="semibold" /> : null}
     </>
   );
-  if (!onSeeAll) return <View style={[s.header, { paddingHorizontal: l.gutter }]}>{text}</View>;
+  // TV: the header is not a focus stop; the D-pad goes from row to row (the side menu has Library).
+  if (!onSeeAll || l.tv) return <View style={[s.header, { paddingHorizontal: l.gutter }]}>{text}</View>;
   return (
     <View style={[s.headerWrap, { paddingHorizontal: l.gutter }]}>
       <Touchable

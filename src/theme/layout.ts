@@ -30,7 +30,7 @@ export const tv = {
   railItemHeight: 72,
   railIcon: 40,
   /** The Home billboard takes this share of the screen height. */
-  billboardFactor: 0.5,
+  billboardFactor: 0.4,
 } as const;
 
 export function tvScale(width: number): number {

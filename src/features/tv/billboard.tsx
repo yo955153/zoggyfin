@@ -16,6 +16,7 @@ import type { BaseItemDto } from '@/api/types';
 import { useImageServer } from '@/api/use-api';
 import { ItemImage } from '@/components/item-image';
 import { buildImageUrl, imageSource } from '@/images/image-url';
+import { resolveImage } from '@/images/resolve-image';
 import { episodeLabel, formatDuration } from '@/lib/format';
 import { useDebounced } from '@/lib/use-debounced';
 import {
@@ -47,7 +48,7 @@ export function showOnBillboard(item: BaseItemDto): void {
 }
 
 /** The pause before the billboard follows the focus (ms). */
-const FOLLOW_MS = 220;
+const FOLLOW_MS = 350;
 
 /** The billboard height for a window height. */
 export function billboardHeight(windowHeight: number): number {
@@ -80,16 +81,33 @@ export function Billboard() {
   const item = full.data?.Id === shown?.Id ? (full.data ?? shown) : shown;
   const height = billboardHeight(l.height);
   const width = l.contentWidth;
+  const artW = Math.round(width * 0.72);
+  const server = useImageServer();
+  // One backdrop at the size it shows (capped), so a focus move loads a small image.
+  const scale = Math.min(PixelRatio.get(), 1.5);
+  const art = item ? resolveImage(item, 'backdrop', { width: Math.round(artW * scale), height: Math.round(height * scale) }, server) : null;
 
   if (!item) return <View style={{ height }} />;
   const title = (item.Type === 'Episode' ? item.SeriesName : null) ?? item.Name ?? '';
   const meta = metaLine(item);
   return (
     <View style={[s.root, { height }]} accessibilityLiveRegion="polite">
-      <Animated.View key={item.Id} entering={FadeIn.duration(motion.duration.base)} style={StyleSheet.absoluteFill}>
-        <View style={[s.art, { width: width * 0.72, height }]}>
-          <ItemImage item={item} variant="backdrop" width={width * 0.72} aspectRatio={(width * 0.72) / height} rounded={0} hideArtTitle hairline={false} />
-        </View>
+      {/* No key: the old backdrop stays until the new one has loaded, then cross-fades. */}
+      <View style={[s.art, { width: artW, height }]}>
+        {art?.kind === 'remote' ? (
+          <Image
+            source={imageSource(art.uri, server)}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={motion.duration.base}
+            cachePolicy="memory-disk"
+            priority="high"
+          />
+        ) : (
+          <ItemImage item={item} variant="backdrop" width={artW} aspectRatio={artW / height} rounded={0} hideArtTitle hairline={false} />
+        )}
+      </View>
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {/* The art fades into the page on the left and at the bottom. */}
         <LinearGradient
           colors={[c.bg, withAlpha(c.bg, 0.85), withAlpha(c.bg, 0)]}
@@ -103,19 +121,19 @@ export function Billboard() {
           locations={[0.6, 1]}
           style={StyleSheet.absoluteFill}
         />
-        <View style={[s.text, { left: l.gutter, width: width * 0.46, bottom: spacing.lg }]}>
-          <Title item={item} title={title} />
-          {meta ? (
-            <Text style={s.meta} numberOfLines={1}>
-              {meta}
-            </Text>
-          ) : null}
-          {item.Overview ? (
-            <Text style={[s.overview, scriptStyle(item.Overview, s.overview, true)]} numberOfLines={3}>
-              {item.Overview}
-            </Text>
-          ) : null}
-        </View>
+      </View>
+      <Animated.View key={item.Id} entering={FadeIn.duration(motion.duration.fast)} style={[s.text, { left: l.gutter, width: width * 0.46, bottom: spacing.md }]}>
+        <Title item={item} title={title} />
+        {meta ? (
+          <Text style={s.meta} numberOfLines={1}>
+            {meta}
+          </Text>
+        ) : null}
+        {item.Overview ? (
+          <Text style={[s.overview, scriptStyle(item.Overview, s.overview, true)]} numberOfLines={2}>
+            {item.Overview}
+          </Text>
+        ) : null}
       </Animated.View>
     </View>
   );
@@ -133,7 +151,7 @@ function Title({ item, title }: { item: BaseItemDto; title: string }) {
       : null;
   const uri =
     logo && server
-      ? buildImageUrl(server, { itemId: logo.id, type: 'Logo', tag: logo.tag, width: scaled(sizes.logoMaxWidth * 1.4) * PixelRatio.get() })
+      ? buildImageUrl(server, { itemId: logo.id, type: 'Logo', tag: logo.tag, width: scaled(sizes.logoMaxWidth) * PixelRatio.get() })
       : null;
   if (uri && failed !== uri) {
     return (
@@ -152,9 +170,9 @@ function Title({ item, title }: { item: BaseItemDto; title: string }) {
 const makeStyles = createStyles(({ c }: AppTheme) => ({
   root: { overflow: 'hidden' as const },
   art: { position: 'absolute' as const, top: 0, right: 0 },
-  text: { position: 'absolute' as const, gap: spacing.sm },
-  title: { ...font(type.display), color: c.text },
-  logoBox: { width: scaled(sizes.logoMaxWidth * 1.4), height: scaled(sizes.logoMaxHeight * 1.2) },
+  text: { position: 'absolute' as const, gap: spacing.xs },
+  title: { ...font(type.title1), color: c.text },
+  logoBox: { width: scaled(sizes.logoMaxWidth), height: scaled(sizes.logoMaxHeight * 0.8) },
   logo: { width: '100%' as const, height: '100%' as const },
   meta: { ...font(type.headline), color: c.text2 },
   overview: { ...font(type.callout), color: c.text },
