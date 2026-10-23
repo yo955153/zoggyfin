@@ -40,13 +40,40 @@ const TV_EVENT_KEYS: Record<string, TvKey> = {
   fastForward: 'fastForward',
 };
 
+const TV_LONG_KEYS: Record<string, TvKey> = {
+  longLeft: 'left',
+  longRight: 'right',
+  longUp: 'up',
+  longDown: 'down',
+  longSelect: 'select',
+  longPlayPause: 'playPause',
+  longRewind: 'rewind',
+  longFastForward: 'fastForward',
+};
+
+/** A press of a key, or the start or end of a held key. */
+export interface TvKeyEvent {
+  key: TvKey;
+  phase: 'press' | 'holdStart' | 'holdEnd';
+}
+
 /**
- * The key of a react-native-tvos remote event. Android sends a key-down
- * (eventKeyAction 0) and a key-up (1) for each press: only the key-down counts.
+ * A react-native-tvos remote event as a key press or hold.
+ *
+ * Android TV (ReactAndroidHWInputDeviceHelper) sends a press as its key-up
+ * (eventKeyAction 1); key-downs come only behind a feature flag, so a
+ * key-down is not counted (no double count when the flag is on). A key held
+ * over 300 ms sends one `longLeft` (etc.) key-down and, on release, a
+ * `longLeft` key-up, and no plain event. tvOS sends one event (action -1).
  */
-export function tvKeyFromEvent(e: { eventType?: string; eventKeyAction?: number | string | null }): TvKey | null {
-  if (Number(e.eventKeyAction) === 1) return null;
-  return (e.eventType && TV_EVENT_KEYS[e.eventType]) || null;
+export function tvKeyFromEvent(e: { eventType?: string; eventKeyAction?: number | string | null }): TvKeyEvent | null {
+  const action = e.eventKeyAction === null || e.eventKeyAction === undefined ? -1 : Number(e.eventKeyAction);
+  const type = e.eventType ?? '';
+  const held = TV_LONG_KEYS[type];
+  if (held) return { key: held, phase: action === 1 ? 'holdEnd' : 'holdStart' };
+  const key = TV_EVENT_KEYS[type];
+  if (!key || action === 0) return null;
+  return { key, phase: 'press' };
 }
 
 const WEB_KEYS: Record<string, TvKey> = {

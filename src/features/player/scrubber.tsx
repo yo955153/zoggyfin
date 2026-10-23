@@ -13,6 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { TvFocusGuide } from '@/features/tv/focus';
 import { isTV } from '@/platform/tv';
 import { type Chapter, chapterAt, chapterMarks, formatTime, spokenTime, type Trickplay, trickplaySheetUrl, trickplayTile } from '@/player/timeline';
 
@@ -196,7 +197,8 @@ export function Scrubber({
         />
       ) : null}
       {isTV ? (
-        // TV: a focus stop. Left and Right scrub (player-screen), Select seeks.
+        // TV: a focus stop. Left and Right scrub (player-screen) and never move the focus off it.
+        <TvFocusGuide trapHorizontal>
         <Pressable
           style={styles.hit}
           onLayout={onLayout}
@@ -216,6 +218,7 @@ export function Scrubber({
           onPress={onTvSelect}>
           {bar}
         </Pressable>
+        </TvFocusGuide>
       ) : (
       <GestureDetector gesture={pan}>
         <View

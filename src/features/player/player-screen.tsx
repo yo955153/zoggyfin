@@ -171,7 +171,7 @@ export function PlayerScreen() {
   // Auto-hide after 3 s while playing; never while paused, scrubbing or with a sheet open.
   useEffect(() => {
     if (!visible || !playing || scrubbing || sheet) return;
-    const t = setTimeout(() => setVisible(false), player.autoHideMs);
+    const t = setTimeout(() => setVisible(false), isTV ? 4000 : player.autoHideMs);
     return () => clearTimeout(t);
   }, [visible, playing, scrubbing, sheet, poke]);
 
@@ -266,58 +266,104 @@ export function PlayerScreen() {
   // moves as usual); a double press also seeks 10 s (player/tv-keys.ts).
   const doublePress = useRef(createDoublePress()).current;
 
-  // TV scrubbing: with the seek bar focused, Left and Right move a target
-  // (faster while held); Select or a short pause seeks there, Back cancels.
+  // TV scrubbing on the focused seek bar: Left and Right move a target
+  // (a tap 10 s, a hold faster) with the time and a thumbnail; it seeks
+  // 800 ms after the last press, or at once on Select. Back cancels it.
+  // Left and Right never move the focus off the bar; Up leaves it.
+  // Fallback: controls shown and no control has the focus: Left and Right scrub.
   const [barFocused, setBarFocused] = useState(false);
-  const [scrubTo, setScrubTo] = useState<number | null>(null);
+  const [scrubTo, setScrubToState] = useState<number | null>(null);
+  const scrubToRef = useRef<number | null>(null);
+  const setScrubTo = (v: number | null) => {
+    scrubToRef.current = v;
+    setScrubToState(v);
+  };
+  const controlFocus = useRef(0);
+  const trackFocus = useCallback((on: boolean) => {
+    controlFocus.current = Math.max(0, controlFocus.current + (on ? 1 : -1));
+  }, []);
+  // Hidden controls are unmounted, maybe with no blur: start the count again.
+  useEffect(() => {
+    if (!visible) controlFocus.current = 0;
+  }, [visible]);
   const scrubRun = useRef<ScrubRun>(NO_RUN);
   const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const clearScrubTimer = () => {
     if (scrubTimer.current) clearTimeout(scrubTimer.current);
     scrubTimer.current = null;
   };
-  const commitScrub = (to: number | null) => {
+  const stopHold = () => {
+    if (holdTimer.current) clearInterval(holdTimer.current);
+    holdTimer.current = null;
+  };
+  const endScrub = () => {
     clearScrubTimer();
+    stopHold();
     scrubRun.current = NO_RUN;
     setScrubTo(null);
     setScrubbing(false);
+  };
+  const commitScrub = () => {
+    const to = scrubToRef.current;
+    endScrub();
     if (to !== null) s.seekTo(to);
     wake();
+    console.log(`[tvkeys] scrub commit to=${to}`);
   };
   const cancelScrub = () => {
-    clearScrubTimer();
-    scrubRun.current = NO_RUN;
-    setScrubTo(null);
-    setScrubbing(false);
+    endScrub();
     wake();
+    console.log('[tvkeys] scrub cancel');
   };
-  useEffect(() => () => {
-    if (scrubTimer.current) clearTimeout(scrubTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (scrubTimer.current) clearTimeout(scrubTimer.current);
+      if (holdTimer.current) clearInterval(holdTimer.current);
+    },
+    [],
+  );
   const scrub = (dir: -1 | 1) => {
     const r = nextRun(scrubRun.current, dir, Date.now());
     scrubRun.current = r.run;
     // A held key repeats fast: only about 7 steps a second move the target.
     if (!r.apply) return;
-    const from = scrubTo ?? playerState().position;
+    const from = scrubToRef.current ?? playerState().position;
     const to = scrubTarget(from, scrubRun.current, playerState().duration);
     setScrubTo(to);
     setScrubbing(true);
     wake();
+    console.log(`[tvkeys] scrub dir=${dir} to=${to}`);
     clearScrubTimer();
-    scrubTimer.current = setTimeout(() => commitScrub(to), SCRUB_COMMIT_MS);
+    scrubTimer.current = setTimeout(commitScrub, SCRUB_COMMIT_MS);
+  };
+  /** Left and Right scrub: the bar has the focus, or no control has it. */
+  const scrubsNow = () => isTV && visible && status !== 'error' && (barFocused || controlFocus.current <= 0);
+
+  const onTvHold = (key: TvKey, start: boolean) => {
+    if (key !== 'left' && key !== 'right') return;
+    if (!start) {
+      stopHold();
+      return;
+    }
+    if (!scrubsNow()) return;
+    const dir = key === 'left' ? -1 : 1;
+    stopHold();
+    scrub(dir);
+    holdTimer.current = setInterval(() => scrub(dir), 150);
   };
 
   const onTvKey = (key: TvKey) => {
-    if (barFocused && visible && (key === 'left' || key === 'right')) {
+    console.log(`[tvkeys] key=${key} visible=${visible} bar=${barFocused} controls=${controlFocus.current} target=${scrubToRef.current}`);
+    if ((key === 'left' || key === 'right') && scrubsNow()) {
       scrub(key === 'left' ? -1 : 1);
       return;
     }
-    if (key === 'back' && scrubTo !== null) {
+    if (key === 'back' && scrubToRef.current !== null) {
       cancelScrub();
       return;
     }
-    const double = key === 'left' || key === 'right' ? doublePress.press(key) : false;
+  const double = key === 'left' || key === 'right' ? doublePress.press(key) : false;
     const action = playerKeyAction(key, double);
     switch (action.type) {
       case 'seek':
@@ -342,7 +388,9 @@ export function PlayerScreen() {
         wake();
         break;
       case 'close':
+        // TV (Netflix style): Back hides the controls first; Back with them hidden leaves the player.
         if (sheet) setSheet(null);
+        else if (isTV && visible) setVisible(false);
         else closePlayer();
         break;
       case 'wake':
@@ -353,8 +401,11 @@ export function PlayerScreen() {
     }
   };
   useTvRemote(!sheet, (e) => {
-    const key = tvKeyFromEvent(e);
-    if (key) onTvKey(key);
+    console.log(`[tvkeys] event type=${e.eventType} action=${String(e.eventKeyAction)} tag=${String(e.tag)}`);
+    const ev = tvKeyFromEvent(e);
+    if (!ev) return;
+    if (ev.phase === 'press') onTvKey(ev.key);
+    else onTvHold(ev.key, ev.phase === 'holdStart');
   });
   // Back closes the player (a sheet first). Phones keep the system back (minimize).
   useTvBack(isNativeTV, () => onTvKey('back'));
@@ -546,7 +597,7 @@ export function PlayerScreen() {
           <LinearGradient colors={player.bottomScrim} style={[styles.bottomScrim, { height: bottomPad + 180 }]} pointerEvents="none" />
 
           <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm, paddingLeft: sideInset, paddingRight: sideInset }]} pointerEvents="box-none">
-            <RoundButton icon="xmark" label="Close player" size={player.closeSize} glyph={iconSize.sm} onPress={closePlayer} />
+            <RoundButton onFocusChange={trackFocus} icon="xmark" label="Close player" size={player.closeSize} glyph={iconSize.sm} onPress={closePlayer} />
             <View style={styles.titleBlock}>
               <Text style={styles.title} numberOfLines={1}>
                 {title}
@@ -559,14 +610,14 @@ export function PlayerScreen() {
             </View>
             <Glass style={styles.pill}>
               <AirPlayButton onOpen={wake} />
-              {s.pipSupported ? <PillButton icon="pip.enter" label="Picture in Picture" onPress={() => s.startPip()} /> : null}
+              {s.pipSupported ? <PillButton onFocusChange={trackFocus} icon="pip.enter" label="Picture in Picture" onPress={() => s.startPip()} /> : null}
               {togetherAvailable ? (
-                <PillButton icon="person.2" label="Watch together" onPress={() => openTogetherSheet('player', null)} />
+                <PillButton onFocusChange={trackFocus} icon="person.2" label="Watch together" onPress={() => openTogetherSheet('player', null)} />
               ) : null}
-              <PillButton icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} />
-              <PillButton icon="gearshape" label="Quality and speed" onPress={() => setSheet('settings')} />
+              <PillButton onFocusChange={trackFocus} icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} />
+              <PillButton onFocusChange={trackFocus} icon="gearshape" label="Quality and speed" onPress={() => setSheet('settings')} />
               {Platform.OS === 'web' ? (
-                <PillButton icon="arrow.up.left.and.arrow.down.right" label="Full screen" onPress={() => s.toggleFullscreen(null)} />
+                <PillButton onFocusChange={trackFocus} icon="arrow.up.left.and.arrow.down.right" label="Full screen" onPress={() => s.toggleFullscreen(null)} />
               ) : null}
             </Glass>
           </View>
@@ -575,6 +626,7 @@ export function PlayerScreen() {
           {!scrubbing && status !== 'error' ? (
             <View style={styles.center} pointerEvents="box-none">
               <RoundButton
+                onFocusChange={trackFocus}
                 icon={skipIcon('back', settings.skipBackSeconds)}
                 label={`Back ${settings.skipBackSeconds} seconds`}
                 size={player.skipSize}
@@ -586,6 +638,7 @@ export function PlayerScreen() {
                 <SkipNumber seconds={settings.skipBackSeconds} />
               </RoundButton>
               <RoundButton
+                onFocusChange={trackFocus}
                 icon={loading ? undefined : showsPause ? 'pause.fill' : 'play.fill'}
                 label={showsPause ? 'Pause' : 'Play'}
                 size={player.playSize}
@@ -599,6 +652,7 @@ export function PlayerScreen() {
                 {loading ? <ActivityIndicator color={c.textOnMedia} size="large" /> : null}
               </RoundButton>
               <RoundButton
+                onFocusChange={trackFocus}
                 icon={skipIcon('forward', settings.skipForwardSeconds)}
                 label={`Forward ${settings.skipForwardSeconds} seconds`}
                 size={player.skipSize}
@@ -632,9 +686,17 @@ export function PlayerScreen() {
                 tvTarget={scrubTo}
                 onTvFocus={(on) => {
                   setBarFocused(on);
-                  if (!on && scrubTo !== null) commitScrub(scrubTo);
+                  console.log(`[tvkeys] bar focus=${on}`);
+                  if (!on && scrubToRef.current !== null) commitScrub();
                 }}
-                onTvSelect={() => commitScrub(scrubTo)}
+                onTvSelect={() => {
+                  // Select seeks to a pending target, or plays and pauses.
+                  if (scrubToRef.current !== null) commitScrub();
+                  else {
+                    s.togglePlay();
+                    wake();
+                  }
+                }}
                 onScrubbing={(on) => {
                   setScrubbing(on);
                   if (on) wake();
@@ -706,10 +768,22 @@ function SkipNumber({ seconds }: { seconds: number }) {
   );
 }
 
-function PillButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+function PillButton({
+  icon,
+  label,
+  onPress,
+  onFocusChange,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  onFocusChange?: (focused: boolean) => void;
+}) {
   return (
     <Pressable
       onPress={onPress}
+      onFocus={() => onFocusChange?.(true)}
+      onBlur={() => onFocusChange?.(false)}
       accessibilityRole="button"
       accessibilityLabel={label}
       style={({ pressed, hovered, focused }: { pressed: boolean; hovered?: boolean; focused?: boolean }) => [

@@ -89,10 +89,17 @@ describe('player key actions', () => {
 });
 
 describe('remote events', () => {
-  it('counts the key-down and drops the key-up', () => {
-    expect(tvKeyFromEvent({ eventType: 'left', eventKeyAction: 0 })).toBe('left');
-    expect(tvKeyFromEvent({ eventType: 'left', eventKeyAction: 1 })).toBeNull();
-    expect(tvKeyFromEvent({ eventType: 'playPause' })).toBe('playPause');
+  it('counts a press on its key-up, as Android TV sends it', () => {
+    expect(tvKeyFromEvent({ eventType: 'left', eventKeyAction: 1 })).toEqual({ key: 'left', phase: 'press' });
+    // A key-down (only behind a feature flag) is not counted twice.
+    expect(tvKeyFromEvent({ eventType: 'left', eventKeyAction: 0 })).toBeNull();
+    // tvOS: one event with no action.
+    expect(tvKeyFromEvent({ eventType: 'playPause' })).toEqual({ key: 'playPause', phase: 'press' });
+  });
+
+  it('reads a held key as a start and an end', () => {
+    expect(tvKeyFromEvent({ eventType: 'longRight', eventKeyAction: 0 })).toEqual({ key: 'right', phase: 'holdStart' });
+    expect(tvKeyFromEvent({ eventType: 'longRight', eventKeyAction: 1 })).toEqual({ key: 'right', phase: 'holdEnd' });
   });
 
   it('ignores events the player does not use', () => {
