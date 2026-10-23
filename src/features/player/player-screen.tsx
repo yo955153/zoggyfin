@@ -295,7 +295,10 @@ export function PlayerScreen() {
     if (scrubTimer.current) clearTimeout(scrubTimer.current);
   }, []);
   const scrub = (dir: -1 | 1) => {
-    scrubRun.current = nextRun(scrubRun.current, dir, Date.now());
+    const r = nextRun(scrubRun.current, dir, Date.now());
+    scrubRun.current = r.run;
+    // A held key repeats fast: only about 7 steps a second move the target.
+    if (!r.apply) return;
     const from = scrubTo ?? playerState().position;
     const to = scrubTarget(from, scrubRun.current, playerState().duration);
     setScrubTo(to);

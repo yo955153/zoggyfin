@@ -1,6 +1,7 @@
 import { type Href, useRouter, useSegments } from 'expo-router';
 import { useCallback } from 'react';
 
+import { seedItem } from '@/api/item-seed';
 import type { BaseItemDto } from '@/api/types';
 
 /** Tab stacks that hold the shared detail routes. */
@@ -41,7 +42,10 @@ export function useOpenItem() {
   return useCallback(
     (item: BaseItemDto) => {
       const href = itemHref(group, item);
-      if (href) router.push(href);
+      if (!href) return;
+      // The page renders at once from what the tile knew.
+      seedItem(item);
+      router.push(href);
     },
     [router, group],
   );

@@ -6,6 +6,7 @@ import {
   nextRun,
   playerKeyAction,
   registerPress,
+  SCRUB_MIN_GAP_MS,
   SCRUB_RUN_MS,
   scrubStep,
   scrubTarget,
@@ -122,28 +123,51 @@ describe('seek feedback', () => {
 });
 
 describe('scrubbing with the remote', () => {
-  it('starts with 10 s steps and speeds up while a key is held', () => {
+  /** Holds a key: a repeat every `every` ms for `ms`; returns the steps that moved the target. */
+  function hold(ms: number, every: number): { t: number; step: number }[] {
     let run = NO_RUN;
-    const steps: number[] = [];
-    for (let i = 0; i < 12; i++) {
-      run = nextRun(run, 1, i * 100);
-      steps.push(scrubStep(run.count));
+    const steps: { t: number; step: number }[] = [];
+    for (let t = 0; t <= ms; t += every) {
+      const r = nextRun(run, 1, t);
+      run = r.run;
+      if (r.apply) steps.push({ t, step: scrubStep(run.at - run.start) });
     }
-    expect(steps.slice(0, 3)).toEqual([10, 10, 10]);
-    expect(steps[4]).toBe(30);
-    expect(steps[11]).toBe(60);
+    return steps;
+  }
+
+  it('moves a single tap exactly 10 s', () => {
+    const r = nextRun(NO_RUN, 1, 1000);
+    expect(r.apply).toBe(true);
+    expect(scrubTarget(100, r.run, 1000)).toBe(110);
+  });
+
+  it('keeps 10 s steps for 1.5 s of hold, then 30 s, and 60 s only after 4 s', () => {
+    const steps = hold(5000, 50);
+    const stepAt = (ms: number) => [...steps].reverse().find((x) => x.t <= ms)?.step;
+    expect(steps.filter((x) => x.t < 1500).every((x) => x.step === 10)).toBe(true);
+    expect(stepAt(2000)).toBe(30);
+    expect(stepAt(3900)).toBe(30);
+    expect(stepAt(5000)).toBe(60);
+    // Steps are at least SCRUB_MIN_GAP_MS apart.
+    expect(steps.every((x, i) => i === 0 || x.t - (steps[i - 1]?.t ?? 0) >= SCRUB_MIN_GAP_MS)).toBe(true);
+  });
+
+  it('applies at most about 7 steps a second, however fast the remote repeats', () => {
+    expect(hold(1000, 20).length).toBeLessThanOrEqual(8);
+    expect(hold(1000, 20).length).toBeGreaterThanOrEqual(6);
   });
 
   it('starts a new run after a pause or a change of direction', () => {
-    const a = nextRun(nextRun(NO_RUN, 1, 0), 1, 100);
-    expect(a.count).toBe(2);
-    expect(nextRun(a, 1, 100 + SCRUB_RUN_MS + 1).count).toBe(1);
-    expect(nextRun(a, -1, 150)).toMatchObject({ dir: -1, count: 1 });
+    const a = nextRun(nextRun(NO_RUN, 1, 0).run, 1, 300).run;
+    expect(a.start).toBe(0);
+    expect(nextRun(a, 1, 300 + SCRUB_RUN_MS + 1).run.start).toBe(300 + SCRUB_RUN_MS + 1);
+    expect(nextRun(a, -1, 350).run).toMatchObject({ dir: -1, start: 350 });
   });
 
   it('keeps the target inside the video', () => {
-    expect(scrubTarget(5, { dir: -1, count: 1, at: 0 }, 100)).toBe(0);
-    expect(scrubTarget(95, { dir: 1, count: 1, at: 0 }, 100)).toBe(100);
-    expect(scrubTarget(50, { dir: 1, count: 1, at: 0 }, 100)).toBe(60);
+    const tap = (dir: -1 | 1) => ({ dir, start: 0, at: 0, applied: 0 });
+    expect(scrubTarget(5, tap(-1), 100)).toBe(0);
+    expect(scrubTarget(95, tap(1), 100)).toBe(100);
+    expect(scrubTarget(50, tap(1), 100)).toBe(60);
   });
 });

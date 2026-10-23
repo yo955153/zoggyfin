@@ -165,32 +165,42 @@ export function stackFeedback(prev: SeekFeedback | null, side: 'left' | 'right',
 /** The scrub seeks this long after the last Left or Right press (ms). Select seeks at once. */
 export const SCRUB_COMMIT_MS = 800;
 
-/** Presses closer than this (ms) in the same direction are one run, and the step grows. */
+/** Presses closer than this (ms) in the same direction are one run (a held key). */
 export const SCRUB_RUN_MS = 600;
+
+/** At most one step per this long (ms), whatever the remote's key-repeat rate: about 7 a second. */
+export const SCRUB_MIN_GAP_MS = 140;
 
 /** A run of Left or Right presses on the seek bar (a held key repeats). */
 export interface ScrubRun {
   dir: -1 | 0 | 1;
-  count: number;
+  /** When the run began (ms). */
+  start: number;
+  /** The last press (ms). */
   at: number;
+  /** The last press that moved the target (ms). */
+  applied: number;
 }
 
-export const NO_RUN: ScrubRun = { dir: 0, count: 0, at: 0 };
+export const NO_RUN: ScrubRun = { dir: 0, start: 0, at: 0, applied: 0 };
 
-/** The step for the nth press of a run (s): 10 s, then 30 s, then 60 s. */
-export function scrubStep(count: number): number {
-  if (count < 4) return 10;
-  if (count < 10) return 30;
+/** The step for a key held this long (ms): 10 s for 1.5 s, then 30 s, and 60 s after 4 s. A tap is 10 s. */
+export function scrubStep(heldMs: number): number {
+  if (heldMs < 1500) return 10;
+  if (heldMs < 4000) return 30;
   return 60;
 }
 
-export function nextRun(run: ScrubRun, dir: -1 | 1, now: number): ScrubRun {
-  if (run.dir === dir && now - run.at >= 0 && now - run.at <= SCRUB_RUN_MS) return { dir, count: run.count + 1, at: now };
-  return { dir, count: 1, at: now };
+/** Records a press. `apply` is false for a repeat that comes too soon after the last step. */
+export function nextRun(run: ScrubRun, dir: -1 | 1, now: number): { run: ScrubRun; apply: boolean } {
+  const same = run.dir === dir && now - run.at >= 0 && now - run.at <= SCRUB_RUN_MS;
+  if (!same) return { run: { dir, start: now, at: now, applied: now }, apply: true };
+  const apply = now - run.applied >= SCRUB_MIN_GAP_MS;
+  return { run: { dir, start: run.start, at: now, applied: apply ? now : run.applied }, apply };
 }
 
 /** The new scrub target: one step of the run from `from`, inside the video. */
 export function scrubTarget(from: number, run: ScrubRun, duration: number): number {
-  const to = from + run.dir * scrubStep(run.count);
+  const to = from + run.dir * scrubStep(run.at - run.start);
   return Math.min(Math.max(0, to), duration > 0 ? duration : to);
 }

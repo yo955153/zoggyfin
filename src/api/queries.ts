@@ -2,11 +2,13 @@
  * Query hooks. Each one pairs a key from `queryKeys` with a function from
  * `jellyfin.ts`. Screens use these and nothing lower.
  */
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { downloadedChildren, downloadedItem, serverOrLocal } from '@/downloads';
 
 import * as jf from './jellyfin';
+import type { BaseItemDto } from './types';
 import { type LibraryQuery, queryKeys } from './query-keys';
 import { useApi } from './use-api';
 
@@ -32,14 +34,51 @@ export function useLatest(parentId: string) {
   return useQuery({ queryKey: queryKeys.latest(scope, parentId), queryFn: () => jf.getLatest(api, userId, parentId) });
 }
 
-export function useItem(itemId: string | undefined) {
+/** `seed`: what a tile already knew about the item, shown until the full item arrives. */
+export function useItem(itemId: string | undefined, seed?: BaseItemDto) {
   const { api, userId, scope } = useApi();
   return useQuery({
     queryKey: queryKeys.item(scope, itemId ?? ''),
     // With no server, a downloaded item still opens from its saved facts.
     queryFn: () => serverOrLocal(() => jf.getItem(api, userId, itemId ?? ''), () => downloadedItem(itemId ?? '')),
     enabled: !!itemId,
+    placeholderData: seed && seed.Id === itemId ? seed : undefined,
   });
+}
+
+/** How long a prefetched item counts as fresh (ms). */
+const PREFETCH_FRESH_MS = 60_000;
+
+/**
+ * TV: loads an item shortly after its tile takes the focus, so Select opens
+ * a page whose data is already there. A focus that moves on within `delayMs`
+ * loads nothing.
+ */
+export function usePrefetchItemOnFocus(delayMs = 300): (item: BaseItemDto) => void {
+  const { api, userId, scope } = useApi();
+  const qc = useQueryClient();
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  return useCallback(
+    (item: BaseItemDto) => {
+      const id = item.Id;
+      if (!id) return;
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        void qc.prefetchQuery({
+          queryKey: queryKeys.item(scope, id),
+          queryFn: () => serverOrLocal(() => jf.getItem(api, userId, id), () => downloadedItem(id)),
+          staleTime: PREFETCH_FRESH_MS,
+        });
+      }, delayMs);
+    },
+    [api, userId, scope, qc, delayMs],
+  );
 }
 
 export function useLibrary(q: LibraryQuery) {

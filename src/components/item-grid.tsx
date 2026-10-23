@@ -2,6 +2,7 @@ import { FlashList } from '@shopify/flash-list';
 import { type ReactElement, useCallback, useState } from 'react';
 import { ActivityIndicator, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 
+import { usePrefetchItemOnFocus } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
 import { useOpenItem } from '@/lib/navigation';
 import { usePullRefresh } from '@/lib/use-pull-refresh';
@@ -48,6 +49,7 @@ export function ItemGrid({
   const openItem = useOpenItem();
   const pull = usePullRefresh(onRefresh);
   const open = onPress ?? openItem;
+  const prefetch = usePrefetchItemOnFocus();
   const [measured, setMeasured] = useState(0);
   const width = measured || l.contentWidth;
   const g = gridLayout(shape, width, l.tv, l.width);
@@ -69,10 +71,17 @@ export function ItemGrid({
           paddingLeft: ((index % columns) * gap) / columns,
           paddingRight: ((columns - 1 - (index % columns)) * gap) / columns,
         }}>
-        <Tile item={item} width={tileWidth} shape={shape} onPress={open} preferredFocus={l.tv && index === 0} />
+        <Tile
+          item={item}
+          width={tileWidth}
+          shape={shape}
+          onPress={open}
+          preferredFocus={l.tv && index === 0}
+          onFocusItem={l.tv ? prefetch : undefined}
+        />
       </View>
     ),
-    [columns, gap, tileWidth, shape, open, l.tv],
+    [columns, gap, tileWidth, shape, open, l.tv, prefetch],
   );
 
   return (

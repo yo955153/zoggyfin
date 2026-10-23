@@ -1,5 +1,7 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 
+import { itemSeed, logItemTiming } from '@/api/item-seed';
 import { useItem } from '@/api/queries';
 import { DetailSkeleton, ErrorState } from '@/components/states';
 import { useOtherServerDownload } from '@/downloads';
@@ -22,8 +24,15 @@ export default function ItemScreen() {
   const { id, name } = useLocalSearchParams<{ id: string; type?: string; name?: string }>();
   // A download of another saved server opens from its saved facts, with no server call.
   const other = useOtherServerDownload(id);
-  const q = useItem(other ? undefined : id);
+  // The tile's item renders the page at once; the full item fills it in.
+  const [seed] = useState(() => itemSeed(id));
+  const q = useItem(other ? undefined : id, seed);
   const item = other?.item ?? q.data;
+  const loaded = !!q.data && !q.isPlaceholderData;
+  useEffect(() => logItemTiming(id, 'first render'), [id]);
+  useEffect(() => {
+    if (loaded) logItemTiming(id, 'data loaded');
+  }, [id, loaded]);
 
   let body;
   if (other) {

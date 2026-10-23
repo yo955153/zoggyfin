@@ -2,6 +2,7 @@ import { FlashList } from '@shopify/flash-list';
 import { type ComponentRef, useCallback, useContext, useRef } from 'react';
 import { Text, View } from 'react-native';
 
+import { usePrefetchItemOnFocus } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
 import { Icon } from '@/components/icon';
 import { BillboardRows, showOnBillboard } from '@/features/tv/billboard';
@@ -64,6 +65,8 @@ export function ItemRow({
   const billboard = useContext(BillboardRows) && l.tv;
   const artOnly = billboard && !titleOnArt;
   const section = useRef<ComponentRef<typeof View> | null>(null);
+  // TV: Select on a tile that kept the focus a moment opens a page whose data is loaded.
+  const prefetch = usePrefetchItemOnFocus();
 
   const renderItem = useCallback(
     ({ item, index }: { item: BaseItemDto; index: number }) => (
@@ -133,6 +136,7 @@ export function ItemRow({
               artOnly={artOnly}
               onFocusItem={(it) => {
                 if (billboard) showOnBillboard(it);
+                prefetch(it);
                 onFocus(index);
               }}
             />
