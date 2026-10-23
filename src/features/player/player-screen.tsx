@@ -35,7 +35,7 @@ import { breakpointFor, layout } from '@/theme/theme';
 import { TogetherSheetHost } from '@/features/together/together-sheet';
 import { TogetherPill } from '@/features/together/together-pill';
 import { useSessionStore } from '@/auth/session-store';
-import { TvFocusGuide } from '@/features/tv/focus';
+import { type FocusTarget, focusView, TvFocusGuide } from '@/features/tv/focus';
 import { useTvBack } from '@/features/tv/use-tv-back';
 import { useTvRemote } from '@/features/tv/use-tv-remote';
 import { features, isNativeTV, isTV } from '@/platform/tv';
@@ -107,6 +107,9 @@ type SheetKind = 'tracks' | 'settings' | null;
  * The full-screen video player (design-system §7.8): video, gestures,
  * auto-hiding controls, skip and next-episode prompts, and the option sheets.
  */
+
+/** TV: the control row that has the focus. */
+type FocusRow = 'top' | 'center' | 'bar' | null;
 export function PlayerScreen() {
   useHideDevToolsButton();
   const now = usePlayerStore((s) => s.now);
@@ -282,9 +285,29 @@ export function PlayerScreen() {
   const trackFocus = useCallback((on: boolean) => {
     controlFocus.current = Math.max(0, controlFocus.current + (on ? 1 : -1));
   }, []);
+  // The row that has the focus now, and the row before it (TV focus repair on Down).
+  const focusRow = useRef<{ now: FocusRow; before: FocusRow }>({ now: null, before: null });
+  const enterRow = (row: FocusRow) => {
+    if (focusRow.current.now !== row) focusRow.current = { now: row, before: focusRow.current.now };
+  };
+  const trackTop = useCallback((on: boolean) => {
+    trackFocus(on);
+    if (on) enterRow('top');
+  }, [trackFocus]);
+  const trackCenter = useCallback((on: boolean) => {
+    trackFocus(on);
+    if (on) enterRow('center');
+  }, [trackFocus]);
+  // The seek bar's view: Down from the center row goes to it.
+  const [barView, setBarView] = useState<FocusTarget | null>(null);
+  // Down showed the controls: the bar takes the focus, not Play.
+  const [focusBar, setFocusBar] = useState(false);
   // Hidden controls are unmounted, maybe with no blur: start the count again.
   useEffect(() => {
-    if (!visible) controlFocus.current = 0;
+    if (!visible) {
+      controlFocus.current = 0;
+      focusRow.current = { now: null, before: null };
+    }
   }, [visible]);
   const scrubRun = useRef<ScrubRun>(NO_RUN);
   const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -354,8 +377,15 @@ export function PlayerScreen() {
   };
 
   const onTvKey = (key: TvKey) => {
-    console.log(`[tvkeys] key=${key} visible=${visible} bar=${barFocused} controls=${controlFocus.current} target=${scrubToRef.current}`);
-    if ((key === 'left' || key === 'right') && scrubsNow()) {
+    const side = key === 'left' || key === 'right';
+    // Every Left and Right counts toward a double press, also the press that shows the controls.
+    const double = side ? doublePress.press(key) : false;
+    console.log(
+      `[tvkeys] key=${key} double=${double} visible=${visible} bar=${barFocused} controls=${controlFocus.current} row=${focusRow.current.now} target=${scrubToRef.current}`,
+    );
+    // A double press seeks 10 s, unless the bar has the focus or a scrub is pending: then it scrubs.
+    const seeks = double && !barFocused && scrubToRef.current === null;
+    if (side && !seeks && scrubsNow()) {
       scrub(key === 'left' ? -1 : 1);
       return;
     }
@@ -363,8 +393,16 @@ export function PlayerScreen() {
       cancelScrub();
       return;
     }
-  const double = key === 'left' || key === 'right' ? doublePress.press(key) : false;
-    const action = playerKeyAction(key, double);
+    if (isTV && key === 'down') {
+      // Down shows the controls with the focus on the seek bar.
+      if (!visible) setFocusBar(true);
+      // Down from the center row must land on the bar. Android sends the key
+      // after the focus moved: if it went up to the top row, send it to the bar.
+      else if (!barFocused && focusRow.current.now === 'top' && focusRow.current.before === 'center' && focusView(barView)) {
+        console.log('[tvkeys] focus repair: bar');
+      }
+    } else if (!visible) setFocusBar(false);
+    const action = playerKeyAction(key, seeks);
     switch (action.type) {
       case 'seek':
         s.skip(action.seconds);
@@ -597,7 +635,7 @@ export function PlayerScreen() {
           <LinearGradient colors={player.bottomScrim} style={[styles.bottomScrim, { height: bottomPad + 180 }]} pointerEvents="none" />
 
           <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm, paddingLeft: sideInset, paddingRight: sideInset }]} pointerEvents="box-none">
-            <RoundButton onFocusChange={trackFocus} icon="xmark" label="Close player" size={player.closeSize} glyph={iconSize.sm} onPress={closePlayer} />
+            <RoundButton onFocusChange={trackTop} icon="xmark" label="Close player" size={player.closeSize} glyph={iconSize.sm} onPress={closePlayer} />
             <View style={styles.titleBlock}>
               <Text style={styles.title} numberOfLines={1}>
                 {title}
@@ -610,14 +648,14 @@ export function PlayerScreen() {
             </View>
             <Glass style={styles.pill}>
               <AirPlayButton onOpen={wake} />
-              {s.pipSupported ? <PillButton onFocusChange={trackFocus} icon="pip.enter" label="Picture in Picture" onPress={() => s.startPip()} /> : null}
+              {s.pipSupported ? <PillButton onFocusChange={trackTop} icon="pip.enter" label="Picture in Picture" onPress={() => s.startPip()} /> : null}
               {togetherAvailable ? (
-                <PillButton onFocusChange={trackFocus} icon="person.2" label="Watch together" onPress={() => openTogetherSheet('player', null)} />
+                <PillButton onFocusChange={trackTop} icon="person.2" label="Watch together" onPress={() => openTogetherSheet('player', null)} />
               ) : null}
-              <PillButton onFocusChange={trackFocus} icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} />
-              <PillButton onFocusChange={trackFocus} icon="gearshape" label="Quality and speed" onPress={() => setSheet('settings')} />
+              <PillButton onFocusChange={trackTop} icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} />
+              <PillButton onFocusChange={trackTop} icon="gearshape" label="Quality and speed" onPress={() => setSheet('settings')} />
               {Platform.OS === 'web' ? (
-                <PillButton onFocusChange={trackFocus} icon="arrow.up.left.and.arrow.down.right" label="Full screen" onPress={() => s.toggleFullscreen(null)} />
+                <PillButton onFocusChange={trackTop} icon="arrow.up.left.and.arrow.down.right" label="Full screen" onPress={() => s.toggleFullscreen(null)} />
               ) : null}
             </Glass>
           </View>
@@ -626,7 +664,8 @@ export function PlayerScreen() {
           {!scrubbing && status !== 'error' ? (
             <View style={styles.center} pointerEvents="box-none">
               <RoundButton
-                onFocusChange={trackFocus}
+                onFocusChange={trackCenter}
+                nextFocusDown={barView}
                 icon={skipIcon('back', settings.skipBackSeconds)}
                 label={`Back ${settings.skipBackSeconds} seconds`}
                 size={player.skipSize}
@@ -638,12 +677,13 @@ export function PlayerScreen() {
                 <SkipNumber seconds={settings.skipBackSeconds} />
               </RoundButton>
               <RoundButton
-                onFocusChange={trackFocus}
+                onFocusChange={trackCenter}
+                nextFocusDown={barView}
                 icon={loading ? undefined : showsPause ? 'pause.fill' : 'play.fill'}
                 label={showsPause ? 'Pause' : 'Play'}
                 size={player.playSize}
                 glyph={iconSize.xxl}
-                preferredFocus={isTV && visible}
+                preferredFocus={isTV && visible && !focusBar}
                 haptic
                 onPress={() => {
                   wake();
@@ -652,7 +692,8 @@ export function PlayerScreen() {
                 {loading ? <ActivityIndicator color={c.textOnMedia} size="large" /> : null}
               </RoundButton>
               <RoundButton
-                onFocusChange={trackFocus}
+                onFocusChange={trackCenter}
+                nextFocusDown={barView}
                 icon={skipIcon('forward', settings.skipForwardSeconds)}
                 label={`Forward ${settings.skipForwardSeconds} seconds`}
                 size={player.skipSize}
@@ -684,8 +725,11 @@ export function PlayerScreen() {
                   wake();
                 }}
                 tvTarget={scrubTo}
+                tvRef={setBarView}
+                tvPreferredFocus={isTV && visible && focusBar}
                 onTvFocus={(on) => {
                   setBarFocused(on);
+                  if (on) enterRow('bar');
                   console.log(`[tvkeys] bar focus=${on}`);
                   if (!on && scrubToRef.current !== null) commitScrub();
                 }}

@@ -1,9 +1,10 @@
 import * as Haptics from 'expo-haptics';
 import { type ReactNode, useState } from 'react';
-import { Platform, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
+import { findNodeHandle, Platform, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
 import { Icon, type IconName } from '@/components/icon';
+import { type FocusTarget } from '@/features/tv/focus';
 import { focusFromKeyboard } from '@/lib/input-modality';
 import { isTV } from '@/platform/tv';
 import { tv, webPressable } from '@/theme';
@@ -28,6 +29,7 @@ export function RoundButton({
   children,
   preferredFocus,
   onFocusChange,
+  nextFocusDown,
 }: {
   icon?: IconName;
   label: string;
@@ -42,6 +44,8 @@ export function RoundButton({
   preferredFocus?: boolean;
   /** The button took (true) or lost (false) the focus. */
   onFocusChange?: (focused: boolean) => void;
+  /** Android TV: the view that Down sends the focus to. */
+  nextFocusDown?: FocusTarget | null;
 }) {
   const pressed = useSharedValue(0);
   const [focused, setFocused] = useState(false);
@@ -66,6 +70,7 @@ export function RoundButton({
       accessibilityLabel={label}
       hitSlop={size < 44 ? (44 - size) / 2 : 0}
       hasTVPreferredFocus={preferredFocus}
+      nextFocusDown={nextFocusDown && Platform.OS !== 'web' ? (findNodeHandle(nextFocusDown) ?? undefined) : undefined}
       onFocus={() => {
         setFocused(focusFromKeyboard());
         onFocusChange?.(true);

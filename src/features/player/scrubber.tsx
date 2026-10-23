@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { TvFocusGuide } from '@/features/tv/focus';
+import { type FocusTarget, TvFocusGuide } from '@/features/tv/focus';
 import { isTV } from '@/platform/tv';
 import { type Chapter, chapterAt, chapterMarks, formatTime, spokenTime, type Trickplay, trickplaySheetUrl, trickplayTile } from '@/player/timeline';
 
@@ -39,6 +39,10 @@ interface Props {
   onTvFocus?: (focused: boolean) => void;
   /** TV: Select on the focused bar. */
   onTvSelect?: () => void;
+  /** TV: the bar's view, so other controls can send the focus to it. */
+  tvRef?: (view: FocusTarget | null) => void;
+  /** TV: take the focus when the bar mounts (Down showed the controls). */
+  tvPreferredFocus?: boolean;
 }
 
 function clamp01(v: number) {
@@ -69,6 +73,8 @@ export function Scrubber({
   tvTarget = null,
   onTvFocus,
   onTvSelect,
+  tvRef,
+  tvPreferredFocus,
 }: Props) {
   const [tvFocused, setTvFocused] = useState(false);
   const [width, setWidth] = useState(0);
@@ -200,6 +206,9 @@ export function Scrubber({
         // TV: a focus stop. Left and Right scrub (player-screen) and never move the focus off it.
         <TvFocusGuide trapHorizontal>
         <Pressable
+          ref={tvRef}
+          focusable
+          hasTVPreferredFocus={tvPreferredFocus}
           style={styles.hit}
           onLayout={onLayout}
           accessibilityRole="adjustable"

@@ -290,7 +290,11 @@ export function DetailScaffold<Row>({
   let header: ReactElement;
   if (twoColumn) {
     const leftWidth = Math.round((pageWidth - l.gutter * 2) * 0.4);
-    const posterWidth = Math.min(leftWidth, layout === 'square' ? 320 : 260);
+    const posterAspect = layout === 'wide' ? 16 / 9 : layout === 'backdrop' ? 2 / 3 : 1;
+    // TV: the poster is at most 40% of the screen height, so the focused Play or Resume button shows whole when the page opens.
+    const tvPosterMax = isTV ? Math.round(l.height * 0.4 * posterAspect) : Infinity;
+    const posterWidth = Math.min(leftWidth, layout === 'square' ? 320 : 260, tvPosterMax);
+    const buttonsWidth = isTV ? Math.min(leftWidth, 260) : posterWidth;
     header = (
       <View>
         {media ? <Hero item={item} height={heroH} style={heroStyle} /> : null}
@@ -301,12 +305,12 @@ export function DetailScaffold<Row>({
                 item={item}
                 variant={layout === 'wide' ? 'landscape' : layout === 'backdrop' ? 'poster' : 'square'}
                 width={posterWidth}
-                aspectRatio={layout === 'wide' ? 16 / 9 : layout === 'backdrop' ? 2 / 3 : 1}
+                aspectRatio={posterAspect}
                 rounded={layout === 'square' ? radius.lg : radius.md}
                 circle={layout === 'circle'}
               />
             </View>
-            <View style={{ width: posterWidth, gap: spacing.lg }}>
+            <View style={{ width: buttonsWidth, gap: spacing.lg }}>
               {primary}
               {actionsRow}
             </View>

@@ -8,7 +8,7 @@
  */
 
 /** Two presses of the same key closer than this are a double press (ms). */
-export const DOUBLE_PRESS_MS = 350;
+export const DOUBLE_PRESS_MS = 400;
 
 /** How far a double Left or Right seeks (s). */
 export const DOUBLE_PRESS_SEEK = 10;
