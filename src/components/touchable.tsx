@@ -1,4 +1,4 @@
-import { type ComponentRef, type ReactNode, type Ref, useState } from 'react';
+import { type ComponentRef, type ReactNode, type Ref, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   type PressableProps,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
+import { forgetContentFocus, rememberContentFocus } from '@/features/tv/focus';
 import { focusFromKeyboard } from '@/lib/input-modality';
 import { isTV } from '@/platform/tv';
 import { mediaColors, motion, tv, useTheme, webPressable } from '@/theme';
@@ -49,7 +50,8 @@ function pressScale(kind: TouchKind): number {
  * Press, hover and focus feedback for every control. Feedback starts on
  * press-in; the release settles with the `snappy` spring. Tiles lift on hover
  * and focus (scale + `raised` shadow); the focus ring is 2 pt `focusRing`
- * with a 2 pt gap (TV: 4 and 4, with the tvOS-like focus scale).
+ * with a 2 pt gap. TV: a white ring with a glow and the focus scale; the
+ * last focused control is remembered for the side menu (features/tv/focus).
  * Reduce Motion keeps the overlays and drops the scale.
  */
 export function Touchable({
@@ -77,6 +79,21 @@ export function Touchable({
   const [focused, setFocused] = useState(false);
   const state: TouchState = { pressed, hovered, focused };
 
+  // TV: keep a handle on the view, so the side menu can give the focus back to it.
+  const own = useRef<ComponentRef<typeof View> | null>(null);
+  const setRef = useCallback(
+    (v: ComponentRef<typeof View> | null) => {
+      own.current = v;
+      if (typeof ref === 'function') ref(v);
+      else if (ref) (ref as { current: ComponentRef<typeof View> | null }).current = v;
+    },
+    [ref],
+  );
+  useEffect(() => {
+    const box = own;
+    return () => forgetContentFocus(box.current);
+  }, []);
+
   const lifts = kind === 'tile' || (isTV && kind !== 'row' && kind !== 'plain');
   const restScale = (h: boolean, f: boolean) => {
     if (reduced || !lifts) return 1;
@@ -95,7 +112,7 @@ export function Touchable({
 
   return (
     <Pressable
-      ref={ref}
+      ref={setRef}
       disabled={disabled}
       onPressIn={(e) => {
         setPressed(true);
@@ -120,6 +137,7 @@ export function Touchable({
       onFocus={(e) => {
         const visible = focusFromKeyboard();
         setFocused(visible);
+        if (isTV) rememberContentFocus(own.current);
         if (visible) scale.set(withTiming(restScale(hovered, true), { duration: motion.duration.fast, easing: STANDARD }));
         onFocus?.(e);
       }}
@@ -131,7 +149,7 @@ export function Touchable({
       accessibilityState={{ disabled: !!disabled, ...rest.accessibilityState }}
       style={[webPressable, disabled && styles.disabled, containerStyle]}
       {...rest}>
-      <Animated.View style={[inner, animated, lifted && t.shadow('raised')]}>
+      <Animated.View style={[inner, animated, lifted && t.shadow('raised'), isTV && showRing && styles.tvGlow]}>
         {typeof children === 'function' ? children(state) : children}
         {kind === 'tile' || kind === 'button' || kind === 'icon' ? (
           <View
@@ -155,7 +173,7 @@ export function Touchable({
                 bottom: -(ringGap + ringWidth),
                 borderRadius: radius + ringGap + ringWidth,
                 borderWidth: ringWidth,
-                borderColor: t.c.focusRing,
+                borderColor: isTV ? mediaColors.white : t.c.focusRing,
               },
             ]}
           />
@@ -170,4 +188,11 @@ const styles = StyleSheet.create({
   pressOverlay: { backgroundColor: mediaColors.pressOverlay },
   hoverOverlay: { backgroundColor: mediaColors.hoverOverlay },
   ring: { position: 'absolute' },
+  // TV: a soft white glow around the focused control (10-foot focus).
+  tvGlow: {
+    shadowColor: mediaColors.white,
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+  },
 });

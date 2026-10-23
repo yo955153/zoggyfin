@@ -1,0 +1,278 @@
+/**
+ * The TV navigation: a side menu at the leading edge instead of the tab bar.
+ * Closed, it is a slim rail of icons under a menu glyph. When the focus
+ * comes into it (Left at the leading edge of the content), it opens over the
+ * content with the labels. Right or Back closes it and gives the focus back
+ * to the content. The tab stacks are the same as on phones.
+ */
+import { type Href, router, usePathname } from 'expo-router';
+import { TabList, Tabs, TabSlot, TabTrigger, useTabTrigger } from 'expo-router/ui';
+import { LinearGradient } from 'expo-linear-gradient';
+import { type ComponentRef, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, withTiming } from 'react-native-reanimated';
+
+import { Icon, type IconName } from '@/components/icon';
+import { isNativeTV, isTVPreview } from '@/platform/tv';
+import { type AppTheme, createStyles, font, mediaColors, motion, radius, spacing, tv, tvScale, type, useLayout, useStyles, useTheme, webPressable, withAlpha } from '@/theme';
+
+import { type FocusTarget, focusView, restoreContentFocus, TvFocusGuide } from './focus';
+import { useTvBack } from './use-tv-back';
+import { installWebSpatialNav } from './web-spatial-nav';
+
+interface Destination {
+  /** The tab name; null for a page that is not a tab (Settings). */
+  name: string | null;
+  href: Href;
+  label: string;
+  icon: IconName;
+}
+
+/** The menu, top to bottom. Downloads, watch together and extension panels are not on TV. */
+const DESTINATIONS: Destination[] = [
+  { name: 'home', href: '/', label: 'Home', icon: 'house' },
+  { name: 'search', href: '/search', label: 'Search', icon: 'magnifyingglass' },
+  { name: 'library', href: '/libraries', label: 'Library', icon: 'square.stack' },
+  { name: 'music', href: '/music', label: 'Music', icon: 'music.note' },
+  { name: null, href: '/settings', label: 'Settings', icon: 'gearshape' },
+];
+
+const STANDARD = Easing.bezier(...motion.easing.standard);
+
+/** The TV window never changes size, so the menu sizes are fixed. */
+const K = tvScale(Dimensions.get('window').width);
+const ICON = Math.round(tv.railIcon * K);
+
+/** The (tabs) layout on TV: the tab content after the rail, and the side menu over it. */
+export function TvTabsLayout() {
+  const l = useLayout();
+  const rail = Math.round(tv.railWidth * tvScale(l.width));
+  const content = useRef<ComponentRef<typeof View> | null>(null);
+  return (
+    <Tabs style={styles.flex}>
+      {/* First in the tree, so the content (not the menu) takes the first focus. */}
+      <TvFocusGuide ref={content} autoFocus style={[styles.flex, { paddingLeft: rail }]}>
+        <TabSlot />
+      </TvFocusGuide>
+      <SideMenu content={content} />
+      <TabList style={styles.hidden}>
+        {DESTINATIONS.filter((d) => d.name).map((d) => (
+          <TabTrigger key={d.name} name={d.name ?? ''} href={d.href} />
+        ))}
+      </TabList>
+    </Tabs>
+  );
+}
+
+/** Sends the focus back to the content: its last focused control (a TV focus guide remembers it). */
+function focusContent(content: RefObject<FocusTarget | null>): void {
+  if (isNativeTV) focusView(content.current);
+  else restoreContentFocus();
+}
+
+function SideMenu({ content }: { content: RefObject<FocusTarget | null> }) {
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  const l = useLayout();
+  const reduced = useReducedMotion();
+  const pathname = usePathname();
+  const railW = Math.round(tv.railWidth * tvScale(l.width));
+  const menuW = Math.round(tv.menuWidth * tvScale(l.width));
+  const [open, setOpen] = useState(false);
+  const closing = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The selected item: the focus lands on it when it comes into the menu.
+  const [active, setActive] = useState<FocusTarget | null>(null);
+  const root = useRef<FocusTarget | null>(null);
+  const settings = pathname === '/settings';
+
+  const onItemFocus = useCallback(() => {
+    if (closing.current) clearTimeout(closing.current);
+    closing.current = null;
+    setOpen(true);
+  }, []);
+  // The focus moves from item to item as a blur then a focus: close only when no item takes it.
+  const onItemBlur = useCallback(() => {
+    if (closing.current) clearTimeout(closing.current);
+    closing.current = setTimeout(() => setOpen(false), 60);
+  }, []);
+  useEffect(() => () => {
+    if (closing.current) clearTimeout(closing.current);
+  }, []);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    focusContent(content);
+  }, [content]);
+
+  // Back closes the open menu (and stays in the app).
+  useTvBack(open, close);
+
+  // Web preview: the arrow keys move the focus; Right out of the menu goes back to the content.
+  useEffect(() => {
+    if (!isTVPreview) return;
+    const remove = installWebSpatialNav();
+    const onKey = (e: KeyboardEvent) => {
+      const el = root.current as unknown as HTMLElement | null;
+      if (e.key !== 'ArrowRight' || !el || !el.contains(document.activeElement)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      close();
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      remove();
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [close]);
+
+  const panel = useAnimatedStyle(() => ({
+    width: withTiming(open ? menuW : railW, { duration: reduced ? 0 : motion.duration.base, easing: STANDARD }),
+  }));
+  const scrim = useAnimatedStyle(() => ({
+    opacity: withTiming(open ? 1 : 0, { duration: reduced ? 0 : motion.duration.base, easing: STANDARD }),
+  }));
+
+  return (
+    <>
+      {/* The open menu dims the content under it. */}
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrim]}>
+        <LinearGradient
+          colors={[withAlpha(mediaColors.black, 0.94), withAlpha(mediaColors.black, 0.7), withAlpha(mediaColors.black, 0)]}
+          locations={[0, 0.3, 0.65]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+      <TvFocusGuide
+        ref={root}
+        destinations={[active]}
+        style={[s.rail, { width: railW }]}
+        accessibilityRole="menu"
+        accessibilityLabel="Menu">
+        {/* The closed rail: a dark edge, so the icons read over the content. */}
+        <LinearGradient
+          colors={[withAlpha(c.bg, 0.96), withAlpha(c.bg, 0)]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <Animated.View style={[s.panel, panel]}>
+          <View style={[s.menuGlyph, { paddingLeft: (railW - ICON) / 2 }]} accessible={false}>
+            <Icon name="line.horizontal.3" size={ICON} color={open ? c.text : c.text2} />
+          </View>
+          <View style={s.items}>
+            {DESTINATIONS.map((d) => (
+              <MenuItem
+                key={d.label}
+                destination={d}
+                open={open}
+                settings={settings}
+                railWidth={railW}
+                onSelected={setActive}
+                onFocus={onItemFocus}
+                onBlur={onItemBlur}
+                onDone={close}
+              />
+            ))}
+          </View>
+        </Animated.View>
+      </TvFocusGuide>
+    </>
+  );
+}
+
+function MenuItem({
+  destination,
+  open,
+  settings,
+  railWidth,
+  onSelected,
+  onFocus,
+  onBlur,
+  onDone,
+}: {
+  destination: Destination;
+  open: boolean;
+  /** Settings is open (it is a page in the Home stack, not a tab). */
+  settings: boolean;
+  railWidth: number;
+  onSelected: (view: FocusTarget | null) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+  onDone: () => void;
+}) {
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  const [focused, setFocused] = useState(false);
+  // Settings is not a tab: its trigger lookup is unused.
+  const tab = useTabTrigger({ name: destination.name ?? 'home' });
+  const selected = destination.name ? !settings && !!tab.trigger?.isFocused : settings;
+  const view = useRef<FocusTarget | null>(null);
+  useEffect(() => {
+    if (selected) onSelected(view.current);
+  }, [selected, onSelected]);
+
+  const go = () => {
+    // A tab opens at its first page, like the streaming apps.
+    if (destination.name) tab.switchTab(destination.name, { resetOnFocus: true });
+    else router.navigate('/(tabs)/(home)/settings');
+    // Let the new screen mount, then give it the focus.
+    setTimeout(onDone, 80);
+  };
+
+  const fg = focused ? c.bg : selected ? c.text : c.text2;
+  return (
+    <Pressable
+      ref={view}
+      onPress={go}
+      onFocus={() => {
+        setFocused(true);
+        onFocus();
+      }}
+      onBlur={() => {
+        setFocused(false);
+        onBlur();
+      }}
+      accessibilityRole="menuitem"
+      accessibilityLabel={destination.label}
+      accessibilityState={{ selected }}
+      style={[s.item, webPressable]}>
+      <View style={[s.itemInner, { paddingLeft: (railWidth - ICON) / 2 - spacing.sm }, focused && s.itemFocused]}>
+        {selected && !focused ? <View style={s.selectedBar} /> : null}
+        <Icon name={destination.icon} size={ICON} color={fg} weight={selected ? 'semibold' : 'regular'} />
+        {open ? (
+          <Text style={[s.label, { color: fg }, selected && s.labelSelected]} numberOfLines={1}>
+            {destination.label}
+          </Text>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  hidden: { display: 'none' },
+});
+
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+    rail: { position: 'absolute' as const, left: 0, top: 0, bottom: 0, overflow: 'visible' as const },
+    panel: { position: 'absolute' as const, left: 0, top: 0, bottom: 0, overflow: 'hidden' as const },
+    menuGlyph: { paddingTop: spacing.xxl, paddingBottom: spacing.xl },
+    items: { flex: 1, justifyContent: 'center' as const, gap: spacing.xs, paddingBottom: spacing.huge },
+    item: { paddingHorizontal: spacing.sm },
+    itemInner: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: spacing.lg,
+      minHeight: Math.round(tv.railItemHeight * K),
+      paddingRight: spacing.lg,
+      borderRadius: radius.md,
+    },
+    itemFocused: { backgroundColor: c.text },
+    selectedBar: { position: 'absolute' as const, left: 0, top: '25%' as const, bottom: '25%' as const, width: 3, borderRadius: 2, backgroundColor: c.accent },
+    label: { ...font(type.title3), flexShrink: 1 },
+    labelSelected: { fontWeight: '700' as const },
+}));

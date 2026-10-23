@@ -5,9 +5,9 @@ import { ActivityIndicator, type LayoutChangeEvent, StyleSheet, View } from 'rea
 import type { BaseItemDto } from '@/api/types';
 import { useOpenItem } from '@/lib/navigation';
 import { usePullRefresh } from '@/lib/use-pull-refresh';
-import { gridLayout, spacing, useLayout, useTheme } from '@/theme';
+import { gridLayout, spacing, tvFocusBleed, useLayout, useTheme } from '@/theme';
 
-import { Tile, type TileShape } from './tile';
+import { Tile, tileHeight, type TileShape } from './tile';
 import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 interface ItemGridProps {
@@ -52,6 +52,8 @@ export function ItemGrid({
   const width = measured || l.contentWidth;
   const g = gridLayout(shape, width, l.tv, l.width);
   const { columns, tileWidth, gap, gutter } = g;
+  // TV: room above the first row for the focus scale and ring.
+  const topPad = l.tv ? tvFocusBleed(tileHeight(shape, tileWidth)) + spacing.lg : autoInset ? spacing.xs : spacing.lg;
 
   const onLayout = (e: LayoutChangeEvent) => {
     const w = Math.round(e.nativeEvent.layout.width);
@@ -81,7 +83,7 @@ export function ItemGrid({
         key={columns}
         keyExtractor={(it, i) => it.Id ?? String(i)}
         contentInsetAdjustmentBehavior={autoInset ? 'automatic' : 'never'}
-        contentContainerStyle={{ paddingHorizontal: gutter, paddingBottom: bottomPad, paddingTop: autoInset ? spacing.xs : spacing.lg }}
+        contentContainerStyle={{ paddingHorizontal: gutter, paddingBottom: bottomPad, paddingTop: topPad }}
         onEndReached={onEndReached}
         onEndReachedThreshold={0.8}
         refreshing={pull.refreshing}

@@ -1,15 +1,16 @@
 import { FlashList } from '@shopify/flash-list';
-import { useCallback } from 'react';
+import { useCallback, useContext } from 'react';
 import { Text, View } from 'react-native';
 
 import type { BaseItemDto } from '@/api/types';
 import { Icon } from '@/components/icon';
+import { BillboardRows, showOnBillboard } from '@/features/tv/billboard';
 import { useOpenItem } from '@/lib/navigation';
-import { createStyles, type AppTheme, font, iconSize, scaled, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
+import { createStyles, type AppTheme, font, iconSize, scaled, sizes, spacing, tvFocusBleed, type, useLayout, useStyles, useTheme } from '@/theme';
 
 import { Delayed, SkeletonBlock, SkeletonText } from './skeleton';
 import { ErrorState } from './states';
-import { Tile, type TileShape, tileAspect } from './tile';
+import { Tile, tileHeight, type TileShape, tileAspect } from './tile';
 import { Touchable } from './touchable';
 
 interface ItemRowProps {
@@ -58,6 +59,9 @@ export function ItemRow({
   const l = useLayout();
   const width = l.rowTile[shape === 'thumb' ? 'thumb' : shape];
   const press = onPress ?? open;
+  // TV Home: art-only tiles; the billboard above shows the focused one.
+  const billboard = useContext(BillboardRows) && l.tv;
+  const artOnly = billboard && !titleOnArt;
 
   const renderItem = useCallback(
     ({ item, index }: { item: BaseItemDto; index: number }) => (
@@ -71,10 +75,12 @@ export function ItemRow({
         subtitle={tileSubtitle ? tileSubtitle(item) : undefined}
         titleOnArt={titleOnArt}
         preferredFocus={preferredFocus && index === 0}
+        artOnly={artOnly}
+        onFocusItem={billboard ? showOnBillboard : undefined}
       />
       </View>
     ),
-    [width, shape, press, tileTitle, tileSubtitle, titleOnArt, preferredFocus, l.gap],
+    [width, shape, press, tileTitle, tileSubtitle, titleOnArt, preferredFocus, l.gap, artOnly, billboard],
   );
 
   if (error && !items?.length) {
@@ -88,6 +94,8 @@ export function ItemRow({
   if (!isLoading && !items?.length && hideWhenEmpty) return null;
 
   const artHeight = width / tileAspect(shape);
+  // TV: room above and below for the focus scale and ring; a horizontal list clips at its edges.
+  const padV = l.tv ? tvFocusBleed(tileHeight(shape, width, !titleOnArt && !artOnly)) : spacing.xs;
   return (
     <View style={[s.section, { marginTop: l.sectionGap }]}>
       <RowHeader title={title} onSeeAll={onSeeAll} />
@@ -109,7 +117,7 @@ export function ItemRow({
           keyExtractor={(it, i) => it.Id ?? String(i)}
           showsHorizontalScrollIndicator={false}
           decelerationRate="fast"
-          contentContainerStyle={{ paddingLeft: l.gutter, paddingRight: l.gutter - l.gap, paddingVertical: l.tv ? l.gap / 2 : spacing.xs }}
+          contentContainerStyle={{ paddingLeft: l.gutter, paddingRight: l.gutter - l.gap, paddingVertical: padV }}
           renderItem={renderItem}
         />
       )}

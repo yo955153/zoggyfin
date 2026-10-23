@@ -15,6 +15,7 @@ import { shapeForList } from '@/components/tile';
 import { isSupportedView } from '@/features/library/library-kind';
 import { episodeLabel } from '@/lib/format';
 import { itemHref, useTabGroup } from '@/lib/navigation';
+import { isTV } from '@/platform/tv';
 import { homeSections } from '@/registry/home-sections';
 
 const episodeSubtitle = (item: BaseItemDto) =>
@@ -32,6 +33,7 @@ function ContinueWatching() {
       error={q.error}
       onRetry={q.refetch}
       tileSubtitle={episodeSubtitle}
+      preferredFocus={isTV}
     />
   );
 }

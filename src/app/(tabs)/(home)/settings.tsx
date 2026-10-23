@@ -86,7 +86,8 @@ export default function SettingsScreen() {
 
           <AdminSettingsGroup />
 
-          <AppearanceSection />
+          {/* TV is always dark. */}
+          {isTV ? null : <AppearanceSection />}
 
           <PlaybackSection />
 

@@ -129,8 +129,8 @@ export function DetailScaffold<Row>({
   const layout = heroLayout(item);
   const media = layout === 'backdrop' || layout === 'wide';
   const twoColumn = l.contentWidth >= 900;
-  // The width beside an iPad sidebar (TV keeps the full screen behind its rail).
-  const screenW = l.tv ? l.width : l.contentWidth;
+  // The width beside an iPad sidebar or the TV side menu rail.
+  const screenW = l.contentWidth;
   const heroH = heroHeight(layout, screenW, l.height, twoColumn);
   const pageWidth = Math.min(screenW, 1280);
 
@@ -364,7 +364,7 @@ export function DetailScaffold<Row>({
 function Hero({ item, height, style }: { item: BaseItemDto; height: number; style: ReturnType<typeof useAnimatedStyle> }) {
   const { c } = useTheme();
   const l = useLayout();
-  const w = l.tv ? l.width : l.contentWidth;
+  const w = l.contentWidth;
   return (
     <View style={[styles.heroClip, { height }]}>
       <Animated.View style={[StyleSheet.absoluteFill, style]}>

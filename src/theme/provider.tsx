@@ -4,6 +4,7 @@ import * as SystemUI from 'expo-system-ui';
 import { type ReactNode, useEffect, useMemo } from 'react';
 import { Appearance, Platform, useColorScheme } from 'react-native';
 
+import { isTV } from '@/platform/tv';
 import { resolveScheme, useAppearance } from '@/settings/appearance';
 
 import { darkTheme, lightTheme, ThemeContext } from './index';
@@ -16,7 +17,8 @@ import { applyWebStyles } from './web-styles';
 export function AppThemeProvider({ children }: { children: ReactNode }) {
   const system = useColorScheme();
   const choice = useAppearance((s) => s.choice);
-  const scheme = resolveScheme(choice, system);
+  // TV is always dark (a 10-foot UI in a dim room).
+  const scheme = isTV ? 'dark' : resolveScheme(choice, system);
   const theme = scheme === 'light' ? lightTheme : darkTheme;
 
   useEffect(() => {

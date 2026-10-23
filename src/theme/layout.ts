@@ -10,24 +10,40 @@ import { type Breakpoint, breakpointFor, gridFor, type GridResult, layout, type 
  */
 export const tv = {
   baseWidth: 1920,
-  railWidth: 300,
-  gutter: 80,
-  tileGap: 36,
-  sectionGap: 56,
-  rowTileWidth: { poster: 248, thumb: 520, square: 300, circle: 180 } satisfies Record<TileKind, number>,
+  /** The collapsed side menu: a slim rail of icons at the leading edge. */
+  railWidth: 112,
+  /** The side menu when it is open (icons and labels). */
+  menuWidth: 440,
+  /** About 5 % of the screen: inside the overscan-safe area. */
+  gutter: 96,
+  tileGap: 40,
+  sectionGap: 44,
+  rowTileWidth: { poster: 272, thumb: 512, square: 300, circle: 200 } satisfies Record<TileKind, number>,
   gridMinTile: { poster: 236, thumb: 480, square: 280, circle: 190 } satisfies Record<TileKind, number>,
   /** Type sizes are the phone sizes times this (before the screen scale). */
-  typeScale: 1.6,
-  /** The focused tile grows by this much, as on tvOS. */
-  focusScale: 1.08,
-  focusRingWidth: 4,
-  focusRingGap: 4,
-  railItemHeight: 64,
-  railIcon: 30,
+  typeScale: 1.8,
+  /** The focused tile grows by this much. */
+  focusScale: 1.1,
+  /** Focus ring width and gap in points (not scaled with the screen). */
+  focusRingWidth: 3,
+  focusRingGap: 3,
+  railItemHeight: 72,
+  railIcon: 40,
+  /** The Home billboard takes this share of the screen height. */
+  billboardFactor: 0.5,
 } as const;
 
 export function tvScale(width: number): number {
   return Math.max(0.5, width / tv.baseWidth);
+}
+
+/**
+ * The space a focused TV tile of this size needs on each side: it grows by
+ * `focusScale` around its centre and the ring sits outside it. A row or a
+ * scroll view with less padding than this cuts the ring off.
+ */
+export function tvFocusBleed(size: number): number {
+  return Math.ceil((size * (tv.focusScale - 1)) / 2 + tv.focusRingWidth + tv.focusRingGap + 2);
 }
 
 export interface LayoutInfo {

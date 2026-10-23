@@ -102,6 +102,8 @@ export const ANDROID_SYMBOLS = {
   'quote.bubble': 'lyrics',
   'airplay.audio': 'cast',
   'line.3.horizontal': 'drag_handle',
+  /** The TV side menu glyph (three lines). */
+  'line.horizontal.3': 'menu',
   'moon.zzz': 'bedtime',
   'speaker.fill': 'volume_mute',
   'speaker.wave.3.fill': 'volume_up',

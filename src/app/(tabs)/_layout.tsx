@@ -6,6 +6,7 @@ import { useDownloadsStore } from '@/downloads/store';
 import { GlobalPlayerKeys } from '@/features/player/global-keys';
 import { MiniPlayer, useMiniPlayerVisible } from '@/features/player/mini-player';
 import { RoomLayer } from '@/features/together/room-bar';
+import { TvTabsLayout } from '@/features/tv/side-menu';
 import { HAS_ACCESSORY, TAB_BAR_HEIGHT } from '@/lib/tab-bar-inset';
 import { features, isTV } from '@/platform/tv';
 import { fontFamily, spacing, useLayout, useTheme } from '@/theme';
@@ -53,7 +54,28 @@ function useDownloadsBadge(): string | null {
   });
 }
 
+/** TV: the side menu instead of the tab bar; the mini player floats at the bottom of the content. */
+function TvLayout() {
+  const mini = useMiniPlayerVisible();
+  const l = useLayout();
+  return (
+    <View style={styles.flex}>
+      <TvTabsLayout />
+      {mini ? (
+        <View pointerEvents="box-none" style={[styles.floating, { bottom: spacing.lg, right: l.gutter, width: l.contentWidth * 0.45 }]}>
+          <MiniPlayer floating />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export default function TabsLayout() {
+  if (isTV) return <TvLayout />;
+  return <PhoneTabsLayout />;
+}
+
+function PhoneTabsLayout() {
   const mini = useMiniPlayerVisible();
   const { c, scheme } = useTheme();
   const badge = useDownloadsBadge();

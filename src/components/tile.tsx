@@ -41,6 +41,10 @@ export interface TileProps {
   titleOnArt?: boolean;
   /** TV: take the first focus on the screen. */
   preferredFocus?: boolean;
+  /** Only the artwork, no title under it (TV Home: the billboard shows the focused title). */
+  artOnly?: boolean;
+  /** The tile took the focus (TV). */
+  onFocusItem?: (item: BaseItemDto) => void;
 }
 
 function radiusFor(shape: TileShape): number {
@@ -63,6 +67,8 @@ export const Tile = memo(function Tile({
   showProgress = true,
   titleOnArt = false,
   preferredFocus,
+  artOnly = false,
+  onFocusItem,
 }: TileProps) {
   const s = useStyles(makeStyles);
   const { c } = useTheme();
@@ -90,6 +96,7 @@ export const Tile = memo(function Tile({
       onPress={() => onPress(item)}
       onLongPress={onLongPress ? () => onLongPress(item) : undefined}
       hasTVPreferredFocus={preferredFocus}
+      onFocus={onFocusItem ? () => onFocusItem(item) : undefined}
       accessibilityRole="button"
       accessibilityLabel={label}
       containerStyle={{ width }}>
@@ -138,7 +145,7 @@ export const Tile = memo(function Tile({
               </View>
             ) : null}
           </View>
-          {!titleOnArt ? (
+          {!titleOnArt && !artOnly ? (
             <>
               <Text
                 style={[s.title, circle && s.center, scriptStyle(titleText, circle ? s.center : s.title)]}

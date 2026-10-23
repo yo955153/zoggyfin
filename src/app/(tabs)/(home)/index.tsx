@@ -8,6 +8,7 @@ import { useApi } from '@/api/use-api';
 import { Avatar } from '@/components/avatar';
 import { Touchable } from '@/components/touchable';
 import { registerBuiltinHomeSections } from '@/features/home/builtin-sections';
+import { Billboard, BillboardRows } from '@/features/tv/billboard';
 import { ProfileMenu } from '@/features/profile/profile-menu';
 import { OfflineBanner } from '@/features/offline/offline-banner';
 import { HomeTogetherSheet, homeTogether, NearbyHomeCard, TogetherHeaderButton } from '@/features/together/home-entry';
@@ -31,6 +32,25 @@ export default function HomeScreen() {
   const [accounts, setAccounts] = useState(false);
 
   const pull = usePullRefresh(() => qc.invalidateQueries({ queryKey: queryKeys.all(scope) }));
+
+  if (isTV) {
+    // TV: the billboard for the focused item stays at the top; the rows scroll under it.
+    return (
+      <View style={s.flex}>
+        <Billboard />
+        <BillboardRows.Provider value>
+          <ScrollView style={s.flex} contentContainerStyle={{ paddingBottom: bottomPad }}>
+            <OfflineBanner entries />
+            {sections.map((sec) => (
+              <View key={sec.id}>
+                <sec.component />
+              </View>
+            ))}
+          </ScrollView>
+        </BillboardRows.Provider>
+      </View>
+    );
+  }
 
   return (
     <>
