@@ -39,6 +39,7 @@ import { createStyles,
   scriptStyle,
   sizes,
   spacing,
+  tv,
   type,
   useLayout,
   useStyles,
@@ -462,26 +463,51 @@ function RoundAction({
   const s = useStyles(makeStyles);
   const { c } = useTheme();
   const size = scaled(sizes.iconButton);
+  // Every platform: press, hover and focus show on the circle only, never around circle and label.
+  // TV adds the focus scale and a white ring.
+  const ringW = isTV ? tv.focusRingWidth : 2;
+  const ringGap = isTV ? tv.focusRingGap : 2;
   return (
     <Touchable
-      kind="icon"
-      radius={radius.pill}
+      kind="plain"
+      ring={false}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={a11y ?? label}
       accessibilityState={active === undefined ? undefined : { selected: active }}
-      style={s.roundWrap}>
-      {({ pressed }) => (
+      style={[s.roundWrap, isTV && s.roundWrapTV]}>
+      {({ pressed, hovered, focused }) => (
         <>
-          <View style={[s.round, { backgroundColor: pressed ? c.surface3 : c.surface2 }]}>
+          <View
+            style={[
+              s.round,
+              { backgroundColor: pressed || hovered ? c.surface3 : c.surface2 },
+              focused && isTV && s.roundFocusTV,
+            ]}>
             <Icon name={icon} size={scaled(iconSize.sm)} color={tint ?? (active ? c.accent : c.text)} weight="semibold" />
             {ring !== undefined ? (
               <View style={StyleSheet.absoluteFill}>
                 <ProgressRing size={size} width={3} progress={ring} color={c.accent} track="transparent" />
               </View>
             ) : null}
+            {focused ? (
+              <View
+                pointerEvents="none"
+                style={[
+                  s.roundRing,
+                  {
+                    top: -(ringGap + ringW),
+                    left: -(ringGap + ringW),
+                    right: -(ringGap + ringW),
+                    bottom: -(ringGap + ringW),
+                    borderWidth: ringW,
+                    borderColor: isTV ? mediaColors.white : c.focusRing,
+                  },
+                ]}
+              />
+            ) : null}
           </View>
-          <Text style={s.roundLabel} numberOfLines={1}>
+          <Text style={[s.roundLabel, focused && s.roundLabelFocused]} numberOfLines={1}>
             {label}
           </Text>
         </>
@@ -558,6 +584,11 @@ const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
     justifyContent: 'center' as const,
   },
   roundLabel: { ...font(type.caption2), color: c.text2 },
+  roundLabelFocused: { color: c.text },
+  // TV: room under the circle for the focus scale and ring, so the label stays clear.
+  roundWrapTV: { gap: 14 },
+  roundRing: { position: 'absolute' as const, borderRadius: radius.pill },
+  roundFocusTV: { transform: [{ scale: tv.focusScale }] },
   overview: { ...font(type.subheadline), color: c.text2 },
   more: { ...font(type.subheadline), fontWeight: '600' as const, color: c.accent, marginTop: 2 },
   footer: { paddingBottom: spacing.huge * 2 },

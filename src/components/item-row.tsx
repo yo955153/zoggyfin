@@ -116,7 +116,8 @@ export function ItemRow({
       ) : l.tv ? (
         <TvShelf
           items={items ?? []}
-          keyOf={(it, i) => it.Id ?? String(i)}
+          // A person can be in the cast twice (two roles): the index keeps keys unique.
+          keyOf={(it, i) => `${it.Id ?? ''}-${i}`}
           tileWidth={width}
           gap={l.gap}
           gutter={l.gutter}
