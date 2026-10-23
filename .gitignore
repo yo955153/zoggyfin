@@ -5,6 +5,8 @@ node_modules/
 dist/
 /ios/
 /android/
+/modules/*/android/build/
+/.claude/worktrees/
 *.log
 .DS_Store
 web-build/
