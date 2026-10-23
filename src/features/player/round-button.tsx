@@ -1,16 +1,19 @@
 import * as Haptics from 'expo-haptics';
-import type { ReactNode } from 'react';
-import { Platform, Pressable, type StyleProp, StyleSheet, type ViewStyle } from 'react-native';
+import { type ReactNode, useState } from 'react';
+import { Platform, Pressable, type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
 import { Icon, type IconName } from '@/components/icon';
+import { isTV } from '@/platform/tv';
+import { tv } from '@/theme';
 
 import { Glass } from './glass';
 import { c, motion } from './tokens';
 
 /**
  * A round glass button over video. Press-in scales to 0.92 (snappy spring
- * back); with Reduce Motion only the opacity changes.
+ * back); with Reduce Motion only the opacity changes. TV: the focused button
+ * grows and gets a white ring.
  */
 export function RoundButton({
   icon,
@@ -22,6 +25,7 @@ export function RoundButton({
   haptic,
   style,
   children,
+  preferredFocus,
 }: {
   icon?: IconName;
   label: string;
@@ -32,8 +36,11 @@ export function RoundButton({
   haptic?: boolean;
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
+  /** TV: take the focus when it mounts or when this turns true. */
+  preferredFocus?: boolean;
 }) {
   const pressed = useSharedValue(0);
+  const [focused, setFocused] = useState(false);
   const reduced = useReducedMotion();
   const anim = useAnimatedStyle(() => {
     const p = pressed.get();
@@ -41,6 +48,7 @@ export function RoundButton({
       ? { opacity: 1 - p * 0.3 }
       : { transform: [{ scale: 1 - p * (1 - motion.press.buttonScale) }] };
   });
+  const focusRing = isTV && focused;
   const body = (
     <>
       {icon ? <Icon name={icon} size={glyph} color={c.textOnMedia} weight="semibold" /> : null}
@@ -53,6 +61,9 @@ export function RoundButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={size < 44 ? (44 - size) / 2 : 0}
+      hasTVPreferredFocus={preferredFocus}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       onPressIn={() => pressed.set(withTiming(1, { duration: motion.duration.press }))}
       onPressOut={() => pressed.set(withSpring(0, motion.spring.snappy))}
       onPress={() => {
@@ -60,17 +71,24 @@ export function RoundButton({
         onPress();
       }}
       style={style}>
-      <Animated.View style={[round, anim]}>
-        {glass ? (
-          <Glass style={[styles.center, round]}>{body}</Glass>
-        ) : (
-          <Animated.View style={[styles.center, round]}>{body}</Animated.View>
-        )}
-      </Animated.View>
+      <View style={[styles.focusWrap, { borderRadius: size / 2 + tv.focusRingWidth * 2 }, focusRing && styles.focused]}>
+        <Animated.View style={[round, anim]}>
+          {glass ? (
+            <Glass style={[styles.center, round]}>{body}</Glass>
+          ) : (
+            <Animated.View style={[styles.center, round]}>{body}</Animated.View>
+          )}
+        </Animated.View>
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  // A ring with a gap, drawn by the padded wrapper; transparent until focused.
+  focusWrap: isTV
+    ? { padding: tv.focusRingWidth, borderWidth: tv.focusRingWidth, borderColor: 'transparent', margin: -tv.focusRingWidth * 2 }
+    : {},
+  focused: { borderColor: '#FFFFFF', transform: [{ scale: tv.focusScale }] },
 });

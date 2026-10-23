@@ -35,7 +35,11 @@ import { breakpointFor, layout } from '@/theme/theme';
 import { TogetherSheetHost } from '@/features/together/together-sheet';
 import { TogetherPill } from '@/features/together/together-pill';
 import { useSessionStore } from '@/auth/session-store';
-import { features } from '@/platform/tv';
+import { TvFocusGuide } from '@/features/tv/focus';
+import { useTvBack } from '@/features/tv/use-tv-back';
+import { useTvRemote } from '@/features/tv/use-tv-remote';
+import { features, isNativeTV, isTV } from '@/platform/tv';
+import { createDoublePress, playerKeyAction, type SeekFeedback, stackFeedback, type TvKey, tvKeyFromEvent, tvKeyFromWeb } from '@/player/tv-keys';
 import { nearby, nearbySupported } from '@/together/nearby';
 import { openTogetherSheet, togetherState } from '@/together/store';
 import { syncPlaySupported } from '@/together/syncplay';
@@ -116,7 +120,7 @@ export function PlayerScreen() {
   const [fill, setFill] = useState(false);
   const [poke, setPoke] = useState(0);
   const [dismissal, setDismissal] = useState<{ itemId: string; at: number } | null>(null);
-  const [ripple, setRipple] = useState<{ side: 'left' | 'right'; seconds: number; key: number } | null>(null);
+  const [ripple, setRipple] = useState<SeekFeedback | null>(null);
 
   // With no account, a player with nothing to play (a link, a fallback route) goes to the sign-in screen.
   // A short wait: a play request sets the item just after the route opens.
@@ -164,7 +168,8 @@ export function PlayerScreen() {
 
   useEffect(() => {
     if (!ripple) return;
-    const t = setTimeout(() => setRipple(null), 700);
+    // TV: a little longer, so a run of double presses adds up on screen.
+    const t = setTimeout(() => setRipple(null), isTV ? 1000 : 700);
     return () => clearTimeout(t);
   }, [ripple]);
 
@@ -196,11 +201,7 @@ export function PlayerScreen() {
       const side: 'left' | 'right' = x <= third ? 'left' : 'right';
       const step = side === 'left' ? -settings.skipBackSeconds : settings.skipForwardSeconds;
       videoSession().skip(step);
-      setRipple((r) => ({
-        side,
-        seconds: r && r.side === side ? r.seconds + Math.abs(step) : Math.abs(step),
-        key: (r?.key ?? 0) + 1,
-      }));
+      setRipple((r) => stackFeedback(r, side, step));
     },
     [width, settings.skipBackSeconds, settings.skipForwardSeconds, toggleControls],
   );
@@ -248,7 +249,59 @@ export function PlayerScreen() {
   const playNext = useCallback(() => void videoSession().playNext(), []);
   const cancelNext = useCallback(() => setDismissal({ itemId, at: playerState().position }), [itemId]);
 
+  // TV remote: a single Left or Right shows the controls (and the focus
+  // moves as usual); a double press also seeks 10 s (player/tv-keys.ts).
+  const doublePress = useRef(createDoublePress()).current;
+  const onTvKey = (key: TvKey) => {
+    const double = key === 'left' || key === 'right' ? doublePress.press(key) : false;
+    const action = playerKeyAction(key, double);
+    switch (action.type) {
+      case 'seek':
+        s.skip(action.seconds);
+        setRipple((r) => stackFeedback(r, action.seconds < 0 ? 'left' : 'right', action.seconds));
+        wake();
+        break;
+      case 'skip':
+        s.skip(action.direction === 'back' ? -settings.skipBackSeconds : settings.skipForwardSeconds);
+        wake();
+        break;
+      case 'togglePlay':
+        s.togglePlay();
+        wake();
+        break;
+      case 'play':
+        if (!playerState().playing) s.togglePlay();
+        wake();
+        break;
+      case 'pause':
+        if (playerState().playing) s.togglePlay();
+        wake();
+        break;
+      case 'close':
+        if (sheet) setSheet(null);
+        else closePlayer();
+        break;
+      case 'wake':
+        wake();
+        break;
+      case 'none':
+        break;
+    }
+  };
+  useTvRemote(!sheet, (e) => {
+    const key = tvKeyFromEvent(e);
+    if (key) onTvKey(key);
+  });
+  // Back closes the player (a sheet first). Phones keep the system back (minimize).
+  useTvBack(isNativeTV, () => onTvKey('back'));
+
   const onKey = (k: KeyPress) => {
+    if (isTV) {
+      // Web TV preview: the keyboard stands in for the remote.
+      const key = tvKeyFromWeb(k.key);
+      if (key) onTvKey(key);
+      return;
+    }
     wake();
     switch (k.key) {
       case ' ':
@@ -374,6 +427,8 @@ export function PlayerScreen() {
   return (
     <KeyInput enabled={!sheet} onKey={onKey} style={styles.root}>
       <StatusBar hidden={!visible} animated style="light" />
+      {/* TV: the focus stays in the player. */}
+      <TvFocusGuide trapFocus={isNativeTV} style={styles.root}>
       <Animated.View style={[styles.root, frameStyle]} onPointerMove={onPointerMove}>
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {/* Audio plays now (this screen is about to close): no video surface, so no old frame shows. */}
@@ -383,6 +438,25 @@ export function PlayerScreen() {
         <GestureDetector gesture={gestures}>
           <View style={StyleSheet.absoluteFill} accessible={false} />
         </GestureDetector>
+
+        {/* TV, controls hidden: this layer holds the focus, so Select plays or pauses and shows them. */}
+        {isTV && !visible && status !== 'error' ? (
+          <Pressable
+            hasTVPreferredFocus
+            focusable
+            style={StyleSheet.absoluteFill}
+            accessibilityRole="button"
+            accessibilityLabel={showsPause ? 'Pause' : 'Play'}
+            ref={(v) => {
+              // Web TV preview: no focus engine, so focus it by hand.
+              if (v && Platform.OS === 'web') (v as unknown as HTMLElement).focus?.();
+            }}
+            onPress={() => {
+              s.togglePlay();
+              wake();
+            }}
+          />
+        ) : null}
 
         <SubtitleOverlay bottom={visible ? 132 + bottomPad : bottomPad + spacing.xl} />
 
@@ -401,6 +475,9 @@ export function PlayerScreen() {
 
         {/* Controls */}
         <Animated.View style={[StyleSheet.absoluteFill, controlsStyle]} pointerEvents={visible ? 'box-none' : 'none'}>
+          {/* TV: hidden controls are not mounted, so Select never presses an unseen button. */}
+          {!isTV || visible ? (
+          <>
           <LinearGradient colors={player.topScrim} style={[styles.topScrim, { height: insets.top + 120 }]} pointerEvents="none" />
           <LinearGradient colors={player.bottomScrim} style={[styles.bottomScrim, { height: bottomPad + 180 }]} pointerEvents="none" />
 
@@ -449,6 +526,7 @@ export function PlayerScreen() {
                 label={showsPause ? 'Pause' : 'Play'}
                 size={player.playSize}
                 glyph={iconSize.xxl}
+                preferredFocus={isTV && visible}
                 haptic
                 onPress={() => {
                   wake();
@@ -498,6 +576,8 @@ export function PlayerScreen() {
               <Text style={styles.time}>{formatTime(-(Math.max(0, duration - position)))}</Text>
             </View>
           </View>
+          </>
+          ) : null}
         </Animated.View>
 
         {/* Prompts stay visible with the controls hidden. */}
@@ -535,6 +615,7 @@ export function PlayerScreen() {
           </View>
         ) : null}
       </Animated.View>
+      </TvFocusGuide>
 
       <PlayerSheet visible={sheet === 'tracks'} title="Audio & Subtitles" sections={trackSections} onClose={() => setSheet(null)} />
       <PlayerSheet visible={sheet === 'settings'} title="Playback" sections={settingsSections} onClose={() => setSheet(null)} />
@@ -561,7 +642,11 @@ function PillButton({ icon, label, onPress }: { icon: IconName; label: string; o
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.pillButton, (pressed || hovered) && styles.pillPressed]}>
+      style={({ pressed, hovered, focused }: { pressed: boolean; hovered?: boolean; focused?: boolean }) => [
+        styles.pillButton,
+        (pressed || hovered) && styles.pillPressed,
+        isTV && focused && styles.pillFocused,
+      ]}>
       <Icon name={icon} size={iconSize.md} color={c.textOnMedia} />
     </Pressable>
   );
@@ -579,6 +664,8 @@ const styles = StyleSheet.create({
   pillButton: { width: player.pillButton, height: player.pillButton, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   skipNumber: { position: 'absolute', fontSize: 10, lineHeight: 12, fontWeight: '700', color: c.textOnMedia, fontVariant: ['tabular-nums'] },
   pillPressed: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  // TV: the focused pill button turns white-filled, readable from across the room.
+  pillFocused: { backgroundColor: 'rgba(255,255,255,0.35)' },
   center: {
     ...StyleSheet.absoluteFill,
     flexDirection: 'row',

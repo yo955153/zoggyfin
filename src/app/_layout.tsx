@@ -27,9 +27,17 @@ import { startUpdateChecks } from '@/platform/updates';
 import { audioSession } from '@/player/audio/session';
 import '@/invite/wiring';
 import { useInviteLinks } from '@/invite/use-invite-links';
+import { isTV } from '@/platform/tv';
 import { mediaColors, useTheme } from '@/theme';
 import { nearby } from '@/together/nearby';
 import { AppThemeProvider } from '@/theme/provider';
+
+/**
+ * The players open over the page they came from. TV: a full-screen page
+ * instead, so the page under it is taken off screen and its tiles cannot
+ * keep the remote's focus while the video plays.
+ */
+const PLAYER_PRESENTATION = isTV ? ('fullScreenModal' as const) : ('transparentModal' as const);
 
 export default function RootLayout() {
   const session = useSession();
@@ -114,7 +122,7 @@ function Root({ session }: { session: boolean }) {
                 <Stack.Screen
                   name="player"
                   options={{
-                    presentation: 'transparentModal',
+                    presentation: PLAYER_PRESENTATION,
                     animation: 'fade',
                     animationDuration: 240,
                     contentStyle: { backgroundColor: mediaColors.black },
@@ -128,7 +136,7 @@ function Root({ session }: { session: boolean }) {
                 <Stack.Screen
                   name="now-playing"
                   options={{
-                    presentation: 'transparentModal',
+                    presentation: PLAYER_PRESENTATION,
                     animation: 'slide_from_bottom',
                     animationDuration: 300,
                     contentStyle: { backgroundColor: mediaColors.black },
