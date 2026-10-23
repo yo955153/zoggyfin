@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useState } from 'react';
-import { type LayoutChangeEvent, Platform, StyleSheet, Text, View } from 'react-native';
+import { type LayoutChangeEvent, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -13,6 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { isTV } from '@/platform/tv';
 import { type Chapter, chapterAt, chapterMarks, formatTime, spokenTime, type Trickplay, trickplaySheetUrl, trickplayTile } from '@/player/timeline';
 
 import { c, motion, player, spacing, textStyle, type } from './tokens';
@@ -31,6 +32,12 @@ interface Props {
   gutter: number;
   onSeek: (seconds: number) => void;
   onScrubbing: (scrubbing: boolean) => void;
+  /** TV: the time the remote is scrubbing to (Left and Right on the focused bar), or null. */
+  tvTarget?: number | null;
+  /** TV: the bar took or lost the focus. */
+  onTvFocus?: (focused: boolean) => void;
+  /** TV: Select on the focused bar. */
+  onTvSelect?: () => void;
 }
 
 function clamp01(v: number) {
@@ -42,6 +49,8 @@ function clamp01(v: number) {
  * The scrubber (design-system §7.8): 6 pt track, 10 pt while dragged, a
  * white thumb, buffered and played fills, chapter gaps, and a trickplay
  * preview that follows the thumb. The drag runs on the UI thread.
+ * TV: the bar is a focus stop; it grows and its thumb gets a ring while
+ * focused, and the remote's scrub target moves the thumb and the preview.
  */
 export function Scrubber({
   position,
@@ -56,7 +65,11 @@ export function Scrubber({
   gutter,
   onSeek,
   onScrubbing,
+  tvTarget = null,
+  onTvFocus,
+  onTvSelect,
 }: Props) {
+  const [tvFocused, setTvFocused] = useState(false);
   const [width, setWidth] = useState(0);
   const w = useSharedValue(0);
   const progress = useSharedValue(duration > 0 ? position / duration : 0);
@@ -69,11 +82,17 @@ export function Scrubber({
 
   // Follow playback between the 0.5 s time events with a linear glide.
   useEffect(() => {
-    if (scrubbing.get() || !(duration > 0)) return;
+    if (scrubbing.get() || tvTarget !== null || !(duration > 0)) return;
     const target = clamp01(position / duration);
     const jump = Math.abs(target - progress.get()) * duration > 2 || !playing;
     progress.set(jump ? target : withTiming(target, { duration: 500, easing: Easing.linear }));
-  }, [position, duration, playing, progress, scrubbing]);
+  }, [position, duration, playing, progress, scrubbing, tvTarget]);
+
+  // TV: the thumb follows the remote's scrub target.
+  useEffect(() => {
+    if (tvTarget === null || !(duration > 0)) return;
+    progress.set(withTiming(clamp01(tvTarget / duration), { duration: motion.duration.fast }));
+  }, [tvTarget, duration, progress]);
 
   useEffect(() => {
     bufferedP.set(withTiming(duration > 0 ? clamp01(buffered / duration) : 0, { duration: motion.duration.fast }));
@@ -146,22 +165,58 @@ export function Scrubber({
   }));
 
   const value = `${spokenTime(position)} of ${spokenTime(duration)}`;
+  const shownPreview = preview ?? tvTarget;
+
+  const bar = (
+    <>
+      <Animated.View style={[styles.track, trackStyle]}>
+        <Animated.View style={[styles.fill, styles.buffered, bufferedStyle]} />
+        <Animated.View style={[styles.fill, styles.played, playedStyle]} />
+        {marks.map((m) => (
+          <View key={m} style={[styles.mark, { left: m * width - player.chapterGap / 2 }]} />
+        ))}
+      </Animated.View>
+      <Animated.View style={[styles.thumb, tvFocused && styles.thumbFocused, thumbStyle]} />
+    </>
+  );
 
   return (
     <View style={styles.wrap}>
-      {preview !== null && width > 0 ? (
+      {shownPreview !== null && width > 0 ? (
         <Preview
-          seconds={preview}
-          fraction={duration > 0 ? preview / duration : 0}
+          seconds={shownPreview}
+          fraction={duration > 0 ? shownPreview / duration : 0}
           trackWidth={width}
           gutter={gutter}
-          chapter={chapterAt(chapters, preview)?.name ?? null}
+          chapter={chapterAt(chapters, shownPreview)?.name ?? null}
           trickplay={trickplay}
           server={server}
           itemId={itemId}
           mediaSourceId={mediaSourceId}
         />
       ) : null}
+      {isTV ? (
+        // TV: a focus stop. Left and Right scrub (player-screen), Select seeks.
+        <Pressable
+          style={styles.hit}
+          onLayout={onLayout}
+          accessibilityRole="adjustable"
+          accessibilityLabel="Playback position"
+          accessibilityValue={{ text: value }}
+          onFocus={() => {
+            setTvFocused(true);
+            dragging.set(withSpring(1, motion.spring.snappy));
+            onTvFocus?.(true);
+          }}
+          onBlur={() => {
+            setTvFocused(false);
+            dragging.set(withSpring(0, motion.spring.snappy));
+            onTvFocus?.(false);
+          }}
+          onPress={onTvSelect}>
+          {bar}
+        </Pressable>
+      ) : (
       <GestureDetector gesture={pan}>
         <View
           style={styles.hit}
@@ -172,16 +227,10 @@ export function Scrubber({
           accessibilityValue={{ text: value }}
           accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
           onAccessibilityAction={(e) => onSeek(position + (e.nativeEvent.actionName === 'increment' ? 15 : -15))}>
-          <Animated.View style={[styles.track, trackStyle]}>
-            <Animated.View style={[styles.fill, styles.buffered, bufferedStyle]} />
-            <Animated.View style={[styles.fill, styles.played, playedStyle]} />
-            {marks.map((m) => (
-              <View key={m} style={[styles.mark, { left: m * width - player.chapterGap / 2 }]} />
-            ))}
-          </Animated.View>
-          <Animated.View style={[styles.thumb, thumbStyle]} />
+          {bar}
         </View>
       </GestureDetector>
+      )}
     </View>
   );
 }
@@ -269,6 +318,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
   },
+  // TV: the focused bar's thumb has a ring, readable from across the room.
+  thumbFocused: { borderWidth: 3, borderColor: c.accent },
   preview: { position: 'absolute', bottom: player.scrubberHitHeight + spacing.xs, alignItems: 'center', gap: spacing.xs },
   thumbBox: {
     borderRadius: player.preview.radius,

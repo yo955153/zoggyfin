@@ -2,8 +2,13 @@ import {
   createDoublePress,
   DOUBLE_PRESS_MS,
   NO_PRESS,
+  NO_RUN,
+  nextRun,
   playerKeyAction,
   registerPress,
+  SCRUB_RUN_MS,
+  scrubStep,
+  scrubTarget,
   stackFeedback,
   tvKeyFromEvent,
   tvKeyFromWeb,
@@ -113,5 +118,32 @@ describe('seek feedback', () => {
   it('starts again on the other side', () => {
     const a = stackFeedback(stackFeedback(null, 'left', -10), 'left', -10);
     expect(stackFeedback(a, 'right', 10)).toMatchObject({ side: 'right', seconds: 10 });
+  });
+});
+
+describe('scrubbing with the remote', () => {
+  it('starts with 10 s steps and speeds up while a key is held', () => {
+    let run = NO_RUN;
+    const steps: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      run = nextRun(run, 1, i * 100);
+      steps.push(scrubStep(run.count));
+    }
+    expect(steps.slice(0, 3)).toEqual([10, 10, 10]);
+    expect(steps[4]).toBe(30);
+    expect(steps[11]).toBe(60);
+  });
+
+  it('starts a new run after a pause or a change of direction', () => {
+    const a = nextRun(nextRun(NO_RUN, 1, 0), 1, 100);
+    expect(a.count).toBe(2);
+    expect(nextRun(a, 1, 100 + SCRUB_RUN_MS + 1).count).toBe(1);
+    expect(nextRun(a, -1, 150)).toMatchObject({ dir: -1, count: 1 });
+  });
+
+  it('keeps the target inside the video', () => {
+    expect(scrubTarget(5, { dir: -1, count: 1, at: 0 }, 100)).toBe(0);
+    expect(scrubTarget(95, { dir: 1, count: 1, at: 0 }, 100)).toBe(100);
+    expect(scrubTarget(50, { dir: 1, count: 1, at: 0 }, 100)).toBe(60);
   });
 });

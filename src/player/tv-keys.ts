@@ -157,3 +157,40 @@ export function stackFeedback(prev: SeekFeedback | null, side: 'left' | 'right',
     key: (prev?.key ?? 0) + 1,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Scrubbing with the remote (the seek bar has the focus)
+// ---------------------------------------------------------------------------
+
+/** The scrub seeks this long after the last Left or Right press (ms). Select seeks at once. */
+export const SCRUB_COMMIT_MS = 800;
+
+/** Presses closer than this (ms) in the same direction are one run, and the step grows. */
+export const SCRUB_RUN_MS = 600;
+
+/** A run of Left or Right presses on the seek bar (a held key repeats). */
+export interface ScrubRun {
+  dir: -1 | 0 | 1;
+  count: number;
+  at: number;
+}
+
+export const NO_RUN: ScrubRun = { dir: 0, count: 0, at: 0 };
+
+/** The step for the nth press of a run (s): 10 s, then 30 s, then 60 s. */
+export function scrubStep(count: number): number {
+  if (count < 4) return 10;
+  if (count < 10) return 30;
+  return 60;
+}
+
+export function nextRun(run: ScrubRun, dir: -1 | 1, now: number): ScrubRun {
+  if (run.dir === dir && now - run.at >= 0 && now - run.at <= SCRUB_RUN_MS) return { dir, count: run.count + 1, at: now };
+  return { dir, count: 1, at: now };
+}
+
+/** The new scrub target: one step of the run from `from`, inside the video. */
+export function scrubTarget(from: number, run: ScrubRun, duration: number): number {
+  const to = from + run.dir * scrubStep(run.count);
+  return Math.min(Math.max(0, to), duration > 0 ? duration : to);
+}

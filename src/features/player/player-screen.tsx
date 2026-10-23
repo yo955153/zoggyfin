@@ -39,7 +39,20 @@ import { TvFocusGuide } from '@/features/tv/focus';
 import { useTvBack } from '@/features/tv/use-tv-back';
 import { useTvRemote } from '@/features/tv/use-tv-remote';
 import { features, isNativeTV, isTV } from '@/platform/tv';
-import { createDoublePress, playerKeyAction, type SeekFeedback, stackFeedback, type TvKey, tvKeyFromEvent, tvKeyFromWeb } from '@/player/tv-keys';
+import {
+  createDoublePress,
+  NO_RUN,
+  nextRun,
+  playerKeyAction,
+  SCRUB_COMMIT_MS,
+  type ScrubRun,
+  scrubTarget,
+  type SeekFeedback,
+  stackFeedback,
+  type TvKey,
+  tvKeyFromEvent,
+  tvKeyFromWeb,
+} from '@/player/tv-keys';
 import { nearby, nearbySupported } from '@/together/nearby';
 import { openTogetherSheet, togetherState } from '@/together/store';
 import { syncPlaySupported } from '@/together/syncplay';
@@ -252,7 +265,55 @@ export function PlayerScreen() {
   // TV remote: a single Left or Right shows the controls (and the focus
   // moves as usual); a double press also seeks 10 s (player/tv-keys.ts).
   const doublePress = useRef(createDoublePress()).current;
+
+  // TV scrubbing: with the seek bar focused, Left and Right move a target
+  // (faster while held); Select or a short pause seeks there, Back cancels.
+  const [barFocused, setBarFocused] = useState(false);
+  const [scrubTo, setScrubTo] = useState<number | null>(null);
+  const scrubRun = useRef<ScrubRun>(NO_RUN);
+  const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearScrubTimer = () => {
+    if (scrubTimer.current) clearTimeout(scrubTimer.current);
+    scrubTimer.current = null;
+  };
+  const commitScrub = (to: number | null) => {
+    clearScrubTimer();
+    scrubRun.current = NO_RUN;
+    setScrubTo(null);
+    setScrubbing(false);
+    if (to !== null) s.seekTo(to);
+    wake();
+  };
+  const cancelScrub = () => {
+    clearScrubTimer();
+    scrubRun.current = NO_RUN;
+    setScrubTo(null);
+    setScrubbing(false);
+    wake();
+  };
+  useEffect(() => () => {
+    if (scrubTimer.current) clearTimeout(scrubTimer.current);
+  }, []);
+  const scrub = (dir: -1 | 1) => {
+    scrubRun.current = nextRun(scrubRun.current, dir, Date.now());
+    const from = scrubTo ?? playerState().position;
+    const to = scrubTarget(from, scrubRun.current, playerState().duration);
+    setScrubTo(to);
+    setScrubbing(true);
+    wake();
+    clearScrubTimer();
+    scrubTimer.current = setTimeout(() => commitScrub(to), SCRUB_COMMIT_MS);
+  };
+
   const onTvKey = (key: TvKey) => {
+    if (barFocused && visible && (key === 'left' || key === 'right')) {
+      scrub(key === 'left' ? -1 : 1);
+      return;
+    }
+    if (key === 'back' && scrubTo !== null) {
+      cancelScrub();
+      return;
+    }
     const double = key === 'left' || key === 'right' ? doublePress.press(key) : false;
     const action = playerKeyAction(key, double);
     switch (action.type) {
@@ -565,6 +626,12 @@ export function PlayerScreen() {
                   s.seekTo(t);
                   wake();
                 }}
+                tvTarget={scrubTo}
+                onTvFocus={(on) => {
+                  setBarFocused(on);
+                  if (!on && scrubTo !== null) commitScrub(scrubTo);
+                }}
+                onTvSelect={() => commitScrub(scrubTo)}
                 onScrubbing={(on) => {
                   setScrubbing(on);
                   if (on) wake();
