@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 
 import type { ClientIdentity } from '@/api/auth-header';
 import { randomId } from '@/lib/id';
+import { runningOta, versionWithOta } from '@/lib/ota';
 import { storage } from '@/storage/kv';
 
 const DEVICE_ID_KEY = 'device.id';
@@ -25,7 +26,8 @@ export function clientIdentity(): ClientIdentity {
       client: 'Zoggyfin',
       device: Device.modelName ?? Device.deviceName ?? (Platform.OS === 'web' ? 'Web Browser' : 'Device'),
       deviceId: deviceId(),
-      version: Application.nativeApplicationVersion ?? '0.1.0',
+      // With the update ID, the server shows which update each device runs.
+      version: versionWithOta(Application.nativeApplicationVersion ?? '0.1.0', runningOta()),
     };
   }
   return cached;

@@ -21,6 +21,7 @@ import { devOffline, setDevOffline } from '@/lib/dev-offline';
 import { useExtensions } from '@/extensions/store';
 import { checkServer } from '@/lib/online';
 import { formatBytes } from '@/lib/format';
+import { otaLabel, runningOta } from '@/lib/ota';
 import { toast } from '@/lib/toast';
 import { appVersion } from '@/platform/desktop';
 import { isTV } from '@/platform/tv';
@@ -100,7 +101,12 @@ export default function SettingsScreen() {
               label="App version"
               value={
                 appVersion ??
-                `${Application.nativeApplicationVersion ?? id.version}${Application.nativeBuildVersion ? ` (${Application.nativeBuildVersion})` : ''}`
+                [
+                  `${Application.nativeApplicationVersion ?? id.version}${Application.nativeBuildVersion ? ` (${Application.nativeBuildVersion})` : ''}`,
+                  otaLabel(runningOta()),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
               }
             />
             <UpdateSettingsRow />
