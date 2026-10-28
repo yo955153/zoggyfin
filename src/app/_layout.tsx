@@ -15,6 +15,7 @@ import {
   shouldPersistQuery,
 } from '@/api/query-client';
 import { useSession, useSessionStore } from '@/auth/session-store';
+import { RefreshSpinnerHost } from '@/components/refresh-spinner';
 import { ToastHost } from '@/components/toast-host';
 import { downloads, downloadsSupported } from '@/downloads';
 import { ExtensionsHost } from '@/extensions/ui/host';
@@ -149,6 +150,7 @@ function Root({ session }: { session: boolean }) {
             {session ? <AddToPlaylistHost /> : null}
             {session ? <ExtensionsHost /> : null}
             <UpdateCardHost />
+            <RefreshSpinnerHost />
             <ToastHost />
           </View>
   );

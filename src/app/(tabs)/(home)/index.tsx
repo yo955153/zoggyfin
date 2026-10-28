@@ -6,6 +6,7 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { queryKeys } from '@/api/query-keys';
 import { useApi } from '@/api/use-api';
 import { Avatar } from '@/components/avatar';
+import { refreshTint, useRefreshSpinner } from '@/components/refresh-spinner';
 import { Touchable } from '@/components/touchable';
 import { registerBuiltinHomeSections } from '@/features/home/builtin-sections';
 import { Billboard, BillboardRows } from '@/features/tv/billboard';
@@ -35,6 +36,7 @@ export default function HomeScreen() {
   const [accounts, setAccounts] = useState(false);
 
   const pull = usePullRefresh(() => qc.invalidateQueries({ queryKey: queryKeys.all(scope) }));
+  useRefreshSpinner(pull.refreshing);
 
   // TV: the row with the focus scrolls to the top of the list, right under the billboard.
   const tvScroll = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -105,7 +107,7 @@ export default function HomeScreen() {
         contentInsetAdjustmentBehavior="automatic"
         style={s.flex}
         contentContainerStyle={[s.content, { paddingBottom: bottomPad }]}
-        refreshControl={isTV ? undefined : <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={c.text2} />}>
+        refreshControl={isTV ? undefined : <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={refreshTint(c.text2)} />}>
         <OfflineBanner entries />
         {homeTogether ? <NearbyHomeCard /> : null}
         {sections.map((sec) => (

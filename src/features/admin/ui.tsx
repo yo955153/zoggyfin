@@ -10,6 +10,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, Text, View, type ViewSty
 import { Button } from '@/components/button';
 import { Icon, type IconName } from '@/components/icon';
 import { Sheet } from '@/components/sheet';
+import { refreshTint, useRefreshSpinner } from '@/components/refresh-spinner';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { TextField } from '@/components/text-field';
 import { Touchable } from '@/components/touchable';
@@ -82,13 +83,14 @@ export function AdminPage({ children, onRefresh, wide = false, inset = true, sty
   const sidebar = inset ? sidebarInset : 0;
   const { c } = useTheme();
   const pull = usePullRefresh(onRefresh);
+  useRefreshSpinner(pull.refreshing);
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       style={rs.page}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={[rs.content, { paddingBottom: bottomPad }, sidebar ? { paddingLeft: sidebar + spacing.lg } : null]}
-      refreshControl={pull.onRefresh ? <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={c.text3} colors={[c.accent]} /> : undefined}>
+      refreshControl={pull.onRefresh ? <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={refreshTint(c.text3)} colors={[c.accent]} /> : undefined}>
       <View style={[rs.inner, wide && s.innerWide, style]}>{children}</View>
     </ScrollView>
   );

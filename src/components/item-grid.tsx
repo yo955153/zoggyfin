@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import { type ReactElement, useCallback, useState } from 'react';
-import { ActivityIndicator, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, type LayoutChangeEvent, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { usePrefetchItemOnFocus } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
@@ -8,6 +8,7 @@ import { useOpenItem } from '@/lib/navigation';
 import { usePullRefresh } from '@/lib/use-pull-refresh';
 import { gridLayout, spacing, tvFocusBleed, useLayout, useTheme } from '@/theme';
 
+import { refreshTint, useRefreshSpinner } from './refresh-spinner';
 import { Tile, tileHeight, type TileShape } from './tile';
 import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
@@ -48,6 +49,7 @@ export function ItemGrid({
   const { c } = useTheme();
   const openItem = useOpenItem();
   const pull = usePullRefresh(onRefresh);
+  useRefreshSpinner(pull.refreshing);
   const open = onPress ?? openItem;
   const prefetch = usePrefetchItemOnFocus();
   const [measured, setMeasured] = useState(0);
@@ -95,8 +97,7 @@ export function ItemGrid({
         contentContainerStyle={{ paddingHorizontal: gutter, paddingBottom: bottomPad, paddingTop: topPad }}
         onEndReached={onEndReached}
         onEndReachedThreshold={0.8}
-        refreshing={pull.refreshing}
-        onRefresh={pull.onRefresh}
+        refreshControl={pull.onRefresh ? <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={refreshTint(c.text2)} /> : undefined}
         ListHeaderComponent={ListHeaderComponent}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={isFetchingMore ? <ActivityIndicator style={styles.footer} color={c.text2} /> : null}

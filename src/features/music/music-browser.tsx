@@ -1,7 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { DEFAULT_MUSIC_OPTIONS, type MusicOptions, type MusicTab } from '@/api/jellyfin';
 import { useMusicTab, usePlayedSongs } from '@/api/queries';
@@ -11,6 +11,7 @@ import { Chip, chipRowTV } from '@/components/chip';
 import { ItemGrid } from '@/components/item-grid';
 import { ItemRow } from '@/components/item-row';
 import { OptionSheet } from '@/components/option-sheet';
+import { refreshTint, useRefreshSpinner } from '@/components/refresh-spinner';
 import { EmptyState, ErrorState, GridSkeleton, LoadingState } from '@/components/states';
 import { TabPager } from '@/components/tab-pager';
 import type { PagerTab } from '@/components/tab-pager-types';
@@ -20,7 +21,7 @@ import { usePullRefresh } from '@/lib/use-pull-refresh';
 import { usePlayer } from '@/player';
 import { readJson, writeJson } from '@/storage/json';
 import { storage } from '@/storage/kv';
-import { spacing, useLayout } from '@/theme';
+import { spacing, useLayout, useTheme } from '@/theme';
 import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 export type AudioLibraryKind = 'music' | 'books';
@@ -157,6 +158,8 @@ function MusicPage({ libraryId, tab }: { libraryId: string; tab: MusicTab }) {
   const player = usePlayer();
   const open = useOpenItem();
   const pull = usePullRefresh(q.refetch);
+  useRefreshSpinner(pull.refreshing);
+  const { c } = useTheme();
   const [menu, setMenu] = useState<BaseItemDto | undefined>(undefined);
   const l = useLayout();
   const bottomPad = useTabBottomPadding(spacing.huge * 2, { autoInset: false });
@@ -210,8 +213,7 @@ function MusicPage({ libraryId, tab }: { libraryId: string; tab: MusicTab }) {
           ListHeaderComponent={header}
           onEndReached={more}
           onEndReachedThreshold={0.8}
-          refreshing={pull.refreshing}
-          onRefresh={pull.onRefresh}
+          refreshControl={pull.onRefresh ? <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={refreshTint(c.text2)} /> : undefined}
           ListEmptyComponent={empty}
           contentContainerStyle={{ paddingBottom: bottomPad, paddingTop: spacing.sm }}
         />
