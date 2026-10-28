@@ -11,6 +11,15 @@ import { setAutoPictureInPicture } from '@/native/zoggyfin-native';
 
 import type { EngineListener, EngineSource, EngineStatus, VideoEngine } from './engine-types';
 
+/**
+ * iOS: with no artist or artwork from the app, expo-video puts the file's own
+ * metadata items (AVMetadataItem) into the Now Playing info, and MediaPlayer
+ * aborts the app on them. A download with cover art inside crashed on every
+ * play. So the app always gives both. This URL loads nothing: no artwork shows.
+ * patches/expo-video fixes the cause for the next native build.
+ */
+const NO_ARTWORK = 'file:///dev/null';
+
 class NativeEngine implements VideoEngine {
   private player: VideoPlayer | null = null;
   private listeners = new Set<EngineListener>();
@@ -138,7 +147,7 @@ class NativeEngine implements VideoEngine {
     p.replace({
       uri: source.uri,
       contentType: source.isHls ? 'hls' : 'progressive',
-      metadata: { title: source.title, artist: source.subtitle, artwork: source.artworkUri },
+      metadata: { title: source.title, artist: source.subtitle ?? '', artwork: source.artworkUri ?? (Platform.OS === 'ios' ? NO_ARTWORK : undefined) },
     }, true);
   }
 

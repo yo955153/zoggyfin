@@ -1,0 +1,28 @@
+diff --git a/ios/NowPlayingManager.swift b/ios/NowPlayingManager.swift
+index a8f92a5f4599b8f8a348c6d104c77965afea0892..f0da5406eb54ca4d466849cc9b55b6c4808bc7fb 100644
+--- a/ios/NowPlayingManager.swift
++++ b/ios/NowPlayingManager.swift
+@@ -120,8 +120,9 @@ class NowPlayingManager: VideoPlayerObserverDelegate {
+ 
+       var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+ 
+-      nowPlayingInfo[MPMediaItemPropertyTitle] = userMetadata?.title ?? title
+-      nowPlayingInfo[MPMediaItemPropertyArtist] = userMetadata?.artist ?? artist
++      // AVMetadataItem is not a valid Now Playing value: MediaPlayer aborts on it. Use its string value.
++      nowPlayingInfo[MPMediaItemPropertyTitle] = userMetadata?.title ?? title?.stringValue
++      nowPlayingInfo[MPMediaItemPropertyArtist] = userMetadata?.artist ?? artist?.stringValue
+       nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = currentItem.duration.seconds
+       nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentItem.currentTime().seconds
+       nowPlayingInfo[MPNowPlayingInfoPropertyIsLiveStream] = currentItem.duration.isIndefinite
+@@ -137,7 +138,10 @@ class NowPlayingManager: VideoPlayerObserverDelegate {
+         }
+       } else if userMetadata?.artwork == nil {
+         self.artworkDataTask = nil
+-        nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
++        // The same for artwork: MediaPlayer needs an MPMediaItemArtwork, not the AVMetadataItem.
++        nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork?.dataValue.flatMap { UIImage(data: $0) }.map { image in
++          MPMediaItemArtwork(boundsSize: image.size) { _ in image }
++        }
+       }
+ 
+       MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo

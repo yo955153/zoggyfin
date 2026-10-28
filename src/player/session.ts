@@ -17,6 +17,7 @@ import { clientIdentity } from '@/auth/identity';
 import { useSessionStore } from '@/auth/session-store';
 import { checkDownloadedFiles, type DownloadRecord, findDownload, localExtraUri, localFileFor, readLocalText } from '@/downloads';
 import { outboxPosition } from '@/downloads/outbox-store';
+import { useDownloadsStore } from '@/downloads/store';
 import { resolveImage } from '@/images/resolve-image';
 import { isOffline } from '@/lib/online';
 import { bitrateFor, usePlaybackSettings } from '@/settings/playback';
@@ -139,6 +140,38 @@ class VideoSession {
 
   constructor() {
     this.engine.subscribe(this.onEngine);
+    useDownloadsStore.subscribe((s, prev) => {
+      const itemId = playerState().now?.item.Id;
+      if (itemId && s.records[itemId] !== prev.records[itemId]) void this.switchToDownload(itemId);
+    });
+  }
+
+  /**
+   * The download of the streamed item completed: the item continues from the
+   * file at the same position. Not in a together session, where the group
+   * keeps one timeline.
+   */
+  private async switchToDownload(itemId: string): Promise<void> {
+    const st = playerState();
+    const now = st.now;
+    if (!now || now.kind !== 'video' || now.plan.isLocal || now.item.Id !== itemId) return;
+    if (st.status === 'error' || st.status === 'ended' || playRouter.active || controlGate.active) return;
+    const r = downloaded(itemId);
+    if (!r) return;
+    const id = ++this.loadId;
+    const position = this.engine.position || st.position;
+    const request: PlayRequest = { item: now.item, queue: now.queue, startPositionTicks: secondsToTicks(position), autoplay: st.playing };
+    // The server's stream (and its transcode) stops; the file then plays in a new player.
+    await this.finishCurrent();
+    if (id !== this.loadId) return;
+    this.lastRequest = request;
+    try {
+      await this.playLocal(id, r, request);
+    } catch (e) {
+      if (id !== this.loadId) return;
+      console.warn('[player] switch to the download failed', e);
+      setPlayerState({ status: 'error', error: errorText(e) });
+    }
   }
 
   private onEngine = (e: EngineEvent) => {
@@ -235,6 +268,16 @@ class VideoSession {
       const { api, userId } = context();
       const target = await jf.resolvePlayable(api, userId, request.item);
       if (!target?.Id) throw new Error('Nothing to play here yet.');
+      if (target.Id !== request.item.Id) {
+        // A show or season resolved to an episode: a download of that episode plays from the device.
+        await checkDownloadedFiles([target.Id]);
+        if (id !== this.loadId) return;
+        const localTarget = downloaded(target.Id);
+        if (localTarget) {
+          await this.playLocal(id, localTarget, request);
+          return;
+        }
+      }
       // The full item has chapters, trickplay info and the user's position.
       const item = await jf.getItem(api, userId, target.Id);
       if (id !== this.loadId) return;
