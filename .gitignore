@@ -1,3 +1,4 @@
+.env
 .env.local
 .env*.local
 node_modules/
@@ -26,3 +27,4 @@ coverage/
 # Web runtime config (self-hosted builds); see public/config.example.json
 public/config.json
 .playwright-mcp/
+.wrangler/

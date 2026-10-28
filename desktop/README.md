@@ -201,7 +201,7 @@ pnpm desktop:publish
    | `latest.json` (the updater feed) | no-cache |
 
 5. Makes the GitHub release `v<version>` with the DMG, the update archive, its signature and
-   `latest.json`. While the repository is private, only collaborators see it.
+   `latest.json`.
 
 Secrets stay in `~/.config/zoggyfin-desktop/` (mode 600, never in the repository):
 `notary.env` (Developer ID identity and the App Store Connect API key), `updater.env` and

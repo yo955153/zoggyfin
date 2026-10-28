@@ -1,6 +1,16 @@
 {
   "name": "zoggyfin",
   "version": "0.1.0",
+  "description": "A fast, clear Jellyfin client for iPhone, iPad, Mac and the web",
+  "homepage": "https://zoggyfin.zog-tech.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zog-tech/zoggyfin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zog-tech/zoggyfin/issues"
+  },
+  "author": "Zog Tech, Inc. <admin@zog-tech.com>",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo-google-fonts/noto-sans-arabic": "^0.4.3",
