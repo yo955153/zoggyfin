@@ -121,6 +121,16 @@ export function registerBuiltinItemActions(): void {
     when: ({ item, app }) => item.Type === 'Playlist' && !!app.deletePlaylist,
     run: ({ item, app }) => app.deletePlaylist?.(item),
   });
+  // The server sets CanDelete only for a user with the content deletion permission.
+  itemActions.register({
+    id: 'builtin.deleteItem',
+    title: 'Delete from server',
+    icon: 'trash',
+    order: 96,
+    destructive: true,
+    when: ({ item, app }) => !!app.deleteItem && item.CanDelete === true && item.Type !== 'Playlist',
+    run: ({ item, app }) => app.deleteItem?.(item),
+  });
   itemActions.register({
     id: 'builtin.favorite',
     title: 'Add to favourites',

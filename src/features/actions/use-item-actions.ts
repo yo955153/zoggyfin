@@ -7,7 +7,7 @@ import * as jf from '@/api/jellyfin';
 import { queryKeys } from '@/api/query-keys';
 import type { BaseItemDto } from '@/api/types';
 import { useApi } from '@/api/use-api';
-import { router } from 'expo-router';
+import { router, useGlobalSearchParams } from 'expo-router';
 
 import { downloads, downloadsSupported } from '@/downloads';
 import { loadItemFacts, needsItemFacts } from '@/extensions/runtime';
@@ -32,6 +32,8 @@ export function useItemActions(item: BaseItemDto | undefined) {
   const qc = useQueryClient();
   const openItem = useOpenItem();
   const player = usePlayer();
+  // The item page on screen, so a delete from that page goes back.
+  const { id: routeId } = useGlobalSearchParams<{ id?: string }>();
   const version = useSyncExternalStore(itemActions.subscribe, itemActions.list, itemActions.list);
   // The download actions change with the item's download state.
   const dlKey = useDownloadsStore((s) => {
@@ -67,6 +69,26 @@ export function useItemActions(item: BaseItemDto | undefined) {
         const ok = await confirmDestructive(`Delete ${it.Name ?? 'this playlist'}?`, 'The playlist is removed from the server for this account. The songs and videos in it stay in the library.', 'Delete');
         if (ok && (await playlistOps.remove(it)) && router.canGoBack()) router.back();
       },
+      deleteItem: async (it) => {
+        const id = it.Id ?? '';
+        const scopeNote = it.Type === 'Series' ? ' All its seasons and episodes go too.' : it.Type === 'Season' ? ' All its episodes go too.' : it.Type === 'MusicAlbum' ? ' All its songs go too.' : '';
+        const ok = await confirmDestructive(
+          `Delete ${it.Name ?? 'this item'} from the server?`,
+          `The files are deleted from the server's disk for every user.${scopeNote} You cannot undo this.`,
+          'Delete',
+        );
+        if (!ok || !id) return;
+        try {
+          await jf.deleteItem(api, id);
+        } catch (e) {
+          toast(describeError(e).title, { icon: 'exclamationmark.triangle' });
+          return;
+        }
+        toast(`Deleted ${it.Name ?? 'the item'}`, { icon: 'checkmark' });
+        if (routeId === id && router.canGoBack()) router.back();
+        qc.removeQueries({ queryKey: queryKeys.item(scope, id) });
+        await refresh();
+      },
       ...(downloadsSupported
         ? {
             downloadStatus: (it: BaseItemDto) => statusOf(it.Id ?? '', downloadsState()),
@@ -85,7 +107,7 @@ export function useItemActions(item: BaseItemDto | undefined) {
           }
         : null),
     };
-  }, [api, userId, scope, qc, openItem, player]);
+  }, [api, userId, scope, qc, openItem, player, routeId]);
 
   // Extension actions can filter on the item's library or file path: load them only then.
   const extList = useExtensions((st) => st.list);

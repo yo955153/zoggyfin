@@ -53,7 +53,8 @@ export interface Page {
 }
 
 /** Fields every tile needs. Image tags and blurhashes come by default. */
-const TILE_FIELDS: ItemFields[] = ['PrimaryImageAspectRatio', 'ChildCount', 'Trickplay'];
+// CanDelete lets a tile's action menu offer "Delete from server".
+const TILE_FIELDS: ItemFields[] = ['PrimaryImageAspectRatio', 'ChildCount', 'Trickplay', 'CanDelete'];
 const IMAGE_TYPES: ImageType[] = ['Primary', 'Thumb', 'Backdrop'];
 const tile = {
   fields: TILE_FIELDS,
@@ -748,6 +749,11 @@ export async function renamePlaylist(api: Api, playlistId: string, name: string)
 
 export async function deletePlaylist(api: Api, playlistId: string): Promise<void> {
   await getLibraryApi(api).deleteItem({ itemId: playlistId });
+}
+
+/** Deletes an item and its files from the server. The user needs the content deletion permission. */
+export async function deleteItem(api: Api, itemId: string): Promise<void> {
+  await getLibraryApi(api).deleteItem({ itemId });
 }
 
 // ---- Downloads and offline progress ---------------------------------------------

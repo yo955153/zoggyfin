@@ -21,6 +21,8 @@ export interface AppActionApi {
   addToPlaylist?(item: BaseItemDto): void;
   renamePlaylist?(item: BaseItemDto): void;
   deletePlaylist?(item: BaseItemDto): void | Promise<void>;
+  /** Deletes the item and its files from the server. */
+  deleteItem?(item: BaseItemDto): void | Promise<void>;
   /** Downloads. Left out where downloads do not exist (web, TV). */
   downloadStatus?(item: BaseItemDto): DownloadStatus;
   download?(item: BaseItemDto): void;
