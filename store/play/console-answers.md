@@ -5,8 +5,8 @@ Package: `com.zogtech.zoggyfin`. Developer: Zog Tech, Inc. Contact: admin@zog-te
 
 ## 0. Before the forms
 
-1. **Users and permissions:** give the service account (`play-publisher@…`, the same
-   account that ZogNotes uses) access to Zoggyfin. Use "Manage app access" on that user,
+1. **Users and permissions:** give the service account (`play-publisher@…`, the Play
+   publishing service account of the developer account) access to Zoggyfin. Use "Manage app access" on that user,
    or give the account access to all apps. Permissions: "View app information",
    "Release apps to testing tracks", "Manage testing tracks and edit tester lists" and
    "Manage store presence". Do not give "Release to production".

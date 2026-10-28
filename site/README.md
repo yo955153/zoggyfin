@@ -43,7 +43,7 @@ admin@zog-tech.com.
 
 ## Run and deploy
 
-The site moves from nginx on the home server to Cloudflare Pages (project `zoggyfin-site`).
+The site moves from a self-hosted nginx to Cloudflare Pages (project `zoggyfin-site`).
 Until the switch, the old nginx files (`nginx.conf`, `docker-compose.yml`) stay here.
 
 - `wrangler.toml` names the Pages project. `public/` is the output folder; there is no build.

@@ -3,6 +3,8 @@ name = "zoggyfin-desktop"
 version = "0.1.8"
 description = "Zoggyfin desktop: the web app in a Tauri window, with libmpv for video"
 license = "MPL-2.0"
+repository = "https://github.com/zog-tech/zoggyfin"
+homepage = "https://zoggyfin.zog-tech.com"
 edition = "2021"
 publish = false
 
@@ -52,6 +54,6 @@ lto = "thin"
 opt-level = "s"
 strip = true
 # Never "abort": wry catches the Objective-C exception that WebKit throws for a cancelled
-# request by unwinding through Rust frames. With "abort" the app quits there (ZogNotes 0.1.0
-# crashed so). src/lib.rs refuses to build a release with "abort".
+# request by unwinding through Rust frames. With "abort" the app quits there (an earlier
+# Tauri app crashed so). src/lib.rs refuses to build a release with "abort".
 panic = "unwind"

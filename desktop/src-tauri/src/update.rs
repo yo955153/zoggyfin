@@ -9,7 +9,7 @@
 //! 3. `update_install_and_relaunch`: puts the new bundle in place of the installed bundle, then
 //!    quits, and starts the same bundle path again after this process has exited.
 //!
-//! Rules (from the ZogNotes desktop app, which hit each problem):
+//! Rules (from an earlier Tauri app, which hit each problem):
 //! - The update goes into the bundle that the user installed: the real path of the running
 //!   executable, or the original path of an App Translocation path. The updater plugin's own JS
 //!   `check()` cannot take that path, so the page calls these commands.
