@@ -106,7 +106,11 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/ios/",
-      "/android/"
+      "/android/",
+      "<rootDir>/.claude/"
+    ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/.claude/"
     ]
   }
 }

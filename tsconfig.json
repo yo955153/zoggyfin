@@ -24,6 +24,7 @@
     "node_modules",
     "ios",
     "android",
-    "scripts/together-bench"
+    "scripts/together-bench",
+    ".claude"
   ]
 }
