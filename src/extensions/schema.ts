@@ -61,9 +61,9 @@ const requestSchema = z.object({
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).default('POST'),
   path,
   /** Query values. Each string is a template. */
-  query: z.record(z.string().max(500)).optional(),
+  query: z.record(z.string(), z.string().max(500)).optional(),
   /** A JSON body. Each string value is a template. */
-  body: z.record(z.unknown()).optional(),
+  body: z.record(z.string(), z.unknown()).optional(),
 });
 export type RequestSpec = z.infer<typeof requestSchema>;
 
@@ -144,13 +144,12 @@ export const manifestSchema = z.object({
   description: text.optional(),
   /** Every request goes to this origin and to no other. */
   baseUrl: z
-    .string()
     .url()
     .refine((u) => /^https?:\/\//i.test(u), 'The base URL must use http or https'),
   icon: z.string().max(60).optional(),
   permissions: z.array(z.enum(PERMISSIONS)).max(PERMISSIONS.length).default(['network']),
   /** Headers sent with every request. Values are templates (for example `Bearer {{settings.apiKey}}`). */
-  headers: z.record(z.string().max(500)).optional(),
+  headers: z.record(z.string(), z.string().max(500)).optional(),
   contributes: z
     .object({
       settings: z.array(settingSchema).max(20).optional(),

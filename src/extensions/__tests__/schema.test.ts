@@ -33,6 +33,13 @@ describe('parseManifest', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('rejects text that is not a URL and a header map with a bad value, naming the field', () => {
+    const u = parseManifest({ ...raw, baseUrl: 'not a url' });
+    expect(!u.ok && u.error).toMatch(/^baseUrl: /);
+    const h = parseManifest({ ...raw, headers: { Authorization: 5 } });
+    expect(!h.ok && h.error).toMatch(/^headers\.Authorization: /);
+  });
+
   it('rejects unknown permissions and bad ids, naming the field', () => {
     const p = parseManifest({ ...raw, permissions: ['camera'] });
     expect(!p.ok && p.error).toMatch(/^permissions/);

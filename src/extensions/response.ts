@@ -18,26 +18,22 @@ export const taskRefSchema = z.object({
 });
 export type TaskRef = z.infer<typeof taskRefSchema>;
 
-export const actionResponseSchema = z
-  .object({
-    toast: toastSchema.optional(),
-    task: taskRefSchema.optional(),
-    refresh: refresh.optional(),
-  })
-  .passthrough();
+export const actionResponseSchema = z.looseObject({
+  toast: toastSchema.optional(),
+  task: taskRefSchema.optional(),
+  refresh: refresh.optional(),
+});
 export type ActionResponse = z.infer<typeof actionResponseSchema>;
 
-export const taskStatusSchema = z
-  .object({
-    state: z.enum(['queued', 'running', 'done', 'failed']),
-    /** 0 to 1. */
-    progress: z.number().min(0).max(1).optional(),
-    title: z.string().max(200).optional(),
-    message: z.string().max(300).optional(),
-    toast: toastSchema.optional(),
-    refresh: refresh.optional(),
-  })
-  .passthrough();
+export const taskStatusSchema = z.looseObject({
+  state: z.enum(['queued', 'running', 'done', 'failed']),
+  /** 0 to 1. */
+  progress: z.number().min(0).max(1).optional(),
+  title: z.string().max(200).optional(),
+  message: z.string().max(300).optional(),
+  toast: toastSchema.optional(),
+  refresh: refresh.optional(),
+});
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
 
 export function toastText(t: z.infer<typeof toastSchema> | undefined): string | null {
