@@ -4,6 +4,11 @@ Each section is the notes of one release. `pnpm desktop:publish` puts the sectio
 version into `latest.json` (the update card shows it) and into the GitHub release.
 Write one short line per item.
 
+## 0.1.10 (2026-10-29)
+
+- The display no longer dims or sleeps while a video plays
+- Admin, Libraries: a "Watch for new files" switch, so new files appear without a scan
+
 ## 0.1.9 (2026-10-28)
 
 - Delete a film, an episode or an album from the server (More, for users who may delete)
