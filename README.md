@@ -126,7 +126,7 @@ Phase 2b ("Platform base and restyle"):
   only a wide thumbnail), square album art or a circle for people.
 - The project builds on `react-native-tvos` (aliased as `react-native`) with
   `@react-native-tvos/config-tv`. Phone, tablet and web builds are unchanged. `EXPO_TV=1`
-  makes prebuild generate TV targets; the TV layout comes in a later phase.
+  makes prebuild generate TV targets with the 10-foot layout (side menu, remote focus).
 
 Phase 3 ("Music and audio"):
 
