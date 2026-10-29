@@ -8,6 +8,10 @@
 //!
 //! The handlers are only there while libmpv plays. Music plays in the web
 //! view, and WebKit gives it Now Playing through the Media Session API.
+//!
+//! While a video plays (not paused), the module also holds an IOKit power
+//! assertion, so the display does not dim or sleep. libmpv draws through the
+//! render API, so macOS does not know that a video plays.
 
 use std::ptr::NonNull;
 use std::sync::Mutex;
@@ -17,7 +21,7 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::AnyThread;
 use objc2_app_kit::NSImage;
-use objc2_core_foundation::CGSize;
+use objc2_core_foundation::{CFString, CGSize};
 use objc2_foundation::{NSData, NSMutableDictionary, NSNumber, NSString};
 use objc2_media_player::{
     MPChangePlaybackPositionCommandEvent, MPMediaItemArtwork, MPMediaItemPropertyArtist, MPMediaItemPropertyArtwork,
@@ -60,6 +64,8 @@ struct Inner {
     artwork_url: Option<String>,
     artwork: Option<Retained<MPMediaItemArtwork>>,
     last: Option<NowPlaying>,
+    /// The IOKit assertion that keeps the display awake while a video plays.
+    awake: Option<u32>,
 }
 
 // SAFETY: `Inner` is only used on the main thread (every access goes through `run_on_main_thread`).
@@ -209,6 +215,36 @@ fn publish(inner: &Inner, np: &NowPlaying) {
     }
 }
 
+#[link(name = "IOKit", kind = "framework")]
+extern "C" {
+    fn IOPMAssertionCreateWithName(kind: *const CFString, level: u32, name: *const CFString, id: *mut u32) -> i32;
+    fn IOPMAssertionRelease(id: u32) -> i32;
+}
+
+/// `kIOPMAssertionLevelOn`.
+const ASSERTION_LEVEL_ON: u32 = 255;
+
+/// Holds or releases the display assertion. A failure only means the display may sleep.
+fn keep_display_awake(inner: &mut Inner, on: bool) {
+    match (on, inner.awake) {
+        (true, None) => {
+            let kind = CFString::from_str("PreventUserIdleDisplaySleep");
+            let name = CFString::from_str("Zoggyfin is playing a video");
+            let mut id = 0u32;
+            // SAFETY: both strings live for the call; `id` is a valid out pointer.
+            if unsafe { IOPMAssertionCreateWithName(&*kind, ASSERTION_LEVEL_ON, &*name, &mut id) } == 0 {
+                inner.awake = Some(id);
+            }
+        }
+        (false, Some(id)) => {
+            // SAFETY: `id` came from IOPMAssertionCreateWithName and is released once.
+            unsafe { IOPMAssertionRelease(id) };
+            inner.awake = None;
+        }
+        _ => {}
+    }
+}
+
 /// Main thread: shows the video in Now Playing and takes the media keys.
 fn update<R: Runtime>(app: &AppHandle<R>, np: NowPlaying) {
     let state = app.state::<MediaState>();
@@ -222,6 +258,7 @@ fn update<R: Runtime>(app: &AppHandle<R>, np: NowPlaying) {
         }
     }
     publish(&inner, &np);
+    keep_display_awake(&mut inner, np.playing);
     inner.last = Some(np);
 }
 
@@ -253,6 +290,7 @@ fn clear<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<MediaState>();
     let mut inner = state.inner.lock().unwrap();
     unregister(&mut inner);
+    keep_display_awake(&mut inner, false);
     inner.artwork = None;
     inner.artwork_url = None;
     inner.last = None;
