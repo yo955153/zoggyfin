@@ -55,12 +55,21 @@ Everything else in `src/` and bundled assets can ship as an OTA update.
   ```
 
   A local or new native module must load with `requireOptionalNativeModule` and work (or hide the feature) when it is `null`. Examples: `src/native/zoggyfin-native.native.ts`, `src/together/nearby-native.native.ts`, `src/servers/discovery/backend.native.ts`.
-- Keep JS workarounds for native bugs while old binaries are in use. Example: `src/player/engine.native.tsx` passes `artist` and `artwork` to expo-video; `patches/expo-video@58.0.12.patch` fixes only new builds.
+- Keep JS workarounds for native bugs while old binaries are in use. Example: `src/player/engine.native.tsx` passes `artist` and `artwork` to expo-video; `patches/expo-video@58.0.13.patch` fixes only new builds.
 - The `tv` EAS profile is on the `production` channel. An update to `production` reaches TV builds too: check the TV layout (web `?tv=1` at least).
 
 ## 5. Before shipping
 
 Run the `verify-change` skill. All of `pnpm typecheck`, `pnpm lint` and `pnpm test` must pass.
+
+For a native build with a patch of an Expo module (for example `expo-video`), check that the patch is in the binary. Expo precompiles most `expo-*` iOS modules, and a precompiled module ignores the patch. The module must be in `expo.autolinking.ios.buildFromSource` in `package.json`. Then:
+
+```sh
+pnpm expo prebuild --clean --platform ios   # the module must not be in the "Precompiled modules" list
+xcodebuild -workspace ios/Zoggyfin.xcworkspace -scheme Zoggyfin -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' build > build.log 2>&1
+grep NowPlayingManager.swift build.log      # no match: the patch is not in the binary
+```
 
 ## 6. How each target gets the change
 
