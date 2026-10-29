@@ -16,7 +16,7 @@ import { Icon, type IconName } from '@/components/icon';
 import { isNativeTV, isTVPreview } from '@/platform/tv';
 import { type AppTheme, createStyles, font, mediaColors, motion, radius, spacing, tv, tvScale, type, useLayout, useStyles, useTheme, webPressable, withAlpha } from '@/theme';
 
-import { type FocusTarget, focusView, restoreContentFocus, TvFocusGuide } from './focus';
+import { type FocusTarget, focusView, restoreContentFocus, setContentGuide, setMenuFocused, TvFocusGuide } from './focus';
 import { useTvBack } from './use-tv-back';
 import { installWebSpatialNav } from './web-spatial-nav';
 
@@ -48,6 +48,11 @@ export function TvTabsLayout() {
   const l = useLayout();
   const rail = Math.round(tv.railWidth * tvScale(l.width));
   const content = useRef<ComponentRef<typeof View> | null>(null);
+  // Page transitions in the tab stacks give the focus back through this guide (tvStackListeners).
+  useEffect(() => {
+    setContentGuide(content.current);
+    return () => setContentGuide(null);
+  }, []);
   return (
     <Tabs style={styles.flex}>
       {/* First in the tree, so the content (not the menu) takes the first focus. */}
@@ -88,10 +93,12 @@ function SideMenu({ content }: { content: RefObject<FocusTarget | null> }) {
   const onItemFocus = useCallback(() => {
     if (closing.current) clearTimeout(closing.current);
     closing.current = null;
+    setMenuFocused(true);
     setOpen(true);
   }, []);
   // The focus moves from item to item as a blur then a focus: close only when no item takes it.
   const onItemBlur = useCallback(() => {
+    setMenuFocused(false);
     if (closing.current) clearTimeout(closing.current);
     closing.current = setTimeout(() => setOpen(false), 60);
   }, []);

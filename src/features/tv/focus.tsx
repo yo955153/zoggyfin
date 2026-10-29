@@ -4,7 +4,7 @@
  * inside them (the player). Web and phones get plain views.
  */
 import type { ComponentRef, Ref } from 'react';
-import { TVFocusGuideView, View, type ViewProps } from 'react-native';
+import { Platform, TVFocusGuideView, View, type ViewProps } from 'react-native';
 
 import { isNativeTV, isTV } from '@/platform/tv';
 
@@ -48,6 +48,40 @@ export function focusView(view: FocusTarget | null | undefined): boolean {
 export function restoreContentFocus(): boolean {
   return focusView(lastContent);
 }
+
+let contentGuide: FocusTarget | null = null;
+let menuFocused = false;
+
+/** The focus guide around the tab content (the side menu layout owns it). */
+export function setContentGuide(view: FocusTarget | null): void {
+  contentGuide = view;
+}
+
+/** An item of the side menu took or lost the focus. */
+export function setMenuFocused(focused: boolean): void {
+  menuFocused = focused;
+}
+
+/** The pause after a page transition ends, so the page it covered has left the window. */
+const SETTLE_MS = 60;
+
+/**
+ * Android TV, after a page opens or closes in a tab stack. The page that was
+ * covered or closed leaves the window only when its transition ends; if it
+ * had the focus, Android drops the focus and the remote moves nothing. A
+ * page without a preferred focus (Settings) was never reachable. Asking
+ * the content guide for the focus again keeps a focus that is still there
+ * and otherwise moves it to the first control of the visible page. The side
+ * menu keeps a focus it has.
+ */
+function refocusContent(): void {
+  setTimeout(() => {
+    if (!menuFocused) focusView(contentGuide);
+  }, SETTLE_MS);
+}
+
+/** `screenListeners` for the tab stacks. */
+export const tvStackListeners = isNativeTV && Platform.OS === 'android' ? { transitionEnd: refocusContent } : undefined;
 
 type GuideOwnProps = 'destinations' | 'autoFocus' | 'safePadding' | 'trapFocusUp' | 'trapFocusDown' | 'trapFocusLeft' | 'trapFocusRight' | 'onFocusEnter' | 'onFocusLeave';
 
