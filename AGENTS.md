@@ -28,7 +28,7 @@ The rule from CONTRIBUTING.md: **every feature works on every platform**, or the
 - Video: `expo-video` (iOS, Android), an HTML `<video>` element with `hls.js` (web), libmpv (Mac app).
 - Audio: `expo-audio` (`AudioPlaylist`).
 - Downloads: `@kesha-antonov/react-native-background-downloader` (iOS, Android), Rust in the Mac app.
-- Watch together crypto: `@noble/*` 1.x, Apple CryptoKit on iOS.
+- Watch together crypto: `@noble/*` 2.x, Apple CryptoKit on iOS.
 - Desktop: Tauri 2, Rust, a Swift bridge, libmpv.
 - Tests: Jest 30 with the `jest-expo` preset. TypeScript 6 with `strict`. ESLint 9 with `eslint-config-expo`.
 
