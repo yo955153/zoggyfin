@@ -54,6 +54,10 @@ first commit to today. All of it was built in the first weeks of the project.
   ChaCha20-Poly1305, with CryptoKit on Apple platforms.
 - A saved server stays one entry when its address or its Id changes.
 
+### Fixed
+
+- TV: Down on the last Home row no longer scrolls the rows out of view.
+
 ## Mac app releases
 
 | Version | Date | Notes |

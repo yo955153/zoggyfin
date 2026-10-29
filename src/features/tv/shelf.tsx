@@ -5,13 +5,19 @@
  * row (the row scrolls, not the focus), and Up or Down into a row lands on
  * the tile that had the focus there last (an autoFocus focus guide).
  */
-import { type ComponentRef, createContext, type ReactNode, type RefObject, useContext, useRef } from 'react';
+import { type ComponentRef, createContext, type ReactNode, type RefObject, useContext, useEffect, useRef } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { type FocusTarget, TvFocusGuide } from './focus';
 
-/** Home on TV: scrolls the page so the row with the focus sits under the billboard. */
-export const TvRowScroll = createContext<((row: FocusTarget | null) => void) | null>(null);
+/** Home on TV: the page that scrolls the row with the focus under the billboard. */
+export interface TvRowPage {
+  scrollTo: (row: FocusTarget | null) => void;
+  /** A row mounts; the page sizes its end so the last row can scroll up and no further. Returns the cleanup. */
+  track: (row: RefObject<FocusTarget | null>) => () => void;
+}
+
+export const TvRowScroll = createContext<TvRowPage | null>(null);
 
 export function TvShelf<T>({
   items,
@@ -38,13 +44,15 @@ export function TvShelf<T>({
   /** `onFocus(index)` must run when the tile takes the focus. */
   renderTile: (item: T, index: number, onFocus: (index: number) => void) => ReactNode;
 }) {
-  const scrollPage = useContext(TvRowScroll);
+  const page = useContext(TvRowScroll);
   const step = tileWidth + gap;
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const row = useRef<FocusTarget | null>(null);
+  const target = anchor ?? row;
+  useEffect(() => page?.track(target), [page, target]);
   const onFocusAt = (index: number) => {
     scroll.current?.scrollTo({ x: index * step, animated: true });
-    scrollPage?.(anchor?.current ?? row.current);
+    page?.scrollTo(target.current);
   };
 
   // The list starts `bleed` before the first tile, so the tile left of the

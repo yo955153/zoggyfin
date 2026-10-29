@@ -1,4 +1,4 @@
-import { gridLayout, layoutFor } from '../layout';
+import { gridLayout, layoutFor, tvPageEndPadding } from '../layout';
 import { fallbackArt, textDirection } from '../theme';
 
 describe('grid layout (design system §2.3)', () => {
@@ -32,5 +32,21 @@ describe('content text', () => {
   it('gives the same fallback art for the same title', () => {
     expect(fallbackArt('Sample Movie')).toEqual(fallbackArt('  sample movie '));
     expect(fallbackArt('Sample Movie').css).toContain('linear-gradient');
+  });
+});
+
+describe('TV Home end padding', () => {
+  it('lets the last row scroll to the top of the list and no further', () => {
+    // A 600 pt list; rows 0 to 900, the last row starts at 700 (200 tall).
+    const pad = tvPageEndPadding(600, 900, 700);
+    expect(pad).toBe(400);
+    // The furthest scroll is the content height minus the list height: the last row's top.
+    expect(900 + pad - 600).toBe(700);
+  });
+  it('adds nothing when the last row is taller than the list', () => {
+    expect(tvPageEndPadding(300, 900, 500)).toBe(0);
+  });
+  it('fills the list when there is one short row', () => {
+    expect(tvPageEndPadding(600, 250, 0)).toBe(350);
   });
 });

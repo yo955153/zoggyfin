@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
-import { type ReactElement, type ReactNode, useCallback, useState } from 'react';
+import { type ReactElement, type ReactNode, useCallback, useMemo, useState } from 'react';
 import { PixelRatio, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   interpolate,
@@ -24,7 +24,7 @@ import { useItemActions } from '@/features/actions/use-item-actions';
 import { TogetherSheetHost, usePlayForEveryone, useTogetherEntry } from '@/features/together/together-sheet';
 import { buildImageUrl, imageSource } from '@/images/image-url';
 import type { FocusTarget } from '@/features/tv/focus';
-import { TvRowScroll } from '@/features/tv/shelf';
+import { type TvRowPage, TvRowScroll } from '@/features/tv/shelf';
 import { formatClock, playedFraction } from '@/lib/format';
 import { isTV } from '@/platform/tv';
 import { usePlayer } from '@/player';
@@ -138,6 +138,8 @@ export function DetailScaffold<Row>({
     },
     [l.height, offset, scrollRef],
   );
+  // The page ends with its own padding: no rows to track.
+  const tvPage = useMemo<TvRowPage>(() => ({ scrollTo: scrollToRow, track: () => () => undefined }), [scrollToRow]);
 
   const layout = heroLayout(item);
   const media = layout === 'backdrop' || layout === 'wide';
@@ -352,7 +354,7 @@ export function DetailScaffold<Row>({
           ),
         }}
       />
-      <TvRowScroll.Provider value={isTV ? scrollToRow : null}>
+      <TvRowScroll.Provider value={isTV ? tvPage : null}>
       <Animated.FlatList
         ref={scrollRef}
         data={rows ?? []}
