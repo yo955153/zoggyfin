@@ -4,6 +4,14 @@ Each section is the notes of one release. `pnpm desktop:publish` puts the sectio
 version into `latest.json` (the update card shows it) and into the GitHub release.
 Write one short line per item.
 
+## 0.1.9 (2026-10-28)
+
+- Delete a film, an episode or an album from the server (More, for users who may delete)
+- A video you downloaded plays from the file, also when you open it from the server's pages
+- A download that finishes while you watch takes over from the stream at the same place
+- The player's error card says what failed, not only "Request failed"
+- Hover and keyboard focus show on the round buttons only, not on their labels
+
 ## 0.1.8 (2026-10-20)
 
 - Together: a guest that already played the film no longer pauses everyone when it joins
