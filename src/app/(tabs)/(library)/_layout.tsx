@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 
+import { tvStackListeners } from '@/features/tv/focus';
 import { useTabStackOptions } from '@/lib/stack-options';
 import { SidebarInsetProvider } from '@/theme/sidebar-inset';
 
@@ -12,5 +13,5 @@ export default function LibraryLayout() {
 
 function TabStack({ inset }: { inset: number }) {
   const options = useTabStackOptions(inset);
-  return <Stack screenOptions={options} />;
+  return <Stack screenOptions={options} screenListeners={tvStackListeners} />;
 }

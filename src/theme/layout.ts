@@ -46,6 +46,16 @@ export function tvFocusBleed(size: number): number {
   return Math.ceil((size * (tv.focusScale - 1)) / 2 + tv.focusRingWidth + tv.focusRingGap + 2);
 }
 
+/**
+ * The space after the last TV Home row: just enough for the last row to
+ * scroll up to the top of the list, and no more. With more, Android's
+ * ScrollView scrolls on into the empty space when Down has no row to go to,
+ * and the rows slide out of view.
+ */
+export function tvPageEndPadding(viewportHeight: number, rowsHeight: number, lastRowTop: number): number {
+  return Math.max(0, Math.round(viewportHeight - (rowsHeight - lastRowTop)));
+}
+
 export interface LayoutInfo {
   tv: boolean;
   bp: Breakpoint;

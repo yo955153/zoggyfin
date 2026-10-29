@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, Stack } from 'expo-router';
-import { type ComponentRef, useCallback, useRef, useState, useSyncExternalStore } from 'react';
+import { type ComponentRef, type RefObject, useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 
 import { queryKeys } from '@/api/query-keys';
@@ -11,7 +11,7 @@ import { Touchable } from '@/components/touchable';
 import { registerBuiltinHomeSections } from '@/features/home/builtin-sections';
 import { Billboard, BillboardRows } from '@/features/tv/billboard';
 import type { FocusTarget } from '@/features/tv/focus';
-import { TvRowScroll } from '@/features/tv/shelf';
+import { type TvRowPage, TvRowScroll } from '@/features/tv/shelf';
 import { ProfileMenu } from '@/features/profile/profile-menu';
 import { OfflineBanner } from '@/features/offline/offline-banner';
 import { HomeTogetherSheet, homeTogether, NearbyHomeCard, TogetherHeaderButton } from '@/features/together/home-entry';
@@ -19,7 +19,7 @@ import { useRootScreenOptions } from '@/lib/stack-options';
 import { usePullRefresh } from '@/lib/use-pull-refresh';
 import { isTV } from '@/platform/tv';
 import { homeSections } from '@/registry/home-sections';
-import { createStyles, type AppTheme, sizes, spacing, useLayout, useStyles, useTheme } from '@/theme';
+import { createStyles, type AppTheme, sizes, spacing, tvPageEndPadding, useLayout, useStyles, useTheme } from '@/theme';
 import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 registerBuiltinHomeSections();
@@ -42,30 +42,72 @@ export default function HomeScreen() {
   const tvScroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const tvContent = useRef<ComponentRef<typeof View> | null>(null);
   const lastRowY = useRef(-1);
-  const scrollToRow = useCallback((row: FocusTarget | null) => {
+  const rows = useRef(new Set<RefObject<FocusTarget | null>>());
+  const [listH, setListH] = useState(0);
+  const [end, setEnd] = useState<{ rowsH: number; lastTop: number } | null>(null);
+  // The rows' height and the top of the last row size the space after it (tvPageEndPadding).
+  const measureEnd = useCallback((rowsH: number) => {
     const content = tvContent.current;
-    if (!row || !content) return;
-    row.measureLayout(
-      content,
-      (_x, y) => {
-        if (Math.abs(y - lastRowY.current) < 1) return;
-        lastRowY.current = y;
-        tvScroll.current?.scrollTo({ y, animated: true });
-      },
-      () => undefined,
-    );
+    if (!content) return;
+    const found = [...rows.current].map((r) => r.current).filter((v): v is FocusTarget => !!v);
+    if (!found.length) return setEnd({ rowsH, lastTop: 0 });
+    let lastTop = 0;
+    let left = found.length;
+    const done = () => {
+      left -= 1;
+      if (!left) setEnd({ rowsH, lastTop });
+    };
+    for (const row of found) {
+      row.measureLayout(
+        content,
+        (_x, y) => {
+          lastTop = Math.max(lastTop, y);
+          done();
+        },
+        done,
+      );
+    }
   }, []);
+  const tvPage = useMemo<TvRowPage>(
+    () => ({
+      scrollTo: (row) => {
+        const content = tvContent.current;
+        if (!row || !content) return;
+        row.measureLayout(
+          content,
+          (_x, y) => {
+            if (Math.abs(y - lastRowY.current) < 1) return;
+            lastRowY.current = y;
+            tvScroll.current?.scrollTo({ y, animated: true });
+          },
+          () => undefined,
+        );
+      },
+      track: (row) => {
+        rows.current.add(row);
+        return () => {
+          rows.current.delete(row);
+        };
+      },
+    }),
+    [],
+  );
 
   if (isTV) {
+    // Until the rows are measured: room for any row to scroll up to the top.
+    const endPad = end && listH ? tvPageEndPadding(listH, end.rowsH, end.lastTop) : l.height * 0.5;
     // TV: the billboard for the focused item stays at the top; the rows scroll under it.
     return (
       <View style={s.flex}>
         <Billboard />
         <BillboardRows.Provider value>
-          <TvRowScroll.Provider value={scrollToRow}>
-            {/* The bottom padding lets the last row scroll up to the top too. */}
-            <ScrollView ref={tvScroll} style={s.flex} contentContainerStyle={{ paddingBottom: Math.max(bottomPad, l.height * 0.5) }}>
-              <View ref={tvContent}>
+          <TvRowScroll.Provider value={tvPage}>
+            <ScrollView
+              ref={tvScroll}
+              style={s.flex}
+              contentContainerStyle={{ paddingBottom: Math.max(bottomPad, endPad) }}
+              onLayout={(e) => setListH(e.nativeEvent.layout.height)}>
+              <View ref={tvContent} onLayout={(e) => measureEnd(e.nativeEvent.layout.height)}>
                 <OfflineBanner entries />
                 {sections.map((sec) => (
                   <View key={sec.id}>
