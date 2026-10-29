@@ -1,8 +1,9 @@
 /**
  * The rendezvous primitives with the audited @noble libraries (Android, the
  * web page of the Mac app, and the tests). iOS uses rendezvous-cipher.ios.ts
- * (CryptoKit). The libraries are pinned to 1.x because 1.x ships CommonJS
- * (jest-expo) and works in Metro with no transform.
+ * (CryptoKit). The libraries are ESM only, so Jest transforms them
+ * (`@noble` in `transformIgnorePatterns`). They never draw random bytes here:
+ * the caller gives the key seed and the nonce.
  */
 import { chacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { x25519 } from '@noble/curves/ed25519.js';
