@@ -36,7 +36,7 @@ first commit to today. All of it was built in the first weeks of the project.
 - **Invites.** An administrator adds a person and shares one link or QR code. The invite page on the
   website opens the app or the store.
 - **Admin panel.** Dashboard, now playing, users, libraries, tasks, activity, devices, logs, restart
-  and shut down.
+  and shut down. Each library has a "Watch for new files" switch (the server's real-time monitoring).
 - **Extensions.** Install a JSON manifest from a server. Extensions add item actions, Home rows,
   shared-link targets and panels. No extension code runs in the app.
 - **Mac app.** A Tauri 2 app with libmpv video, downloads, Now Playing and media keys, signed and

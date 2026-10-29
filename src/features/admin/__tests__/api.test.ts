@@ -56,6 +56,21 @@ describe('sdkAdminApi', () => {
     ]);
   });
 
+  it('turns the file watch of a library on and keeps its other options', async () => {
+    const { admin, calls } = mockServer({
+      'GET /Library/VirtualFolders': { data: [{ Name: 'Shows', ItemId: 'lib1', LibraryOptions: { EnableRealtimeMonitor: false, EnablePhotos: true } }] },
+      'POST /Library/VirtualFolders/LibraryOptions': { status: 204 },
+    });
+    await admin.setLibraryWatch('lib1', true);
+    expect(calls[1]).toMatchObject({ method: 'POST', url: '/Library/VirtualFolders/LibraryOptions', data: { Id: 'lib1', LibraryOptions: { EnableRealtimeMonitor: true, EnablePhotos: true } } });
+  });
+
+  it('refuses to change the file watch of a library that is gone', async () => {
+    const { admin, calls } = mockServer({ 'GET /Library/VirtualFolders': { data: [] } });
+    await expect(admin.setLibraryWatch('lib1', true)).rejects.toThrow('no longer on the server');
+    expect(calls).toHaveLength(1);
+  });
+
   it('sends session commands', async () => {
     const { admin, calls } = mockServer({
       'POST /Sessions/s1/Message': { status: 204 },

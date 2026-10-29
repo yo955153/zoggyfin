@@ -58,10 +58,10 @@ function item(p: Partial<BaseItemDto>): BaseItemDto {
 }
 
 const LIBRARIES: VirtualFolderInfo[] = [
-  { Name: 'Movies', ItemId: 'lib-movies', CollectionType: 'movies', Locations: ['/media/movies'] },
-  { Name: 'Shows', ItemId: 'lib-shows', CollectionType: 'tvshows', Locations: ['/media/shows', '/mnt/archive/shows'] },
-  { Name: 'Music', ItemId: 'lib-music', CollectionType: 'music', Locations: ['/media/music'] },
-  { Name: 'Audiobooks', ItemId: 'lib-books', CollectionType: 'books', Locations: ['/media/audiobooks'] },
+  { Name: 'Movies', ItemId: 'lib-movies', CollectionType: 'movies', Locations: ['/media/movies'], LibraryOptions: { EnableRealtimeMonitor: true } },
+  { Name: 'Shows', ItemId: 'lib-shows', CollectionType: 'tvshows', Locations: ['/media/shows', '/mnt/archive/shows'], LibraryOptions: { EnableRealtimeMonitor: false } },
+  { Name: 'Music', ItemId: 'lib-music', CollectionType: 'music', Locations: ['/media/music'], LibraryOptions: { EnableRealtimeMonitor: true } },
+  { Name: 'Audiobooks', ItemId: 'lib-books', CollectionType: 'books', Locations: ['/media/audiobooks'], LibraryOptions: { EnableRealtimeMonitor: true } },
 ];
 
 function makeUsers(): UserDto[] {
@@ -368,6 +368,11 @@ export function fixtureAdminApi(): AdminApi {
       return libraries.map((l) => ({ ...l }));
     },
     refreshLibrary: async () => delay(),
+    setLibraryWatch: async (itemId, on) => {
+      await delay();
+      const l = libraries.find((x) => x.ItemId === itemId);
+      if (l) l.LibraryOptions = { ...l.LibraryOptions, EnableRealtimeMonitor: on };
+    },
     scanAll: async () => {
       await delay();
       tasks = tasks.map((t) => (t.Key === LIBRARY_SCAN_TASK_KEY ? { ...t, State: 'Running', CurrentProgressPercentage: 0 } : t));

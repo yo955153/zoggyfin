@@ -65,6 +65,8 @@ export interface AdminApi {
   libraries(): Promise<VirtualFolderInfo[]>;
   refreshLibrary(itemId: string, kind: RefreshKind): Promise<void>;
   scanAll(): Promise<void>;
+  /** Turns the server's file watch ("real-time monitoring") of a library on or off. */
+  setLibraryWatch(itemId: string, on: boolean): Promise<void>;
   tasks(): Promise<TaskInfo[]>;
   startTask(id: string): Promise<void>;
   stopTask(id: string): Promise<void>;
@@ -146,6 +148,13 @@ export function sdkAdminApi(api: Api): AdminApi {
     },
     scanAll: async () => {
       await getLibraryApi(api).refreshLibrary();
+    },
+    setLibraryWatch: async (itemId, on) => {
+      // The server replaces all options of the library, so start from its current options, not from a cached copy.
+      const lib = getLibraryStructureApi(api);
+      const folder = (await lib.getVirtualFolders()).data.find((f) => f.ItemId === itemId);
+      if (!folder) throw new Error('The library is no longer on the server.');
+      await lib.updateLibraryOptions({ updateLibraryOptionsDto: { Id: itemId, LibraryOptions: { ...folder.LibraryOptions, EnableRealtimeMonitor: on } } });
     },
     tasks: async () => (await tasksApi().getTasks({ isHidden: false })).data,
     startTask: async (taskId) => {
