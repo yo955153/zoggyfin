@@ -4,7 +4,8 @@
  */
 import { router } from 'expo-router';
 
-import { useLatest, useMovieRecommendations, useNextUp, useResume, useViews } from '@/api/queries';
+import { useLatest, useMovieRecommendations, useNextUp, useResume, useShortMoviePool, useViews } from '@/api/queries';
+import { useApi } from '@/api/use-api';
 import { downloadsSupported, useDownloadLists } from '@/downloads';
 import { useServerNames } from '@/features/servers/use-server-names';
 import { useOffline } from '@/lib/online';
@@ -12,12 +13,17 @@ import type { BaseItemDto } from '@/api/types';
 import { ItemRow } from '@/components/item-row';
 import { EmptyState } from '@/components/states';
 import { shapeForList } from '@/components/tile';
+import { daySeed } from '@/features/home/daily';
 import { recommendationRows } from '@/features/home/recommendations';
+import { SHORT_POOL_SIZE, shortOnTime } from '@/features/home/short-on-time';
+import { useDay } from '@/features/home/use-day';
 import { isSupportedView } from '@/features/library/library-kind';
-import { episodeLabel } from '@/lib/format';
+import { episodeLabel, formatDuration } from '@/lib/format';
 import { itemHref, useTabGroup } from '@/lib/navigation';
 import { isTV } from '@/platform/tv';
 import { homeSections } from '@/registry/home-sections';
+
+const runtimeSubtitle = (item: BaseItemDto) => formatDuration(item.RunTimeTicks);
 
 const episodeSubtitle = (item: BaseItemDto) =>
   item.Type === 'Episode' ? [episodeLabel(item), item.Name].filter(Boolean).join(' · ') : undefined;
@@ -75,6 +81,17 @@ function BecauseYouWatched() {
       ))}
     </>
   );
+}
+
+/** "Short on time": unwatched movies of 100 minutes or less, in an order that stays for the day. */
+function ShortOnTime() {
+  const offline = useOffline();
+  const { userId } = useApi();
+  const day = useDay();
+  const q = useShortMoviePool(SHORT_POOL_SIZE, !offline);
+  const items = shortOnTime(q.data, daySeed(day, userId));
+  if (offline || !items.length) return null;
+  return <ItemRow title="Short on time" shape="poster" items={items} tileSubtitle={runtimeSubtitle} />;
 }
 
 function ContinueListening() {
@@ -167,6 +184,7 @@ export function registerBuiltinHomeSections(): void {
   homeSections.register({ id: 'builtin.nextUp', order: 20, component: NextUp });
   homeSections.register({ id: 'builtin.becauseYouWatched', order: 25, component: BecauseYouWatched });
   homeSections.register({ id: 'builtin.continueListening', order: 30, component: ContinueListening });
+  homeSections.register({ id: 'builtin.shortOnTime', order: 35, component: ShortOnTime });
   homeSections.register({ id: 'builtin.recentlyAdded', order: 40, component: RecentlyAdded });
   homeSections.register({ id: 'builtin.downloaded', order: 50, component: DownloadedLast });
 }

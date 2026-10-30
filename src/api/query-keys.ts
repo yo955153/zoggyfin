@@ -73,6 +73,8 @@ export const queryKeys = {
   playlists: (s: SessionScope, mediaType?: string) => [...scopeKey(s), 'playlists', mediaType ?? 'all'] as const,
   /** Movie recommendations for the "Because you watched" Home rows. */
   recommendations: (s: SessionScope) => [...scopeKey(s), 'recommendations'] as const,
+  /** The unwatched movies that the "Short on time" Home row filters by runtime. */
+  shortMovies: (s: SessionScope) => [...scopeKey(s), 'shortMovies'] as const,
   similar: (s: SessionScope, itemId: string) => [...scopeKey(s), 'similar', itemId] as const,
   search: (s: SessionScope, term: string) =>
     [...scopeKey(s), 'search', term.trim().toLowerCase()] as const,

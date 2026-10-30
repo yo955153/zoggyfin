@@ -160,6 +160,17 @@ export function useMovieRecommendations(enabled = true) {
   });
 }
 
+/** The pool of unwatched movies for "Short on time" (`limit` keeps the request small). */
+export function useShortMoviePool(limit: number, enabled = true) {
+  const { api, userId, scope } = useApi();
+  return useQuery({
+    queryKey: queryKeys.shortMovies(scope),
+    queryFn: () => jf.getShortMoviePool(api, userId, limit),
+    staleTime: HOUR,
+    enabled,
+  });
+}
+
 export function useMusicTab(libraryId: string | undefined, tab: jf.MusicTab, options: jf.MusicOptions = jf.DEFAULT_MUSIC_OPTIONS, enabled = true) {
   const { api, userId, scope } = useApi();
   return useInfiniteQuery({

@@ -317,6 +317,26 @@ export async function getMovieRecommendations(api: Api, userId: string): Promise
   return res.data ?? [];
 }
 
+/**
+ * The pool for "Short on time": the best-rated unwatched movies. The server
+ * has no runtime filter, so the app filters this bounded set by runtime
+ * (`features/home/short-on-time.ts`). `RunTimeTicks` comes by default.
+ */
+export async function getShortMoviePool(api: Api, userId: string, limit: number): Promise<BaseItemDto[]> {
+  const res = await getLibraryApi(api).getItems({
+    userId,
+    includeItemTypes: ['Movie'],
+    recursive: true,
+    filters: ['IsUnplayed'],
+    sortBy: ['CommunityRating', 'SortName'],
+    sortOrder: ['Descending', 'Ascending'],
+    limit,
+    enableTotalRecordCount: false,
+    ...tile,
+  });
+  return res.data.Items ?? [];
+}
+
 // ---- Music ------------------------------------------------------------------------
 
 export type MusicTab = 'albums' | 'artists' | 'playlists' | 'songs' | 'genres' | 'audiobooks' | 'authors';
