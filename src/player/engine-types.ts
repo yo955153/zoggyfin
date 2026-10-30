@@ -38,6 +38,12 @@ export interface EngineSubtitle {
 
 export type EngineStatus = 'idle' | 'loading' | 'ready' | 'error';
 
+/**
+ * How the video fills the window: `contain` shows the whole frame, `cover`
+ * crops to the window, `fill` stretches to it (the CSS `object-fit` names).
+ */
+export type VideoFit = 'contain' | 'cover' | 'fill';
+
 export type EngineEvent =
   | { type: 'status'; status: EngineStatus; error?: string }
   | { type: 'playing'; playing: boolean }

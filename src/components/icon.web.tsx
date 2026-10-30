@@ -106,6 +106,7 @@ import {
   Lock,
   Users,
   UserX,
+  Ratio,
 } from 'lucide-react';
 
 import { type IconName, isIconName } from './icon-names';
@@ -188,6 +189,7 @@ const LUCIDE: Record<IconName, Glyph> = {
   'speaker.wave.2.fill': { icon: Volume2 },
   'speaker.slash.fill': { icon: VolumeX },
   'arrow.up.left.and.arrow.down.right': { icon: Maximize },
+  aspectratio: { icon: Ratio },
   gauge: { icon: Gauge },
   circle: { icon: Circle },
   'checkmark.circle.fill': { icon: CircleCheck },

@@ -24,6 +24,7 @@ import { useHideDevToolsButton } from '@/lib/dev-tools';
 import { episodeLabel } from '@/lib/format';
 import { KeyInput } from '@/native/key-input';
 import { VideoSurface } from '@/player/engine';
+import type { VideoFit } from '@/player/engine-types';
 import type { KeyPress } from '@/native/key-input-types';
 import { nextUpPhase, nextUpStartsAt, skipPromptAt } from '@/player/segments';
 import { videoSession } from '@/player/session';
@@ -103,7 +104,13 @@ function minimizePlayer() {
   leave();
 }
 
-type SheetKind = 'tracks' | 'settings' | null;
+type SheetKind = 'tracks' | 'settings' | 'screen' | null;
+
+const FITS: { fit: VideoFit; label: string; detail: string }[] = [
+  { fit: 'contain', label: 'Fit', detail: 'Shows the whole picture' },
+  { fit: 'cover', label: 'Fill', detail: 'Crops the picture to fill the screen' },
+  { fit: 'fill', label: 'Stretch', detail: 'Stretches the picture to the screen' },
+];
 
 /**
  * The full-screen video player (design-system §7.8): video, gestures,
@@ -135,7 +142,7 @@ export function PlayerScreen() {
   const [visible, setVisible] = useState(true);
   const [scrubbing, setScrubbing] = useState(false);
   const [sheet, setSheet] = useState<SheetKind>(null);
-  const [fill, setFill] = useState(false);
+  const [fit, setFit] = useState<VideoFit>('contain');
   const [poke, setPoke] = useState(0);
   const [dismissal, setDismissal] = useState<{ itemId: string; at: number } | null>(null);
   const [ripple, setRipple] = useState<SeekFeedback | null>(null);
@@ -262,8 +269,8 @@ export function PlayerScreen() {
         }
       });
     const pinch = Gesture.Pinch().onEnd((e) => {
-      if (e.scale > 1.08) scheduleOnRN(setFill, true);
-      else if (e.scale < 0.92) scheduleOnRN(setFill, false);
+      if (e.scale > 1.08) scheduleOnRN(setFit, 'cover');
+      else if (e.scale < 0.92) scheduleOnRN(setFit, 'contain');
     });
     return Gesture.Simultaneous(pinch, Gesture.Race(pan, Gesture.Exclusive(double, single)));
   }, [toggleControls, onDoubleTap, dragY, height, signedIn]);
@@ -519,7 +526,7 @@ export function PlayerScreen() {
         break;
       case 'f':
         if (Platform.OS === 'web') s.toggleFullscreen(null);
-        else setFill((f) => !f);
+        else setFit((f) => (f === 'contain' ? 'cover' : 'contain'));
         break;
       case 'm':
         s.toggleMuted();
@@ -633,7 +640,7 @@ export function PlayerScreen() {
       <Animated.View style={[styles.root, frameStyle]} onPointerMove={onPointerMove}>
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {/* Audio plays now (this screen is about to close): no video surface, so no old frame shows. */}
-          {now?.kind === 'audio' ? null : <VideoSurface fill={fill} style={StyleSheet.absoluteFill} />}
+          {now?.kind === 'audio' ? null : <VideoSurface fit={fit} style={StyleSheet.absoluteFill} />}
         </View>
 
         <GestureDetector gesture={gestures}>
@@ -713,11 +720,15 @@ export function PlayerScreen() {
             </View>
             <Glass style={styles.pill}>
               <AirPlayButton onOpen={wake} />
-              {s.pipSupported ? <PillButton onFocusChange={trackTop} icon="pip.enter" label="Picture in Picture" onPress={() => s.startPip()} /> : null}
+              {/* TV: the system can say it has Picture in Picture and still refuse it (Google TV). */}
+              {s.pipSupported && !isTV ? <PillButton onFocusChange={trackTop} icon="pip.enter" label="Picture in Picture" onPress={() => s.startPip()} /> : null}
               {togetherAvailable ? (
                 <PillButton onFocusChange={trackTop} icon="person.2" label="Watch together" onPress={() => openTogetherSheet('player', null)} />
               ) : null}
               <PillButton onFocusChange={trackTop} icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} />
+              {now?.kind === 'audio' ? null : (
+                <PillButton onFocusChange={trackTop} icon="aspectratio" label="Screen size" onPress={() => setSheet('screen')} />
+              )}
               <PillButton onFocusChange={trackTop} icon="gearshape" label="Quality and speed" onPress={() => setSheet('settings')} />
               {Platform.OS === 'web' ? (
                 <PillButton onFocusChange={trackTop} icon="arrow.up.left.and.arrow.down.right" label="Full screen" onPress={() => s.toggleFullscreen(null)} />
@@ -860,6 +871,12 @@ export function PlayerScreen() {
 
       <PlayerSheet visible={sheet === 'tracks'} title="Audio & Subtitles" sections={trackSections} onClose={() => setSheet(null)} />
       <PlayerSheet visible={sheet === 'settings'} title="Playback" sections={settingsSections} onClose={() => setSheet(null)} />
+      <PlayerSheet
+        visible={sheet === 'screen'}
+        title="Screen Size"
+        sections={[{ title: 'Picture', rows: FITS.map((f) => ({ key: f.fit, label: f.label, detail: f.detail, selected: fit === f.fit, onPress: () => setFit(f.fit) })) }]}
+        onClose={() => setSheet(null)}
+      />
       <TogetherSheetHost where="player" />
       {/* Under the top bar and the Together pill, so it does not cover the controls. */}
       <ToastHost overlay offset={player.closeSize + spacing.sm * 2 + 32} />
