@@ -4,7 +4,17 @@
  */
 import { router } from 'expo-router';
 
-import { useLatest, useNextUp, useResume, useViews } from '@/api/queries';
+import {
+  useGenreOfDayItems,
+  useLatest,
+  useMovieRecommendations,
+  useNextUp,
+  useResume,
+  useShortMoviePool,
+  useVideoGenres,
+  useViews,
+} from '@/api/queries';
+import { useApi } from '@/api/use-api';
 import { downloadsSupported, useDownloadLists } from '@/downloads';
 import { useServerNames } from '@/features/servers/use-server-names';
 import { useOffline } from '@/lib/online';
@@ -12,11 +22,18 @@ import type { BaseItemDto } from '@/api/types';
 import { ItemRow } from '@/components/item-row';
 import { EmptyState } from '@/components/states';
 import { shapeForList } from '@/components/tile';
+import { daySeed } from '@/features/home/daily';
+import { GENRE_POOL_SIZE, pickDailyGenre, spotlightItems, spotlightTitle } from '@/features/home/genre-spotlight';
+import { recommendationRows } from '@/features/home/recommendations';
+import { SHORT_POOL_SIZE, shortOnTime } from '@/features/home/short-on-time';
+import { useDay } from '@/features/home/use-day';
 import { isSupportedView } from '@/features/library/library-kind';
-import { episodeLabel } from '@/lib/format';
+import { episodeLabel, formatDuration } from '@/lib/format';
 import { itemHref, useTabGroup } from '@/lib/navigation';
 import { isTV } from '@/platform/tv';
 import { homeSections } from '@/registry/home-sections';
+
+const runtimeSubtitle = (item: BaseItemDto) => formatDuration(item.RunTimeTicks);
 
 const episodeSubtitle = (item: BaseItemDto) =>
   item.Type === 'Episode' ? [episodeLabel(item), item.Name].filter(Boolean).join(' · ') : undefined;
@@ -51,6 +68,53 @@ function NextUp() {
       tileSubtitle={episodeSubtitle}
     />
   );
+}
+
+/*
+ * Discovery rows ("Because you watched", "Short on time", the daily genre)
+ * are extras: they show no skeleton and no error, and they hide while the
+ * server is out of reach, since their items do not play offline. A load
+ * with no cache adds them when the data arrives; after that the persisted
+ * cache shows them at once on a cold start.
+ */
+
+/** "Because you watched …": up to three rows from the server's movie recommendations. */
+function BecauseYouWatched() {
+  const offline = useOffline();
+  const q = useMovieRecommendations(!offline);
+  const rows = recommendationRows(q.data);
+  if (offline || !rows.length) return null;
+  return (
+    <>
+      {rows.map((r) => (
+        <ItemRow key={r.key} title={r.title} shape="poster" items={r.items} />
+      ))}
+    </>
+  );
+}
+
+/** "Short on time": unwatched movies of 100 minutes or less, in an order that stays for the day. */
+function ShortOnTime() {
+  const offline = useOffline();
+  const { userId } = useApi();
+  const day = useDay();
+  const q = useShortMoviePool(SHORT_POOL_SIZE, !offline);
+  const items = shortOnTime(q.data, daySeed(day, userId));
+  if (offline || !items.length) return null;
+  return <ItemRow title="Short on time" shape="poster" items={items} tileSubtitle={runtimeSubtitle} />;
+}
+
+/** The genre of the day: one movie or show genre per user and day, unwatched items first. */
+function GenreOfTheDay() {
+  const offline = useOffline();
+  const { userId } = useApi();
+  const day = useDay();
+  const genres = useVideoGenres(!offline);
+  const genre = pickDailyGenre(genres.data, daySeed(day, userId));
+  const q = useGenreOfDayItems(day, genre?.Id ?? undefined, GENRE_POOL_SIZE, !offline);
+  const items = spotlightItems(q.data);
+  if (offline || !genre || !items.length) return null;
+  return <ItemRow title={spotlightTitle(genre)} shape="poster" items={items} />;
 }
 
 function ContinueListening() {
@@ -141,7 +205,10 @@ export function registerBuiltinHomeSections(): void {
   homeSections.register({ id: 'builtin.downloadedOffline', order: 5, component: DownloadedFirst });
   homeSections.register({ id: 'builtin.continueWatching', order: 10, component: ContinueWatching });
   homeSections.register({ id: 'builtin.nextUp', order: 20, component: NextUp });
+  homeSections.register({ id: 'builtin.becauseYouWatched', order: 25, component: BecauseYouWatched });
   homeSections.register({ id: 'builtin.continueListening', order: 30, component: ContinueListening });
+  homeSections.register({ id: 'builtin.shortOnTime', order: 35, component: ShortOnTime });
   homeSections.register({ id: 'builtin.recentlyAdded', order: 40, component: RecentlyAdded });
+  homeSections.register({ id: 'builtin.genreOfTheDay', order: 42, component: GenreOfTheDay });
   homeSections.register({ id: 'builtin.downloaded', order: 50, component: DownloadedLast });
 }

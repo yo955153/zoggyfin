@@ -12,6 +12,7 @@ import { getInstantMixApi } from '@jellyfin/sdk/lib/utils/api/instant-mix-api';
 import { getLibraryApi } from '@jellyfin/sdk/lib/utils/api/library-api';
 import { getLyricApi } from '@jellyfin/sdk/lib/utils/api/lyric-api';
 import { getMediaInfoApi } from '@jellyfin/sdk/lib/utils/api/media-info-api';
+import { getMovieApi } from '@jellyfin/sdk/lib/utils/api/movie-api';
 import { getMediaSegmentApi } from '@jellyfin/sdk/lib/utils/api/media-segment-api';
 import { getPersonApi } from '@jellyfin/sdk/lib/utils/api/person-api';
 import { getPlaylistApi } from '@jellyfin/sdk/lib/utils/api/playlist-api';
@@ -43,6 +44,7 @@ import type {
   PublicSystemInfo,
   QueryFiltersLegacy,
   QuickConnectResult,
+  RecommendationDto,
   UserDto,
 } from './types';
 
@@ -300,6 +302,66 @@ export async function getChildren(api: Api, userId: string, parentId: string, ki
 
 export async function getSimilar(api: Api, userId: string, itemId: string): Promise<BaseItemDto[]> {
   const res = await getLibraryApi(api).getSimilarItems({ itemId, userId, limit: 16, fields: TILE_FIELDS });
+  return res.data.Items ?? [];
+}
+
+// ---- Home discovery ---------------------------------------------------------------
+
+/**
+ * Movie recommendations ("Because you watched …"). Movies only: the server
+ * has no such endpoint for shows or music. A server with no played or liked
+ * movies answers with an empty list.
+ */
+export async function getMovieRecommendations(api: Api, userId: string): Promise<RecommendationDto[]> {
+  const res = await getMovieApi(api).getMovieRecommendations({ userId, categoryLimit: 4, itemLimit: 12, fields: TILE_FIELDS });
+  return res.data ?? [];
+}
+
+/**
+ * The pool for "Short on time": the best-rated unwatched movies. The server
+ * has no runtime filter, so the app filters this bounded set by runtime
+ * (`features/home/short-on-time.ts`). `RunTimeTicks` comes by default.
+ */
+export async function getShortMoviePool(api: Api, userId: string, limit: number): Promise<BaseItemDto[]> {
+  const res = await getLibraryApi(api).getItems({
+    userId,
+    includeItemTypes: ['Movie'],
+    recursive: true,
+    filters: ['IsUnplayed'],
+    sortBy: ['CommunityRating', 'SortName'],
+    sortOrder: ['Descending', 'Ascending'],
+    limit,
+    enableTotalRecordCount: false,
+    ...tile,
+  });
+  return res.data.Items ?? [];
+}
+
+/** Movie and show genres with their counts (`MovieCount`, `SeriesCount`), for the genre of the day. */
+export async function getVideoGenres(api: Api, userId: string): Promise<BaseItemDto[]> {
+  const res = await getGenreApi(api).getGenres({
+    userId,
+    includeItemTypes: ['Movie', 'Series'],
+    fields: ['ItemCounts'],
+    enableImages: false,
+    enableTotalRecordCount: false,
+  });
+  return res.data.Items ?? [];
+}
+
+/** The best-rated movies and shows of one genre. */
+export async function getGenreVideos(api: Api, userId: string, genreId: string, limit: number): Promise<BaseItemDto[]> {
+  const res = await getLibraryApi(api).getItems({
+    userId,
+    genreIds: [genreId],
+    includeItemTypes: ['Movie', 'Series'],
+    recursive: true,
+    sortBy: ['CommunityRating', 'SortName'],
+    sortOrder: ['Descending', 'Ascending'],
+    limit,
+    enableTotalRecordCount: false,
+    ...tile,
+  });
   return res.data.Items ?? [];
 }
 

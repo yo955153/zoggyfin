@@ -13,6 +13,7 @@ export type {
   PublicSystemInfo,
   AuthenticationResult,
   QuickConnectResult,
+  RecommendationDto,
   CollectionType,
   QueryFiltersLegacy,
   ChapterInfo,

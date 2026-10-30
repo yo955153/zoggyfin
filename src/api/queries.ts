@@ -143,6 +143,56 @@ export function useSimilar(itemId: string | undefined, enabled = true) {
   });
 }
 
+const HOUR = 60 * 60 * 1000;
+
+/**
+ * Movie recommendations. The server can pick other categories on each call,
+ * so a long stale time keeps the rows from changing under the user; pull to
+ * refresh asks again.
+ */
+export function useMovieRecommendations(enabled = true) {
+  const { api, userId, scope } = useApi();
+  return useQuery({
+    queryKey: queryKeys.recommendations(scope),
+    queryFn: () => jf.getMovieRecommendations(api, userId),
+    staleTime: 12 * HOUR,
+    enabled,
+  });
+}
+
+/** The pool of unwatched movies for "Short on time" (`limit` keeps the request small). */
+export function useShortMoviePool(limit: number, enabled = true) {
+  const { api, userId, scope } = useApi();
+  return useQuery({
+    queryKey: queryKeys.shortMovies(scope),
+    queryFn: () => jf.getShortMoviePool(api, userId, limit),
+    staleTime: HOUR,
+    enabled,
+  });
+}
+
+/** Movie and show genres with counts. They change rarely. */
+export function useVideoGenres(enabled = true) {
+  const { api, userId, scope } = useApi();
+  return useQuery({
+    queryKey: queryKeys.videoGenres(scope),
+    queryFn: () => jf.getVideoGenres(api, userId),
+    staleTime: 24 * HOUR,
+    enabled,
+  });
+}
+
+/** The items of the genre of the day (`day` is "YYYY-MM-DD"). */
+export function useGenreOfDayItems(day: string, genreId: string | undefined, limit: number, enabled = true) {
+  const { api, userId, scope } = useApi();
+  return useQuery({
+    queryKey: queryKeys.genreOfDay(scope, day, genreId ?? ''),
+    queryFn: () => jf.getGenreVideos(api, userId, genreId ?? '', limit),
+    staleTime: 6 * HOUR,
+    enabled: enabled && !!genreId,
+  });
+}
+
 export function useMusicTab(libraryId: string | undefined, tab: jf.MusicTab, options: jf.MusicOptions = jf.DEFAULT_MUSIC_OPTIONS, enabled = true) {
   const { api, userId, scope } = useApi();
   return useInfiniteQuery({
