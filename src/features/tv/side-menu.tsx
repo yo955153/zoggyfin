@@ -13,11 +13,13 @@ import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, withTiming } from 'react-native-reanimated';
 
 import { Icon, type IconName } from '@/components/icon';
+import { tvKeyFromEvent } from '@/player/tv-keys';
 import { isNativeTV, isTVPreview } from '@/platform/tv';
 import { type AppTheme, createStyles, font, mediaColors, motion, radius, spacing, tv, tvScale, type, useLayout, useStyles, useTheme, webPressable, withAlpha } from '@/theme';
 
 import { type FocusTarget, focusView, restoreContentFocus, setContentGuide, setMenuFocused, TvFocusGuide } from './focus';
 import { useTvBack } from './use-tv-back';
+import { useTvRemote } from './use-tv-remote';
 import { installWebSpatialNav } from './web-spatial-nav';
 
 interface Destination {
@@ -113,6 +115,11 @@ function SideMenu({ content }: { content: RefObject<FocusTarget | null> }) {
 
   // Back closes the open menu (and stays in the app).
   useTvBack(open, close);
+  // Native TV: so does Right. Android's focus search does not find the content
+  // from the open menu, which lies over the content's first column.
+  useTvRemote(isNativeTV && open, (e) => {
+    if (tvKeyFromEvent(e)?.key === 'right') close();
+  });
 
   // Web preview: the arrow keys move the focus; Right out of the menu goes back to the content.
   useEffect(() => {
@@ -222,8 +229,12 @@ function MenuItem({
   }, [selected, onSelected]);
 
   const go = () => {
-    // A tab opens at its first page, like the streaming apps.
-    if (destination.name) tab.switchTab(destination.name, { resetOnFocus: true });
+    // A tab opens at its first page, like the streaming apps. switchTab resets only
+    // a tab it switches to, so the open tab (Home under Settings, a tab on an item
+    // page) goes back to its first page through its stack.
+    if (destination.name && tab.trigger?.isFocused) {
+      if (router.canDismiss()) router.dismissTo(destination.href);
+    } else if (destination.name) tab.switchTab(destination.name, { resetOnFocus: true });
     else router.navigate('/(tabs)/(home)/settings');
     // Let the new screen mount, then give it the focus.
     setTimeout(onDone, 80);
