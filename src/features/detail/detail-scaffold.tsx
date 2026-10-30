@@ -18,8 +18,9 @@ import { ItemActionSheet } from '@/components/action-sheet';
 import { Button } from '@/components/button';
 import { Icon, type IconName } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
+import { useDownloadArrival } from '@/components/download-indicator';
 import { ProgressRing } from '@/components/progress-ring';
-import { useDownloadStatus } from '@/downloads';
+import { type DownloadStatus, useDownloadStatus } from '@/downloads';
 import { Touchable } from '@/components/touchable';
 import { useItemActions } from '@/features/actions/use-item-actions';
 import { TogetherSheetHost, usePlayForEveryone, useTogetherEntry } from '@/features/together/together-sheet';
@@ -175,24 +176,35 @@ export function DetailScaffold<Row>({
   });
 
   // `key`: a stable React key when the label changes (the download shows its percent), so the button stays mounted.
-  const secondary: { key?: string; icon: IconName; label: string; active?: boolean; onPress: () => void; ring?: number; tint?: string; a11y?: string; spare?: boolean }[] = [];
+  const secondary: {
+    key?: string;
+    icon: IconName;
+    label: string;
+    active?: boolean;
+    onPress: () => void;
+    ring?: number;
+    download?: DownloadStatus['state'];
+    tint?: string;
+    a11y?: string;
+    spare?: boolean;
+  }[] = [];
   if (playable && resumable) {
     secondary.push({ icon: 'arrow.counterclockwise', label: 'Start over', onPress: () => player.play({ item, startPositionTicks: 0 }) });
   }
   const dlAction = actions.find((a) => a.id === 'builtin.download' || a.id === 'builtin.downloading' || a.id === 'builtin.removeDownload');
   if (dlAction) {
     if (download.state === 'completed') {
-      secondary.push({ key: 'download', icon: 'arrow.down.circle.fill', label: 'Downloaded', tint: c.success, a11y: 'Downloaded. Remove the download', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', download: download.state, icon: 'arrow.down.circle.fill', label: 'Downloaded', tint: c.success, a11y: 'Downloaded. Remove the download', onPress: () => run(dlAction) });
     } else if (download.state === 'none') {
-      secondary.push({ key: 'download', icon: 'arrow.down.circle', label: 'Download', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', download: download.state, icon: 'arrow.down.circle', label: 'Download', onPress: () => run(dlAction) });
     } else if (download.state === 'failed' && download.missing) {
-      secondary.push({ key: 'download', icon: 'arrow.down.circle', label: 'Download again', tint: c.danger, a11y: 'The downloaded file is missing. Download it again', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', download: download.state, icon: 'arrow.down.circle', label: 'Download again', tint: c.danger, a11y: 'The downloaded file is missing. Download it again', onPress: () => run(dlAction) });
     } else if (download.state === 'failed') {
-      secondary.push({ key: 'download', icon: 'exclamationmark.triangle', label: 'Failed', tint: c.danger, a11y: 'Download failed. Open Downloads', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', download: download.state, icon: 'exclamationmark.triangle', label: 'Failed', tint: c.danger, a11y: 'Download failed. Open Downloads', onPress: () => run(dlAction) });
     } else {
       const pct = Math.round(download.progress * 100);
       secondary.push({
-        key: 'download',
+        key: 'download', download: download.state,
         icon: 'arrow.down.circle',
         label: download.state === 'paused' ? 'Paused' : `${pct}%`,
         ring: download.progress,
@@ -464,6 +476,7 @@ function RoundAction({
   active,
   onPress,
   ring,
+  download,
   tint,
   a11y,
 }: {
@@ -473,6 +486,8 @@ function RoundAction({
   onPress: () => void;
   /** A progress ring around the button (a running download), 0..1. */
   ring?: number;
+  /** The download button's state: its icon arrives when the download completes on this page. */
+  download?: DownloadStatus['state'];
   tint?: string;
   a11y?: string;
 }) {
@@ -494,6 +509,8 @@ function RoundAction({
   };
   // The Touchable owns the circle's press scale; the pop moves only the icon.
   const pop = usePopIn(active, turnedOn, TOGGLE_POP, undefined, onTurnedOn);
+  // The page shows one item, so the button needs no scope for the arrival.
+  const arrival = useDownloadArrival(undefined, download ?? 'none');
   return (
     <Touchable
       kind="plain"
@@ -514,8 +531,11 @@ function RoundAction({
               { backgroundColor: pressed || hovered ? c.surface3 : c.surface2 },
               focused && isTV && s.roundFocusTV,
             ]}>
-            <Animated.View style={pop}>
-              <Icon name={icon} size={scaled(iconSize.sm)} color={tint ?? (active ? c.accent : c.text)} weight="semibold" />
+            {/* Two views: each animation owns its own scale. */}
+            <Animated.View style={arrival}>
+              <Animated.View style={pop}>
+                <Icon name={icon} size={scaled(iconSize.sm)} color={tint ?? (active ? c.accent : c.text)} weight="semibold" />
+              </Animated.View>
             </Animated.View>
             {ring !== undefined ? (
               <View style={StyleSheet.absoluteFill}>
