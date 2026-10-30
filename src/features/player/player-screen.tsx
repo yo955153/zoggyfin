@@ -29,6 +29,7 @@ import type { KeyPress } from '@/native/key-input-types';
 import { nextUpPhase, nextUpStartsAt, skipPromptAt } from '@/player/segments';
 import { videoSession } from '@/player/session';
 import { useShowsPause } from '@/player/control-gate';
+import { playingVideo, videoDetail, videoSummary } from '@/player/stream-info';
 import { playerState, setPlayerState, usePlayerStore } from '@/player/store';
 import { chapterAt, formatTime } from '@/player/timeline';
 import { MAX_BITRATE, QUALITY_OPTIONS, qualityLabel, usePlaybackSettings } from '@/settings/playback';
@@ -63,7 +64,7 @@ import { syncPlaySupported } from '@/together/syncplay';
 import { AirPlayButton } from './airplay-button';
 import { Glass } from './glass';
 import { NextUpCard } from './next-up-card';
-import { PlayerSheet, type SheetSection } from './player-sheet';
+import { PlayerSheet, type SheetInfo, type SheetSection } from './player-sheet';
 import { RoundButton } from './round-button';
 import { Scrubber } from './scrubber';
 import { SkipPill } from './skip-pill';
@@ -583,7 +584,15 @@ export function PlayerScreen() {
       ]
     : [];
 
+  const reportedVideo = usePlayerStore((x) => x.video);
+  const streamVideo = now && now.kind !== 'audio' ? playingVideo(reportedVideo, now.plan.playMethod, now.plan.original ?? null, now.plan.target ?? null) : null;
+  const original = now?.plan.original ?? null;
   const method = now?.plan.playMethod === 'Transcode' ? 'Transcoding' : now?.plan.playMethod === 'DirectStream' ? 'Direct stream' : 'Direct play';
+  // What plays against the file: is a higher quality worth it?
+  const streamInfo: SheetInfo[] = [
+    streamVideo ? { key: 'playing', label: `Playing: ${videoSummary(streamVideo)}`, detail: [videoDetail(streamVideo), method].join(' · ') } : null,
+    original && !now?.plan.isLocal ? { key: 'original', label: `Original: ${videoSummary(original)}`, detail: videoDetail(original) } : null,
+  ].filter((r) => r !== null);
   const settingsSections: SheetSection[] = now
     ? [
         ...(now.plan.isLocal
@@ -715,6 +724,11 @@ export function PlayerScreen() {
               {sub ? (
                 <Text style={styles.subtitle} numberOfLines={1}>
                   {sub}
+                </Text>
+              ) : null}
+              {streamVideo ? (
+                <Text style={styles.streamLine} numberOfLines={1} accessibilityLabel={`Playing at ${videoSummary(streamVideo)}`}>
+                  {videoSummary(streamVideo)}
                 </Text>
               ) : null}
             </View>
@@ -870,7 +884,7 @@ export function PlayerScreen() {
       </TvFocusGuide>
 
       <PlayerSheet visible={sheet === 'tracks'} title="Audio & Subtitles" sections={trackSections} onClose={() => setSheet(null)} />
-      <PlayerSheet visible={sheet === 'settings'} title="Playback" sections={settingsSections} onClose={() => setSheet(null)} />
+      <PlayerSheet visible={sheet === 'settings'} title="Playback" sections={settingsSections} info={streamInfo} onClose={() => setSheet(null)} />
       <PlayerSheet
         visible={sheet === 'screen'}
         title="Screen Size"
@@ -933,6 +947,7 @@ const styles = StyleSheet.create({
   titleBlock: { flex: 1, minWidth: 0 },
   title: { ...textStyle(type.headline), color: c.textOnMedia },
   subtitle: { ...textStyle(type.footnote), color: 'rgba(255,255,255,0.72)' },
+  streamLine: { ...textStyle(type.caption1), color: 'rgba(255,255,255,0.6)', fontVariant: ['tabular-nums'] },
   pill: { flexDirection: 'row', alignItems: 'center', borderRadius: radius.pill, overflow: 'hidden', paddingHorizontal: spacing.xs },
   pillButton: { width: player.pillButton, height: player.pillButton, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   skipNumber: { position: 'absolute', fontSize: 10, lineHeight: 12, fontWeight: '700', color: c.textOnMedia, fontVariant: ['tabular-nums'] },

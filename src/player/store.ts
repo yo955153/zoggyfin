@@ -7,6 +7,7 @@ import { create } from 'zustand';
 
 import type { BaseItemDto } from '@/api/types';
 
+import type { VideoTrackInfo } from './engine-types';
 import type { Segment } from './segments';
 import type { StreamPlan } from './stream';
 import type { Chapter, Trickplay } from './timeline';
@@ -48,6 +49,8 @@ export interface PlayerState {
   pip: boolean;
   /** Cues of the selected text subtitle, or null. */
   cues: Cue[] | null;
+  /** The video track the engine reports for the current stream, or null. */
+  video: VideoTrackInfo | null;
 }
 
 export const initialPlayerState: PlayerState = {
@@ -63,6 +66,7 @@ export const initialPlayerState: PlayerState = {
   presentation: 'hidden',
   pip: false,
   cues: null,
+  video: null,
 };
 
 export const usePlayerStore = create<PlayerState>(() => initialPlayerState);

@@ -5,6 +5,9 @@
  */
 import type { DeviceProfile, MediaSourceInfo, MediaStream, PlaybackInfoDto, PlayMethod } from '@/api/types';
 
+import type { VideoTrackInfo } from './engine-types';
+import { originalVideo, type TranscodeTarget, transcodeTarget } from './stream-info';
+
 /** Jellyfin 12 adds `DirectStreamUrl` to media sources. 10.11 does not send it. */
 export type MediaSource = MediaSourceInfo & { DirectStreamUrl?: string | null };
 
@@ -51,6 +54,10 @@ export interface StreamPlan {
   isLocal?: boolean;
   /** The file streams from a nearby host (watch together). Implies `isLocal` rules. */
   fromPeer?: boolean;
+  /** The video stream of the file on the server (the stream info in the player). */
+  original?: VideoTrackInfo | null;
+  /** A transcode: the size and bitrate the server was asked for. */
+  target?: TranscodeTarget | null;
 }
 
 export interface PlaybackInfoInput {
@@ -178,6 +185,7 @@ export function planStream(
     subtitles,
     audioIndex,
     subtitleIndex,
+    original: originalVideo(source),
   };
   if (source.SupportsDirectPlay || (!source.TranscodingUrl && source.SupportsDirectStream)) {
     const url = directPlayUrl(server, itemId, source, playSessionId);
@@ -191,6 +199,7 @@ export function planStream(
     isHls: (source.TranscodingSubProtocol ?? '').toLowerCase() === 'hls' || /\.m3u8(\?|$)/i.test(url),
     playMethod: 'Transcode',
     burnedSubtitle: !!sub && !sub.isText,
+    target: transcodeTarget(source.TranscodingUrl),
   };
 }
 

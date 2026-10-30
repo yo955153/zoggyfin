@@ -42,6 +42,10 @@ class WebEngine implements VideoEngine {
     v.addEventListener('durationchange', () => {
       if (Number.isFinite(v.duration)) this.emit({ type: 'duration', duration: v.duration });
     });
+    // The browser knows the size, not the bitrate (hls.js plays one variant from the server).
+    v.addEventListener('resize', () =>
+      this.emit({ type: 'video', video: v.videoWidth > 0 ? { width: v.videoWidth, height: v.videoHeight, bitrate: null, frameRate: null, codec: null } : null }),
+    );
     v.addEventListener('timeupdate', () => this.emit({ type: 'time', position: v.currentTime, buffered: this.buffered() }));
     v.addEventListener('enterpictureinpicture', () => this.emit({ type: 'pip', active: true }));
     v.addEventListener('leavepictureinpicture', () => this.emit({ type: 'pip', active: false }));
