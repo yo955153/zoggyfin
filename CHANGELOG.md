@@ -53,6 +53,8 @@ first commit to today. All of it was built in the first weeks of the project.
 - **Motion.** Favourite and Played turn on at once on the item page, with a small pop and a light
   haptic. Download rings move smoothly between steps. A finished download's icon arrives with a small
   bounce. Item, library and genre pages fade their content in after a loading skeleton.
+- **Home discovery.** "Because you watched" rows from the server's movie recommendations, a "Short on
+  time" row of unwatched movies of 100 minutes or less, and a genre of the day that changes at midnight.
 
 ### Changed
 

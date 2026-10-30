@@ -93,7 +93,8 @@ Zoggyfin is in early development. The sections below describe what exists today,
 Phase 1 ("Foundation"):
 
 - Sign in with a server address and a username and password, or with Quick Connect.
-- Home: Continue Watching, Next Up, Continue Listening, Recently Added per library.
+- Home: Continue Watching, Next Up, Because you watched (movie recommendations), Continue Listening,
+  Short on time (unwatched movies of 100 minutes or less), Recently Added per library, and a genre of the day.
 - Library: library grids with sort and filters, shows to seasons to episodes, collections.
 - Music: Albums, Artists, Playlists, Songs and Genres in a swipeable pager.
 - Item pages for movies, shows, seasons, episodes, albums, artists, people and playlists.
