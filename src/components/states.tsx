@@ -1,11 +1,13 @@
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { describeError } from '@/api/errors';
 import { Icon, type IconName } from '@/components/icon';
 import { createStyles, type AppTheme, font, iconSize, scaled, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
 
 import { Button } from './button';
-import { Delayed, SkeletonBlock, SkeletonText } from './skeleton';
+import { Delayed, SkeletonBlock, SkeletonShownContext, SkeletonText } from './skeleton';
 import { SHAPES, type TileShape } from './tile-shape';
 import { gridLayout } from '@/theme/layout';
 import { isTV } from '@/platform/tv';
@@ -139,6 +141,32 @@ export function GridSkeleton({ shape, width }: { shape: TileShape; width?: numbe
       </View>
     </Delayed>
   );
+}
+
+/**
+ * Wraps a screen's loading and loaded states. When a skeleton was on screen,
+ * the content fades in (200 ms, strong ease-out), so the swap is not a hard
+ * cut. Content that renders at once (from the persisted cache, or before the
+ * skeleton's delay ends) appears with no fade. Opacity only, so Reduced
+ * Motion needs no other path.
+ */
+export function FadeInAfterLoad({ loading, children }: { loading: boolean; children: ReactNode }) {
+  const [seen, setSeen] = useState(false);
+  const markSeen = useCallback(() => setSeen(true), []);
+  if (loading) return <SkeletonShownContext.Provider value={markSeen}>{children}</SkeletonShownContext.Provider>;
+  return seen ? <FadeIn>{children}</FadeIn> : <>{children}</>;
+}
+
+const FADE_EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+
+/** Mounts at opacity 0, so the content never paints at full opacity first. */
+function FadeIn({ children }: { children: ReactNode }) {
+  const opacity = useSharedValue(0);
+  useEffect(() => {
+    opacity.set(withTiming(1, { duration: 200, easing: FADE_EASE_OUT }));
+  }, [opacity]);
+  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+  return <Animated.View style={[stateStyles.fill, style]}>{children}</Animated.View>;
 }
 
 const makeStyles = createStyles(({ c }: AppTheme) => ({
