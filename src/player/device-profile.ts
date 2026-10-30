@@ -373,7 +373,10 @@ export function buildDeviceProfile(caps: MediaCapabilities, options: ProfileOpti
 
   const hlsVideo = caps.hlsVideoCodecs;
   // fMP4 segments carry HEVC; plain h264 uses MPEG-TS, the most compatible HLS form.
-  const segmentContainer = hlsVideo.includes('hevc') ? 'mp4' : 'ts';
+  // ExoPlayer always takes MPEG-TS (it reads HEVC there too): a transcode that starts
+  // mid-file (resume, a quality change) can give fMP4 a negative `tfdt`, and its
+  // fragmented MP4 extractor stops with "Top bit not zero".
+  const segmentContainer = caps.engine === 'exo' || !hlsVideo.includes('hevc') ? 'ts' : 'mp4';
   const transcoding: TranscodingProfile[] = [
     {
       Container: segmentContainer,

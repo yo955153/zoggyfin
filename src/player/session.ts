@@ -207,6 +207,9 @@ class VideoSession {
       case 'pip':
         setPlayerState({ pip: e.active });
         break;
+      case 'video':
+        setPlayerState({ video: e.video });
+        break;
       case 'ended':
         void this.onEnded();
         break;
@@ -341,6 +344,7 @@ class VideoSession {
       position: start,
       duration: ticksToSecondsExact(item.RunTimeTicks),
       cues: null,
+      video: null,
     });
     this.engine.load({
       uri,
@@ -482,6 +486,7 @@ class VideoSession {
       position: opts.startSeconds,
       duration: ticksToSecondsExact(item.RunTimeTicks) || playerState().duration,
       cues: sameItem ? playerState().cues : null,
+      video: null,
     });
     this.engine.load({
       uri: plan.url,

@@ -16,6 +16,13 @@ export interface SheetRow {
   onPress: () => void;
 }
 
+/** A fact shown above the options (the stream that plays): not focusable. */
+export interface SheetInfo {
+  key: string;
+  label: string;
+  detail?: string | null;
+}
+
 export interface SheetSection {
   title: string;
   rows: SheetRow[];
@@ -32,11 +39,14 @@ export function PlayerSheet({
   visible,
   title,
   sections,
+  info,
   onClose,
 }: {
   visible: boolean;
   title: string;
   sections: SheetSection[];
+  /** Shown above the list and never scrolled away: TV focus cannot reach rows that only show facts. */
+  info?: SheetInfo[];
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -72,6 +82,13 @@ export function PlayerSheet({
             </Pressable>
           )}
         </View>
+        {info?.length ? (
+          <View style={[styles.card, styles.infoCard]}>
+            {info.map((r, i) => (
+              <InfoRow key={r.key} row={r} last={i === info.length - 1} />
+            ))}
+          </View>
+        ) : null}
         <ScrollView
           ref={scroll}
           style={styles.list}
@@ -103,6 +120,23 @@ export function PlayerSheet({
         </ScrollView>
       </View>
     </Modal>
+  );
+}
+
+function InfoRow({ row: r, last }: { row: SheetInfo; last: boolean }) {
+  return (
+    <View style={[styles.row, isTV && styles.rowTV, !last && styles.rowBorder]} accessible>
+      <View style={styles.rowText}>
+        <Text style={[styles.label, isTV && styles.labelTV]} numberOfLines={2}>
+          {r.label}
+        </Text>
+        {r.detail ? (
+          <Text style={[styles.detail, isTV && styles.detailTV]} numberOfLines={1}>
+            {r.detail}
+          </Text>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -192,6 +226,7 @@ const styles = StyleSheet.create({
   section: { gap: spacing.sm },
   sectionTitle: { ...textStyle(type.footnote), color: c.text2, marginLeft: spacing.sm, textTransform: 'uppercase' },
   card: { backgroundColor: c.surface, borderRadius: radius.lg, borderCurve: 'continuous', overflow: 'hidden' },
+  infoCard: { marginHorizontal: spacing.lg, marginBottom: spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.md },
   rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.separator },
   rowActive: { backgroundColor: c.surface3 },

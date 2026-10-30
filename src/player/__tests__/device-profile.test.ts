@@ -180,6 +180,12 @@ describe('ExoPlayer device profile (Android)', () => {
     expect(caps.hevcTenBit).toBe(false);
     const p = buildDeviceProfile(caps, opts);
     expect(codec(p, 'hevc')?.Conditions?.find((c) => c.Property === 'VideoBitDepth')?.Value).toBe('8');
-    expect(p.TranscodingProfiles?.[0]).toMatchObject({ Container: 'mp4', Protocol: 'hls', VideoCodec: 'hevc,h264' });
+    expect(p.TranscodingProfiles?.[0]).toMatchObject({ Container: 'ts', Protocol: 'hls', VideoCodec: 'hevc,h264' });
+  });
+
+  it('transcodes to HLS with MPEG-TS segments, also for hevc (fMP4 can start with a negative tfdt)', () => {
+    const p = buildDeviceProfile(exoCapabilities(phone), opts);
+    const t = (p.TranscodingProfiles ?? []).find((x) => x.Type === 'Video');
+    expect(t).toMatchObject({ Protocol: 'hls', Container: 'ts', VideoCodec: 'hevc,h264' });
   });
 });

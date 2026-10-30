@@ -2,7 +2,9 @@
  * TV Home billboard: the focused item, large, at the top of the screen (like
  * the streaming apps on TV). Tiles in the Home rows report their focus here;
  * the billboard follows after a short pause, so a fast move along a row does
- * not load every backdrop.
+ * not load every backdrop. The art keeps its 16:9 shape from the top: its
+ * lower part runs on under the first row and fades into the page, so the
+ * billboard's short box never crops the top of a backdrop.
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -82,10 +84,13 @@ export function Billboard() {
   const height = billboardHeight(l.height);
   const width = l.contentWidth;
   const artW = Math.round(width * 0.72);
+  const artH = Math.round((artW * 9) / 16);
   const server = useImageServer();
   // One backdrop at the size it shows (capped), so a focus move loads a small image.
   const scale = Math.min(PixelRatio.get(), 1.5);
-  const art = item ? resolveImage(item, 'backdrop', { width: Math.round(artW * scale), height: Math.round(height * scale) }, server) : null;
+  const art = item ? resolveImage(item, 'backdrop', { width: Math.round(artW * scale), height: Math.round(artH * scale) }, server) : null;
+  // A movie or show with no wide art falls back to its tall poster: show all of it at the edge, not a slice.
+  const tall = art?.kind === 'remote' && item?.Type !== 'Episode' && (art.source === 'Primary' || art.source === 'SeriesPrimary');
 
   if (!item) return <View style={{ height }} />;
   const title = (item.Type === 'Episode' ? item.SeriesName : null) ?? item.Name ?? '';
@@ -93,21 +98,22 @@ export function Billboard() {
   return (
     <View style={[s.root, { height }]} accessibilityLiveRegion="polite">
       {/* No key: the old backdrop stays until the new one has loaded, then cross-fades. */}
-      <View style={[s.art, { width: artW, height }]}>
+      <View style={[s.art, { width: artW, height: artH }]}>
         {art?.kind === 'remote' ? (
           <Image
             source={imageSource(art.uri, server)}
             style={StyleSheet.absoluteFill}
-            contentFit="cover"
+            contentFit={tall ? 'contain' : 'cover'}
+            contentPosition={tall ? 'right top' : 'top'}
             transition={motion.duration.base}
             cachePolicy="memory-disk"
             priority="high"
           />
         ) : (
-          <ItemImage item={item} variant="backdrop" width={artW} aspectRatio={artW / height} rounded={0} hideArtTitle hairline={false} />
+          <ItemImage item={item} variant="backdrop" width={artW} aspectRatio={16 / 9} rounded={0} hideArtTitle hairline={false} />
         )}
       </View>
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={[s.fade, { height: artH }]} pointerEvents="none">
         {/* The art fades into the page on the left and at the bottom. */}
         <LinearGradient
           colors={[c.bg, withAlpha(c.bg, 0.85), withAlpha(c.bg, 0)]}
@@ -116,9 +122,10 @@ export function Billboard() {
           end={{ x: 1, y: 0 }}
           style={StyleSheet.absoluteFill}
         />
+        {/* The billboard ends at about 60% of the art: the rest fades out under the first row. */}
         <LinearGradient
-          colors={[withAlpha(c.bg, 0), c.bg]}
-          locations={[0.6, 1]}
+          colors={[withAlpha(c.bg, 0), withAlpha(c.bg, 0.6), c.bg]}
+          locations={[0.42, 0.62, 0.92]}
           style={StyleSheet.absoluteFill}
         />
       </View>
@@ -168,8 +175,10 @@ function Title({ item, title }: { item: BaseItemDto; title: string }) {
 }
 
 const makeStyles = createStyles(({ c }: AppTheme) => ({
-  root: { overflow: 'hidden' as const },
+  // Visible: the art runs on below the billboard, under the rows (the Home ScrollView draws over it).
+  root: { overflow: 'visible' as const },
   art: { position: 'absolute' as const, top: 0, right: 0 },
+  fade: { position: 'absolute' as const, top: 0, left: 0, right: 0 },
   text: { position: 'absolute' as const, gap: spacing.xs },
   title: { ...font(type.title1), color: c.text },
   logoBox: { width: scaled(sizes.logoMaxWidth), height: scaled(sizes.logoMaxHeight * 0.8) },

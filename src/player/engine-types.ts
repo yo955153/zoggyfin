@@ -38,6 +38,23 @@ export interface EngineSubtitle {
 
 export type EngineStatus = 'idle' | 'loading' | 'ready' | 'error';
 
+/**
+ * How the video fills the window: `contain` shows the whole frame, `cover`
+ * crops to the window, `fill` stretches to it (the CSS `object-fit` names).
+ */
+export type VideoFit = 'contain' | 'cover' | 'fill';
+
+/** The video track that plays now, as the player reports it. */
+export interface VideoTrackInfo {
+  width: number;
+  height: number;
+  /** Bits per second, or null when the player does not know. */
+  bitrate: number | null;
+  frameRate: number | null;
+  /** A MIME type or codec name (`video/hevc`, `h264`), or null. */
+  codec: string | null;
+}
+
 export type EngineEvent =
   | { type: 'status'; status: EngineStatus; error?: string }
   | { type: 'playing'; playing: boolean }
@@ -47,6 +64,8 @@ export type EngineEvent =
   | { type: 'muted'; muted: boolean }
   | { type: 'ended' }
   | { type: 'pip'; active: boolean }
+  /** The playing video track changed (a new source, an adaptive switch). Null: not known yet. */
+  | { type: 'video'; video: VideoTrackInfo | null }
   /** A remote command from the lock screen or a headset (web Media Session). */
   | { type: 'remote'; command: 'next' | 'previous' };
 

@@ -78,6 +78,7 @@ export const ANDROID_SYMBOLS = {
   'speaker.wave.2.fill': 'volume_up',
   'speaker.slash.fill': 'volume_off',
   'arrow.up.left.and.arrow.down.right': 'fullscreen',
+  aspectratio: 'aspect_ratio',
   gauge: 'speed',
   circle: 'radio_button_unchecked',
   'checkmark.circle.fill': 'check_circle',

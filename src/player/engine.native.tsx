@@ -3,13 +3,13 @@
  * life, so playback continues when the player screen closes (mini player,
  * background audio, Picture in Picture).
  */
-import { createVideoPlayer, isPictureInPictureSupported, type VideoPlayer, VideoView } from 'expo-video';
+import { createVideoPlayer, isPictureInPictureSupported, type VideoPlayer, type VideoTrack, VideoView } from 'expo-video';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Platform, type StyleProp, View, type ViewStyle } from 'react-native';
 
 import { setAutoPictureInPicture } from '@/native/zoggyfin-native';
 
-import type { EngineListener, EngineSource, EngineStatus, VideoEngine } from './engine-types';
+import type { EngineListener, EngineSource, EngineStatus, VideoEngine, VideoFit, VideoTrackInfo } from './engine-types';
 
 /**
  * iOS: with no artist or artwork from the app, expo-video puts the file's own
@@ -19,6 +19,17 @@ import type { EngineListener, EngineSource, EngineStatus, VideoEngine } from './
  * patches/expo-video fixes the cause for the next native build.
  */
 const NO_ARTWORK = 'file:///dev/null';
+
+function trackInfo(t: VideoTrack | null | undefined): VideoTrackInfo | null {
+  if (!t || !(t.size.width > 0) || !(t.size.height > 0)) return null;
+  return {
+    width: t.size.width,
+    height: t.size.height,
+    bitrate: t.averageBitrate ?? t.peakBitrate ?? null,
+    frameRate: t.frameRate ?? null,
+    codec: t.mimeType ?? null,
+  };
+}
 
 class NativeEngine implements VideoEngine {
   private player: VideoPlayer | null = null;
@@ -119,7 +130,11 @@ class NativeEngine implements VideoEngine {
       p.addListener('timeUpdate', ({ currentTime, bufferedPosition }) =>
         this.emit({ type: 'time', position: currentTime, buffered: Math.max(0, bufferedPosition) }),
       ),
-      p.addListener('sourceLoad', ({ duration }) => this.emit({ type: 'duration', duration })),
+      p.addListener('sourceLoad', ({ duration }) => {
+        this.emit({ type: 'duration', duration });
+        this.emit({ type: 'video', video: trackInfo(p.videoTrack) });
+      }),
+      p.addListener('videoTrackChange', ({ videoTrack }) => this.emit({ type: 'video', video: trackInfo(videoTrack) })),
       p.addListener('playToEnd', () => {
         if (this.sourceReady) this.emit({ type: 'ended' });
       }),
@@ -259,8 +274,8 @@ function detachView(view: VideoView | null) {
   if (e.view === view) e.view = null;
 }
 
-/** Draws the video. `fill` crops to the window; otherwise the whole frame shows. */
-export function VideoSurface({ fill, style }: { fill: boolean; style?: StyleProp<ViewStyle> }) {
+/** Draws the video, fitted to the window by `fit`. */
+export function VideoSurface({ fit, style }: { fit: VideoFit; style?: StyleProp<ViewStyle> }) {
   const e = nativeEngine();
   const ref = useRef<VideoView>(null);
   const player = useSyncExternalStore(e.subscribePlayer, e.currentPlayer);
@@ -276,7 +291,7 @@ export function VideoSurface({ fill, style }: { fill: boolean; style?: StyleProp
       player={player}
       style={style}
       nativeControls={false}
-      contentFit={fill ? 'cover' : 'contain'}
+      contentFit={fit}
       allowsPictureInPicture
       startsPictureInPictureAutomatically
       onPictureInPictureStart={() => e.pipChanged(true)}
