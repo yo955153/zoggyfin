@@ -174,23 +174,25 @@ export function DetailScaffold<Row>({
     return { transform: [{ translateY: interpolate(y, [0, heroH], [0, heroH / 2], 'clamp') }] };
   });
 
-  const secondary: { icon: IconName; label: string; active?: boolean; onPress: () => void; ring?: number; tint?: string; a11y?: string; spare?: boolean }[] = [];
+  // `key`: a stable React key when the label changes (the download shows its percent), so the button stays mounted.
+  const secondary: { key?: string; icon: IconName; label: string; active?: boolean; onPress: () => void; ring?: number; tint?: string; a11y?: string; spare?: boolean }[] = [];
   if (playable && resumable) {
     secondary.push({ icon: 'arrow.counterclockwise', label: 'Start over', onPress: () => player.play({ item, startPositionTicks: 0 }) });
   }
   const dlAction = actions.find((a) => a.id === 'builtin.download' || a.id === 'builtin.downloading' || a.id === 'builtin.removeDownload');
   if (dlAction) {
     if (download.state === 'completed') {
-      secondary.push({ icon: 'arrow.down.circle.fill', label: 'Downloaded', tint: c.success, a11y: 'Downloaded. Remove the download', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', icon: 'arrow.down.circle.fill', label: 'Downloaded', tint: c.success, a11y: 'Downloaded. Remove the download', onPress: () => run(dlAction) });
     } else if (download.state === 'none') {
-      secondary.push({ icon: 'arrow.down.circle', label: 'Download', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', icon: 'arrow.down.circle', label: 'Download', onPress: () => run(dlAction) });
     } else if (download.state === 'failed' && download.missing) {
-      secondary.push({ icon: 'arrow.down.circle', label: 'Download again', tint: c.danger, a11y: 'The downloaded file is missing. Download it again', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', icon: 'arrow.down.circle', label: 'Download again', tint: c.danger, a11y: 'The downloaded file is missing. Download it again', onPress: () => run(dlAction) });
     } else if (download.state === 'failed') {
-      secondary.push({ icon: 'exclamationmark.triangle', label: 'Failed', tint: c.danger, a11y: 'Download failed. Open Downloads', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', icon: 'exclamationmark.triangle', label: 'Failed', tint: c.danger, a11y: 'Download failed. Open Downloads', onPress: () => run(dlAction) });
     } else {
       const pct = Math.round(download.progress * 100);
       secondary.push({
+        key: 'download',
         icon: 'arrow.down.circle',
         label: download.state === 'paused' ? 'Paused' : `${pct}%`,
         ring: download.progress,
@@ -264,8 +266,8 @@ export function DetailScaffold<Row>({
   const fitted = fitRoundActions(secondary, rowWidth, scaled(58), [spacing.xl, spacing.sm]);
   const actionsRow = (
     <View style={[s.actions, { gap: fitted.gap }, centered ? s.actionsCenter : null]} onLayout={(e) => setRowWidth(Math.floor(e.nativeEvent.layout.width))}>
-      {fitted.items.map(({ spare: _spare, ...a }) => (
-        <RoundAction key={a.label} {...a} />
+      {fitted.items.map(({ spare: _spare, key, ...a }) => (
+        <RoundAction key={key ?? a.label} {...a} />
       ))}
     </View>
   );
