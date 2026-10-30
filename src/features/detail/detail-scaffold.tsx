@@ -1,8 +1,9 @@
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
-import { type ReactElement, type ReactNode, useCallback, useMemo, useState } from 'react';
-import { PixelRatio, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { type ReactElement, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import { PixelRatio, Platform, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedRef,
@@ -26,6 +27,8 @@ import { buildImageUrl, imageSource } from '@/images/image-url';
 import type { FocusTarget } from '@/features/tv/focus';
 import { type TvRowPage, TvRowScroll } from '@/features/tv/shelf';
 import { formatClock, playedFraction } from '@/lib/format';
+import { turnedOn } from '@/lib/pop-in';
+import { type PopInOptions, usePopIn } from '@/lib/use-pop-in';
 import { isTV } from '@/platform/tv';
 import { usePlayer } from '@/player';
 import { audioResumeTicks } from '@/player/audio/resume';
@@ -448,6 +451,11 @@ function Title({ item, centered, big }: { item: BaseItemDto; centered: boolean; 
   );
 }
 
+/** A toggle that turns on: the icon grows from 0.8 with no overshoot. Feedback, so it is quick and plain. */
+const TOGGLE_POP: PopInOptions = { from: 0.8, spring: { duration: 300, dampingRatio: 1 } };
+/** The haptic waits for the icon to turn on; a press older than this is no longer the cause. */
+const PRESS_WINDOW_MS = 8000;
+
 function RoundAction({
   icon,
   label,
@@ -473,11 +481,25 @@ function RoundAction({
   // TV adds the focus scale and a white ring.
   const ringW = isTV ? tv.focusRingWidth : 2;
   const ringGap = isTV ? tv.focusRingGap : 2;
+  // The toggle turns on only after the server answers, so the haptic fires with the pop, not on the press.
+  // A failed request then gives no haptic, only its toast.
+  const pressedAt = useRef(0);
+  const onTurnedOn = () => {
+    const recent = Date.now() - pressedAt.current < PRESS_WINDOW_MS;
+    pressedAt.current = 0;
+    // haptics.light (theme): a small confirmation of the user's own action.
+    if (recent && Platform.OS !== 'web' && !isTV) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+  // The Touchable owns the circle's press scale; the pop moves only the icon.
+  const pop = usePopIn(active, turnedOn, TOGGLE_POP, undefined, onTurnedOn);
   return (
     <Touchable
       kind="plain"
       ring={false}
-      onPress={onPress}
+      onPress={() => {
+        if (active === false) pressedAt.current = Date.now();
+        onPress();
+      }}
       accessibilityRole="button"
       accessibilityLabel={a11y ?? label}
       accessibilityState={active === undefined ? undefined : { selected: active }}
@@ -490,7 +512,9 @@ function RoundAction({
               { backgroundColor: pressed || hovered ? c.surface3 : c.surface2 },
               focused && isTV && s.roundFocusTV,
             ]}>
-            <Icon name={icon} size={scaled(iconSize.sm)} color={tint ?? (active ? c.accent : c.text)} weight="semibold" />
+            <Animated.View style={pop}>
+              <Icon name={icon} size={scaled(iconSize.sm)} color={tint ?? (active ? c.accent : c.text)} weight="semibold" />
+            </Animated.View>
             {ring !== undefined ? (
               <View style={StyleSheet.absoluteFill}>
                 <ProgressRing size={size} width={3} progress={ring} color={c.accent} track="transparent" />
