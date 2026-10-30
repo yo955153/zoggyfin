@@ -5,7 +5,7 @@ import { useGenreItems } from '@/api/queries';
 import type { BaseItemDto } from '@/api/types';
 import { Button } from '@/components/button';
 import { ItemGrid } from '@/components/item-grid';
-import { EmptyState, ErrorState, GridSkeleton } from '@/components/states';
+import { EmptyState, ErrorState, FadeInAfterLoad, GridSkeleton } from '@/components/states';
 import { usePlayer } from '@/player';
 import { spacing, useLayout } from '@/theme';
 
@@ -26,19 +26,21 @@ export default function GenreScreen() {
   return (
     <>
       <Stack.Screen options={{ title: name || 'Genre', headerLargeTitleEnabled: true }} />
-      {q.isPending ? (
-        <GridSkeleton shape="square" />
-      ) : q.error && !q.data ? (
-        <ErrorState error={q.error} onRetry={q.refetch} />
-      ) : (
-        <ItemGrid
-          items={q.data ?? []}
-          shape="square"
-          onRefresh={q.refetch}
-          ListHeaderComponent={q.data?.length ? header : null}
-          ListEmptyComponent={<EmptyState icon="music.note" title="No albums in this genre" />}
-        />
-      )}
+      <FadeInAfterLoad loading={q.isPending}>
+        {q.isPending ? (
+          <GridSkeleton shape="square" />
+        ) : q.error && !q.data ? (
+          <ErrorState error={q.error} onRetry={q.refetch} />
+        ) : (
+          <ItemGrid
+            items={q.data ?? []}
+            shape="square"
+            onRefresh={q.refetch}
+            ListHeaderComponent={q.data?.length ? header : null}
+            ListEmptyComponent={<EmptyState icon="music.note" title="No albums in this genre" />}
+          />
+        )}
+      </FadeInAfterLoad>
     </>
   );
 }

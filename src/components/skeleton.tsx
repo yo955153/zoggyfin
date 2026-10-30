@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { type ReactNode, useEffect, useState } from 'react';
+import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -67,13 +67,23 @@ export function SkeletonText({ width }: { width: number }) {
   );
 }
 
+/**
+ * Told when a skeleton really appears (after the delay). `FadeInAfterLoad`
+ * listens, so it fades content in only where a skeleton was seen.
+ */
+export const SkeletonShownContext = createContext<() => void>(() => {});
+
 /** Shows its children only after 150 ms, so fast loads never flash a skeleton. */
 export function Delayed({ children }: { children: ReactNode }) {
   const [shown, setShown] = useState(false);
+  const onShown = useContext(SkeletonShownContext);
   useEffect(() => {
-    const t = setTimeout(() => setShown(true), sizes.skeletonDelay);
+    const t = setTimeout(() => {
+      setShown(true);
+      onShown();
+    }, sizes.skeletonDelay);
     return () => clearTimeout(t);
-  }, []);
+  }, [onShown]);
   return shown ? <>{children}</> : null;
 }
 

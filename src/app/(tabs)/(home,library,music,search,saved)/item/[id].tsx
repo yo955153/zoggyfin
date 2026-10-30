@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 
 import { itemSeed, logItemTiming } from '@/api/item-seed';
 import { useItem } from '@/api/queries';
-import { DetailSkeleton, ErrorState } from '@/components/states';
+import { DetailSkeleton, ErrorState, FadeInAfterLoad } from '@/components/states';
 import { useOtherServerDownload } from '@/downloads';
 import {
   AlbumDetail,
@@ -76,7 +76,7 @@ export default function ItemScreen() {
   return (
     <>
       <Stack.Screen options={{ ...detailScreenOptions, title: item?.Name ?? name ?? '' }} />
-      {body}
+      <FadeInAfterLoad loading={!other && !item}>{body}</FadeInAfterLoad>
     </>
   );
 }

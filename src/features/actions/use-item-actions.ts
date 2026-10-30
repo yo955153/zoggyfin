@@ -128,9 +128,10 @@ export function useItemActions(item: BaseItemDto | undefined) {
   );
   const titleOf = (action: ItemAction) => (item ? actionTitle(action, { item, app, platform: Platform.OS, facts }) : action.title);
 
-  const run = (action: ItemAction) => {
-    if (!item) return;
-    Promise.resolve(action.run({ item, app, platform: Platform.OS, facts })).catch((e: unknown) =>
+  // Returns the action's promise, so a caller can wait for its end (an optimistic toggle).
+  const run = (action: ItemAction): Promise<void> | undefined => {
+    if (!item) return undefined;
+    return Promise.resolve(action.run({ item, app, platform: Platform.OS, facts })).catch((e: unknown) =>
       toast(describeError(e).title),
     );
   };

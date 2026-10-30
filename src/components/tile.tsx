@@ -140,7 +140,7 @@ export const Tile = memo(function Tile({
             ) : null}
             {download.state !== 'none' ? (
               // One badge per tile: the download state comes first.
-              <DownloadBadge status={download} />
+              <DownloadBadge status={download} id={item.Id} />
             ) : played ? (
               <View style={s.badge}>
                 <Icon name="checkmark" size={iconSize.xs} color={mediaColors.white} weight="bold" />

@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 
 import { useLibrary, useViews } from '@/api/queries';
 import { ItemGrid } from '@/components/item-grid';
-import { EmptyState, ErrorState, GridSkeleton } from '@/components/states';
+import { EmptyState, ErrorState, FadeInAfterLoad, GridSkeleton } from '@/components/states';
 import { shapeForList } from '@/components/tile';
 import { FilterBar } from '@/features/library/filter-bar';
 import { hasActiveFilters, useFiltersFor } from '@/features/library/filter-store';
@@ -23,29 +23,31 @@ export default function LibraryGridScreen() {
   return (
     <>
       <Stack.Screen options={{ title: view?.Name ?? name ?? 'Library', headerLargeTitleEnabled: true }} />
-      {lib.isPending ? (
-        <GridSkeleton shape={kind === 'music' ? 'square' : 'poster'} />
-      ) : lib.error && !lib.data ? (
-        <ErrorState error={lib.error} onRetry={lib.refetch} />
-      ) : (
-        <ItemGrid
-          items={items}
-          shape={kind === 'music' ? 'square' : shapeForList(items.slice(0, 30), 'poster')}
-          onEndReached={() => {
-            if (lib.hasNextPage && !lib.isFetchingNextPage) lib.fetchNextPage();
-          }}
-          isFetchingMore={lib.isFetchingNextPage}
-          onRefresh={lib.refetch}
-          ListHeaderComponent={<FilterBar libraryId={id} itemTypes={itemTypes} />}
-          ListEmptyComponent={
-            <EmptyState
-              icon="line.3.horizontal.decrease"
-              title={hasActiveFilters(filters) ? 'Nothing matches these filters' : 'This library is empty'}
-              message={hasActiveFilters(filters) ? 'Clear a filter to see more.' : undefined}
-            />
-          }
-        />
-      )}
+      <FadeInAfterLoad loading={lib.isPending}>
+        {lib.isPending ? (
+          <GridSkeleton shape={kind === 'music' ? 'square' : 'poster'} />
+        ) : lib.error && !lib.data ? (
+          <ErrorState error={lib.error} onRetry={lib.refetch} />
+        ) : (
+          <ItemGrid
+            items={items}
+            shape={kind === 'music' ? 'square' : shapeForList(items.slice(0, 30), 'poster')}
+            onEndReached={() => {
+              if (lib.hasNextPage && !lib.isFetchingNextPage) lib.fetchNextPage();
+            }}
+            isFetchingMore={lib.isFetchingNextPage}
+            onRefresh={lib.refetch}
+            ListHeaderComponent={<FilterBar libraryId={id} itemTypes={itemTypes} />}
+            ListEmptyComponent={
+              <EmptyState
+                icon="line.3.horizontal.decrease"
+                title={hasActiveFilters(filters) ? 'Nothing matches these filters' : 'This library is empty'}
+                message={hasActiveFilters(filters) ? 'Clear a filter to see more.' : undefined}
+              />
+            }
+          />
+        )}
+      </FadeInAfterLoad>
     </>
   );
 }

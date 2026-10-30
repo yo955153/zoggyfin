@@ -1,8 +1,9 @@
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
 import { type ReactElement, type ReactNode, useCallback, useMemo, useState } from 'react';
-import { PixelRatio, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { PixelRatio, Platform, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedRef,
@@ -17,8 +18,9 @@ import { ItemActionSheet } from '@/components/action-sheet';
 import { Button } from '@/components/button';
 import { Icon, type IconName } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
+import { useDownloadArrival } from '@/components/download-indicator';
 import { ProgressRing } from '@/components/progress-ring';
-import { useDownloadStatus } from '@/downloads';
+import { type DownloadStatus, useDownloadStatus } from '@/downloads';
 import { Touchable } from '@/components/touchable';
 import { useItemActions } from '@/features/actions/use-item-actions';
 import { TogetherSheetHost, usePlayForEveryone, useTogetherEntry } from '@/features/together/together-sheet';
@@ -26,7 +28,10 @@ import { buildImageUrl, imageSource } from '@/images/image-url';
 import type { FocusTarget } from '@/features/tv/focus';
 import { type TvRowPage, TvRowScroll } from '@/features/tv/shelf';
 import { formatClock, playedFraction } from '@/lib/format';
+import { turnedOn } from '@/lib/pop-in';
+import { type PopInOptions, usePopIn } from '@/lib/use-pop-in';
 import { isTV } from '@/platform/tv';
+import type { ItemAction } from '@/registry/item-actions';
 import { usePlayer } from '@/player';
 import { audioResumeTicks } from '@/player/audio/resume';
 import { createStyles,
@@ -149,10 +154,27 @@ export function DetailScaffold<Row>({
   const heroH = heroHeight(layout, screenW, l.height, twoColumn);
   const pageWidth = Math.min(screenW, 1280);
 
-  const favorite = !!item.UserData?.IsFavorite;
-  const played = !!item.UserData?.Played;
-  const favAction = actions.find((a) => a.id === (favorite ? 'builtin.unfavorite' : 'builtin.favorite'));
-  const playedAction = actions.find((a) => a.id === (played ? 'builtin.unplayed' : 'builtin.played'));
+  // Favourite and Played show the new state at once. When the request ends, the
+  // server's state takes over again: it confirms the change, or reverts it on a failure.
+  const [pending, setPending] = useState<{ favorite?: boolean; played?: boolean }>({});
+  const serverFavorite = !!item.UserData?.IsFavorite;
+  const serverPlayed = !!item.UserData?.Played;
+  const favorite = pending.favorite ?? serverFavorite;
+  const played = pending.played ?? serverPlayed;
+  const favAction = actions.find((a) => a.id === (serverFavorite ? 'builtin.unfavorite' : 'builtin.favorite'));
+  const playedAction = actions.find((a) => a.id === (serverPlayed ? 'builtin.unplayed' : 'builtin.played'));
+  const toggle = (key: 'favorite' | 'played', next: boolean, action: ItemAction) => {
+    // One request at a time: a second press would send the same action again.
+    if (pending[key] !== undefined) return;
+    setPending((p) => ({ ...p, [key]: next }));
+    void Promise.resolve(run(action)).finally(() =>
+      setPending((p) => {
+        const rest = { ...p };
+        delete rest[key];
+        return rest;
+      }),
+    );
+  };
   const audioResume = audioResumeTicks(item);
   const position = audioResume ?? item.UserData?.PlaybackPositionTicks ?? 0;
   const resumable = position > 0 && (VIDEO_TYPES.has(item.Type ?? '') || audioResume !== null);
@@ -171,23 +193,36 @@ export function DetailScaffold<Row>({
     return { transform: [{ translateY: interpolate(y, [0, heroH], [0, heroH / 2], 'clamp') }] };
   });
 
-  const secondary: { icon: IconName; label: string; active?: boolean; onPress: () => void; ring?: number; tint?: string; a11y?: string; spare?: boolean }[] = [];
+  // `key`: a stable React key when the label changes (the download shows its percent), so the button stays mounted.
+  const secondary: {
+    key?: string;
+    icon: IconName;
+    label: string;
+    active?: boolean;
+    onPress: () => void;
+    ring?: number;
+    download?: DownloadStatus['state'];
+    tint?: string;
+    a11y?: string;
+    spare?: boolean;
+  }[] = [];
   if (playable && resumable) {
     secondary.push({ icon: 'arrow.counterclockwise', label: 'Start over', onPress: () => player.play({ item, startPositionTicks: 0 }) });
   }
   const dlAction = actions.find((a) => a.id === 'builtin.download' || a.id === 'builtin.downloading' || a.id === 'builtin.removeDownload');
   if (dlAction) {
     if (download.state === 'completed') {
-      secondary.push({ icon: 'arrow.down.circle.fill', label: 'Downloaded', tint: c.success, a11y: 'Downloaded. Remove the download', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', download: download.state, icon: 'arrow.down.circle.fill', label: 'Downloaded', tint: c.success, a11y: 'Downloaded. Remove the download', onPress: () => run(dlAction) });
     } else if (download.state === 'none') {
-      secondary.push({ icon: 'arrow.down.circle', label: 'Download', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', download: download.state, icon: 'arrow.down.circle', label: 'Download', onPress: () => run(dlAction) });
     } else if (download.state === 'failed' && download.missing) {
-      secondary.push({ icon: 'arrow.down.circle', label: 'Download again', tint: c.danger, a11y: 'The downloaded file is missing. Download it again', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', download: download.state, icon: 'arrow.down.circle', label: 'Download again', tint: c.danger, a11y: 'The downloaded file is missing. Download it again', onPress: () => run(dlAction) });
     } else if (download.state === 'failed') {
-      secondary.push({ icon: 'exclamationmark.triangle', label: 'Failed', tint: c.danger, a11y: 'Download failed. Open Downloads', onPress: () => run(dlAction) });
+      secondary.push({ key: 'download', download: download.state, icon: 'exclamationmark.triangle', label: 'Failed', tint: c.danger, a11y: 'Download failed. Open Downloads', onPress: () => run(dlAction) });
     } else {
       const pct = Math.round(download.progress * 100);
       secondary.push({
+        key: 'download', download: download.state,
         icon: 'arrow.down.circle',
         label: download.state === 'paused' ? 'Paused' : `${pct}%`,
         ring: download.progress,
@@ -200,8 +235,8 @@ export function DetailScaffold<Row>({
   if (together) secondary.push({ icon: 'person.2', label: 'Together', a11y: together.label, onPress: together.open });
   const playlistAction = actions.find((a) => a.id === 'builtin.addToPlaylist');
   if (playlistAction && item.Type !== 'Playlist') secondary.push({ icon: 'text.badge.plus', label: 'Playlist', a11y: 'Add to playlist', spare: true, onPress: () => run(playlistAction) });
-  if (playedAction) secondary.push({ icon: 'checkmark', label: 'Played', active: played, spare: true, onPress: () => run(playedAction) });
-  if (favAction) secondary.push({ icon: favorite ? 'heart.fill' : 'heart', label: 'Favourite', active: favorite, spare: true, onPress: () => run(favAction) });
+  if (playedAction) secondary.push({ icon: 'checkmark', label: 'Played', active: played, spare: true, onPress: () => toggle('played', !played, playedAction) });
+  if (favAction) secondary.push({ icon: favorite ? 'heart.fill' : 'heart', label: 'Favourite', active: favorite, spare: true, onPress: () => toggle('favorite', !favorite, favAction) });
   for (const a of extraActions ?? []) secondary.push(a);
   secondary.push({ icon: 'ellipsis', label: 'More', onPress: () => setSheet(true) });
 
@@ -261,8 +296,8 @@ export function DetailScaffold<Row>({
   const fitted = fitRoundActions(secondary, rowWidth, scaled(58), [spacing.xl, spacing.sm]);
   const actionsRow = (
     <View style={[s.actions, { gap: fitted.gap }, centered ? s.actionsCenter : null]} onLayout={(e) => setRowWidth(Math.floor(e.nativeEvent.layout.width))}>
-      {fitted.items.map(({ spare: _spare, ...a }) => (
-        <RoundAction key={a.label} {...a} />
+      {fitted.items.map(({ spare: _spare, key, ...a }) => (
+        <RoundAction key={key ?? a.label} {...a} />
       ))}
     </View>
   );
@@ -448,12 +483,16 @@ function Title({ item, centered, big }: { item: BaseItemDto; centered: boolean; 
   );
 }
 
+/** A toggle that turns on: the icon grows from 0.8 with no overshoot. Feedback, so it is quick and plain. */
+const TOGGLE_POP: PopInOptions = { from: 0.8, spring: { duration: 300, dampingRatio: 1 } };
+
 function RoundAction({
   icon,
   label,
   active,
   onPress,
   ring,
+  download,
   tint,
   a11y,
 }: {
@@ -463,6 +502,8 @@ function RoundAction({
   onPress: () => void;
   /** A progress ring around the button (a running download), 0..1. */
   ring?: number;
+  /** The download button's state: its icon arrives when the download completes on this page. */
+  download?: DownloadStatus['state'];
   tint?: string;
   a11y?: string;
 }) {
@@ -473,11 +514,20 @@ function RoundAction({
   // TV adds the focus scale and a white ring.
   const ringW = isTV ? tv.focusRingWidth : 2;
   const ringGap = isTV ? tv.focusRingGap : 2;
+  // The Touchable owns the circle's press scale; the pop moves only the icon.
+  const pop = usePopIn(active, turnedOn, TOGGLE_POP);
+  // The page shows one item, so the button needs no scope for the arrival.
+  const arrival = useDownloadArrival(undefined, download ?? 'none');
   return (
     <Touchable
       kind="plain"
       ring={false}
-      onPress={onPress}
+      onPress={() => {
+        // The toggle shows at once (see `toggle`), so the haptic lands with the pop.
+        // haptics.light (theme): a small confirmation of the user's own action.
+        if (active === false && Platform.OS !== 'web' && !isTV) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress();
+      }}
       accessibilityRole="button"
       accessibilityLabel={a11y ?? label}
       accessibilityState={active === undefined ? undefined : { selected: active }}
@@ -490,7 +540,12 @@ function RoundAction({
               { backgroundColor: pressed || hovered ? c.surface3 : c.surface2 },
               focused && isTV && s.roundFocusTV,
             ]}>
-            <Icon name={icon} size={scaled(iconSize.sm)} color={tint ?? (active ? c.accent : c.text)} weight="semibold" />
+            {/* Two views: each animation owns its own scale. */}
+            <Animated.View style={arrival}>
+              <Animated.View style={pop}>
+                <Icon name={icon} size={scaled(iconSize.sm)} color={tint ?? (active ? c.accent : c.text)} weight="semibold" />
+              </Animated.View>
+            </Animated.View>
             {ring !== undefined ? (
               <View style={StyleSheet.absoluteFill}>
                 <ProgressRing size={size} width={3} progress={ring} color={c.accent} track="transparent" />
