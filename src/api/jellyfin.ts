@@ -337,6 +337,34 @@ export async function getShortMoviePool(api: Api, userId: string, limit: number)
   return res.data.Items ?? [];
 }
 
+/** Movie and show genres with their counts (`MovieCount`, `SeriesCount`), for the genre of the day. */
+export async function getVideoGenres(api: Api, userId: string): Promise<BaseItemDto[]> {
+  const res = await getGenreApi(api).getGenres({
+    userId,
+    includeItemTypes: ['Movie', 'Series'],
+    fields: ['ItemCounts'],
+    enableImages: false,
+    enableTotalRecordCount: false,
+  });
+  return res.data.Items ?? [];
+}
+
+/** The best-rated movies and shows of one genre. */
+export async function getGenreVideos(api: Api, userId: string, genreId: string, limit: number): Promise<BaseItemDto[]> {
+  const res = await getLibraryApi(api).getItems({
+    userId,
+    genreIds: [genreId],
+    includeItemTypes: ['Movie', 'Series'],
+    recursive: true,
+    sortBy: ['CommunityRating', 'SortName'],
+    sortOrder: ['Descending', 'Ascending'],
+    limit,
+    enableTotalRecordCount: false,
+    ...tile,
+  });
+  return res.data.Items ?? [];
+}
+
 // ---- Music ------------------------------------------------------------------------
 
 export type MusicTab = 'albums' | 'artists' | 'playlists' | 'songs' | 'genres' | 'audiobooks' | 'authors';

@@ -4,7 +4,16 @@
  */
 import { router } from 'expo-router';
 
-import { useLatest, useMovieRecommendations, useNextUp, useResume, useShortMoviePool, useViews } from '@/api/queries';
+import {
+  useGenreOfDayItems,
+  useLatest,
+  useMovieRecommendations,
+  useNextUp,
+  useResume,
+  useShortMoviePool,
+  useVideoGenres,
+  useViews,
+} from '@/api/queries';
 import { useApi } from '@/api/use-api';
 import { downloadsSupported, useDownloadLists } from '@/downloads';
 import { useServerNames } from '@/features/servers/use-server-names';
@@ -14,6 +23,7 @@ import { ItemRow } from '@/components/item-row';
 import { EmptyState } from '@/components/states';
 import { shapeForList } from '@/components/tile';
 import { daySeed } from '@/features/home/daily';
+import { GENRE_POOL_SIZE, pickDailyGenre, spotlightItems, spotlightTitle } from '@/features/home/genre-spotlight';
 import { recommendationRows } from '@/features/home/recommendations';
 import { SHORT_POOL_SIZE, shortOnTime } from '@/features/home/short-on-time';
 import { useDay } from '@/features/home/use-day';
@@ -92,6 +102,19 @@ function ShortOnTime() {
   const items = shortOnTime(q.data, daySeed(day, userId));
   if (offline || !items.length) return null;
   return <ItemRow title="Short on time" shape="poster" items={items} tileSubtitle={runtimeSubtitle} />;
+}
+
+/** The genre of the day: one movie or show genre per user and day, unwatched items first. */
+function GenreOfTheDay() {
+  const offline = useOffline();
+  const { userId } = useApi();
+  const day = useDay();
+  const genres = useVideoGenres(!offline);
+  const genre = pickDailyGenre(genres.data, daySeed(day, userId));
+  const q = useGenreOfDayItems(day, genre?.Id ?? undefined, GENRE_POOL_SIZE, !offline);
+  const items = spotlightItems(q.data);
+  if (offline || !genre || !items.length) return null;
+  return <ItemRow title={spotlightTitle(genre)} shape="poster" items={items} />;
 }
 
 function ContinueListening() {
@@ -186,5 +209,6 @@ export function registerBuiltinHomeSections(): void {
   homeSections.register({ id: 'builtin.continueListening', order: 30, component: ContinueListening });
   homeSections.register({ id: 'builtin.shortOnTime', order: 35, component: ShortOnTime });
   homeSections.register({ id: 'builtin.recentlyAdded', order: 40, component: RecentlyAdded });
+  homeSections.register({ id: 'builtin.genreOfTheDay', order: 42, component: GenreOfTheDay });
   homeSections.register({ id: 'builtin.downloaded', order: 50, component: DownloadedLast });
 }

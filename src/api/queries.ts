@@ -171,6 +171,28 @@ export function useShortMoviePool(limit: number, enabled = true) {
   });
 }
 
+/** Movie and show genres with counts. They change rarely. */
+export function useVideoGenres(enabled = true) {
+  const { api, userId, scope } = useApi();
+  return useQuery({
+    queryKey: queryKeys.videoGenres(scope),
+    queryFn: () => jf.getVideoGenres(api, userId),
+    staleTime: 24 * HOUR,
+    enabled,
+  });
+}
+
+/** The items of the genre of the day (`day` is "YYYY-MM-DD"). */
+export function useGenreOfDayItems(day: string, genreId: string | undefined, limit: number, enabled = true) {
+  const { api, userId, scope } = useApi();
+  return useQuery({
+    queryKey: queryKeys.genreOfDay(scope, day, genreId ?? ''),
+    queryFn: () => jf.getGenreVideos(api, userId, genreId ?? '', limit),
+    staleTime: 6 * HOUR,
+    enabled: enabled && !!genreId,
+  });
+}
+
 export function useMusicTab(libraryId: string | undefined, tab: jf.MusicTab, options: jf.MusicOptions = jf.DEFAULT_MUSIC_OPTIONS, enabled = true) {
   const { api, userId, scope } = useApi();
   return useInfiniteQuery({
