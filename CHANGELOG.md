@@ -47,6 +47,9 @@ first commit to today. All of it was built in the first weeks of the project.
 - **Website.** The landing page, the download page, the privacy policy, the support page and the invite
   page at zoggyfin.zog-tech.com, deployed to Cloudflare Pages.
 - **Releases.** EAS build profiles, EAS Update for over-the-air updates and TestFlight builds.
+- **Stream info.** The player shows the resolution and bitrate that play under the title. The Playback
+  sheet puts them next to the original file, so a viewer can tell whether a higher quality would help.
+- **Screen size.** A player menu with Fit, Fill (crop) and Stretch.
 
 ### Changed
 
@@ -59,6 +62,12 @@ first commit to today. All of it was built in the first weeks of the project.
 - TV: Down on the last Home row no longer scrolls the rows out of view.
 - TV: Settings, and other pages with no preferred focus, take the focus when they open. Before, the
   focus stayed on the page they covered and the remote could not reach them.
+- Android: a transcode that started mid-file (resume, a quality change) could stop with a playback
+  error ("Top bit not zero"). ExoPlayer now gets MPEG-TS HLS segments.
+- TV: Home in the side menu leaves Settings. A tab pressed again goes back to its first page.
+- TV: Right in the open side menu gives the focus back to the content.
+- TV: The Home billboard no longer cuts off the top and bottom of the backdrop.
+- TV: No Picture in Picture button. Google TV refused it, so the button did nothing.
 
 ## Mac app releases
 
