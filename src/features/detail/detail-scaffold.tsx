@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
-import { type ReactElement, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import { type ReactElement, type ReactNode, useCallback, useMemo, useState } from 'react';
 import { PixelRatio, Platform, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   interpolate,
@@ -31,6 +31,7 @@ import { formatClock, playedFraction } from '@/lib/format';
 import { turnedOn } from '@/lib/pop-in';
 import { type PopInOptions, usePopIn } from '@/lib/use-pop-in';
 import { isTV } from '@/platform/tv';
+import type { ItemAction } from '@/registry/item-actions';
 import { usePlayer } from '@/player';
 import { audioResumeTicks } from '@/player/audio/resume';
 import { createStyles,
@@ -153,10 +154,27 @@ export function DetailScaffold<Row>({
   const heroH = heroHeight(layout, screenW, l.height, twoColumn);
   const pageWidth = Math.min(screenW, 1280);
 
-  const favorite = !!item.UserData?.IsFavorite;
-  const played = !!item.UserData?.Played;
-  const favAction = actions.find((a) => a.id === (favorite ? 'builtin.unfavorite' : 'builtin.favorite'));
-  const playedAction = actions.find((a) => a.id === (played ? 'builtin.unplayed' : 'builtin.played'));
+  // Favourite and Played show the new state at once. When the request ends, the
+  // server's state takes over again: it confirms the change, or reverts it on a failure.
+  const [pending, setPending] = useState<{ favorite?: boolean; played?: boolean }>({});
+  const serverFavorite = !!item.UserData?.IsFavorite;
+  const serverPlayed = !!item.UserData?.Played;
+  const favorite = pending.favorite ?? serverFavorite;
+  const played = pending.played ?? serverPlayed;
+  const favAction = actions.find((a) => a.id === (serverFavorite ? 'builtin.unfavorite' : 'builtin.favorite'));
+  const playedAction = actions.find((a) => a.id === (serverPlayed ? 'builtin.unplayed' : 'builtin.played'));
+  const toggle = (key: 'favorite' | 'played', next: boolean, action: ItemAction) => {
+    // One request at a time: a second press would send the same action again.
+    if (pending[key] !== undefined) return;
+    setPending((p) => ({ ...p, [key]: next }));
+    void Promise.resolve(run(action)).finally(() =>
+      setPending((p) => {
+        const rest = { ...p };
+        delete rest[key];
+        return rest;
+      }),
+    );
+  };
   const audioResume = audioResumeTicks(item);
   const position = audioResume ?? item.UserData?.PlaybackPositionTicks ?? 0;
   const resumable = position > 0 && (VIDEO_TYPES.has(item.Type ?? '') || audioResume !== null);
@@ -217,8 +235,8 @@ export function DetailScaffold<Row>({
   if (together) secondary.push({ icon: 'person.2', label: 'Together', a11y: together.label, onPress: together.open });
   const playlistAction = actions.find((a) => a.id === 'builtin.addToPlaylist');
   if (playlistAction && item.Type !== 'Playlist') secondary.push({ icon: 'text.badge.plus', label: 'Playlist', a11y: 'Add to playlist', spare: true, onPress: () => run(playlistAction) });
-  if (playedAction) secondary.push({ icon: 'checkmark', label: 'Played', active: played, spare: true, onPress: () => run(playedAction) });
-  if (favAction) secondary.push({ icon: favorite ? 'heart.fill' : 'heart', label: 'Favourite', active: favorite, spare: true, onPress: () => run(favAction) });
+  if (playedAction) secondary.push({ icon: 'checkmark', label: 'Played', active: played, spare: true, onPress: () => toggle('played', !played, playedAction) });
+  if (favAction) secondary.push({ icon: favorite ? 'heart.fill' : 'heart', label: 'Favourite', active: favorite, spare: true, onPress: () => toggle('favorite', !favorite, favAction) });
   for (const a of extraActions ?? []) secondary.push(a);
   secondary.push({ icon: 'ellipsis', label: 'More', onPress: () => setSheet(true) });
 
@@ -467,8 +485,6 @@ function Title({ item, centered, big }: { item: BaseItemDto; centered: boolean; 
 
 /** A toggle that turns on: the icon grows from 0.8 with no overshoot. Feedback, so it is quick and plain. */
 const TOGGLE_POP: PopInOptions = { from: 0.8, spring: { duration: 300, dampingRatio: 1 } };
-/** The haptic waits for the icon to turn on; a press older than this is no longer the cause. */
-const PRESS_WINDOW_MS = 8000;
 
 function RoundAction({
   icon,
@@ -498,17 +514,8 @@ function RoundAction({
   // TV adds the focus scale and a white ring.
   const ringW = isTV ? tv.focusRingWidth : 2;
   const ringGap = isTV ? tv.focusRingGap : 2;
-  // The toggle turns on only after the server answers, so the haptic fires with the pop, not on the press.
-  // A failed request then gives no haptic, only its toast.
-  const pressedAt = useRef(0);
-  const onTurnedOn = () => {
-    const recent = Date.now() - pressedAt.current < PRESS_WINDOW_MS;
-    pressedAt.current = 0;
-    // haptics.light (theme): a small confirmation of the user's own action.
-    if (recent && Platform.OS !== 'web' && !isTV) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
   // The Touchable owns the circle's press scale; the pop moves only the icon.
-  const pop = usePopIn(active, turnedOn, TOGGLE_POP, undefined, onTurnedOn);
+  const pop = usePopIn(active, turnedOn, TOGGLE_POP);
   // The page shows one item, so the button needs no scope for the arrival.
   const arrival = useDownloadArrival(undefined, download ?? 'none');
   return (
@@ -516,7 +523,9 @@ function RoundAction({
       kind="plain"
       ring={false}
       onPress={() => {
-        if (active === false) pressedAt.current = Date.now();
+        // The toggle shows at once (see `toggle`), so the haptic lands with the pop.
+        // haptics.light (theme): a small confirmation of the user's own action.
+        if (active === false && Platform.OS !== 'web' && !isTV) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onPress();
       }}
       accessibilityRole="button"

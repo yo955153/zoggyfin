@@ -50,6 +50,9 @@ first commit to today. All of it was built in the first weeks of the project.
 - **Stream info.** The player shows the resolution and bitrate that play under the title. The Playback
   sheet puts them next to the original file, so a viewer can tell whether a higher quality would help.
 - **Screen size.** A player menu with Fit, Fill (crop) and Stretch.
+- **Motion.** Favourite and Played turn on at once on the item page, with a small pop and a light
+  haptic. Download rings move smoothly between steps. A finished download's icon arrives with a small
+  bounce. Item, library and genre pages fade their content in after a loading skeleton.
 
 ### Changed
 
