@@ -143,6 +143,23 @@ export function useSimilar(itemId: string | undefined, enabled = true) {
   });
 }
 
+const HOUR = 60 * 60 * 1000;
+
+/**
+ * Movie recommendations. The server can pick other categories on each call,
+ * so a long stale time keeps the rows from changing under the user; pull to
+ * refresh asks again.
+ */
+export function useMovieRecommendations(enabled = true) {
+  const { api, userId, scope } = useApi();
+  return useQuery({
+    queryKey: queryKeys.recommendations(scope),
+    queryFn: () => jf.getMovieRecommendations(api, userId),
+    staleTime: 12 * HOUR,
+    enabled,
+  });
+}
+
 export function useMusicTab(libraryId: string | undefined, tab: jf.MusicTab, options: jf.MusicOptions = jf.DEFAULT_MUSIC_OPTIONS, enabled = true) {
   const { api, userId, scope } = useApi();
   return useInfiniteQuery({

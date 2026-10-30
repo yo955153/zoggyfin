@@ -4,7 +4,7 @@
  */
 import { router } from 'expo-router';
 
-import { useLatest, useNextUp, useResume, useViews } from '@/api/queries';
+import { useLatest, useMovieRecommendations, useNextUp, useResume, useViews } from '@/api/queries';
 import { downloadsSupported, useDownloadLists } from '@/downloads';
 import { useServerNames } from '@/features/servers/use-server-names';
 import { useOffline } from '@/lib/online';
@@ -12,6 +12,7 @@ import type { BaseItemDto } from '@/api/types';
 import { ItemRow } from '@/components/item-row';
 import { EmptyState } from '@/components/states';
 import { shapeForList } from '@/components/tile';
+import { recommendationRows } from '@/features/home/recommendations';
 import { isSupportedView } from '@/features/library/library-kind';
 import { episodeLabel } from '@/lib/format';
 import { itemHref, useTabGroup } from '@/lib/navigation';
@@ -50,6 +51,29 @@ function NextUp() {
       onRetry={q.refetch}
       tileSubtitle={episodeSubtitle}
     />
+  );
+}
+
+/*
+ * Discovery rows ("Because you watched", "Short on time", the daily genre)
+ * are extras: they show no skeleton and no error, and they hide while the
+ * server is out of reach, since their items do not play offline. A load
+ * with no cache adds them when the data arrives; after that the persisted
+ * cache shows them at once on a cold start.
+ */
+
+/** "Because you watched …": up to three rows from the server's movie recommendations. */
+function BecauseYouWatched() {
+  const offline = useOffline();
+  const q = useMovieRecommendations(!offline);
+  const rows = recommendationRows(q.data);
+  if (offline || !rows.length) return null;
+  return (
+    <>
+      {rows.map((r) => (
+        <ItemRow key={r.key} title={r.title} shape="poster" items={r.items} />
+      ))}
+    </>
   );
 }
 
@@ -141,6 +165,7 @@ export function registerBuiltinHomeSections(): void {
   homeSections.register({ id: 'builtin.downloadedOffline', order: 5, component: DownloadedFirst });
   homeSections.register({ id: 'builtin.continueWatching', order: 10, component: ContinueWatching });
   homeSections.register({ id: 'builtin.nextUp', order: 20, component: NextUp });
+  homeSections.register({ id: 'builtin.becauseYouWatched', order: 25, component: BecauseYouWatched });
   homeSections.register({ id: 'builtin.continueListening', order: 30, component: ContinueListening });
   homeSections.register({ id: 'builtin.recentlyAdded', order: 40, component: RecentlyAdded });
   homeSections.register({ id: 'builtin.downloaded', order: 50, component: DownloadedLast });
