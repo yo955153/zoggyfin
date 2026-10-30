@@ -104,7 +104,7 @@ export default function HomeScreen() {
           <TvRowScroll.Provider value={tvPage}>
             <ScrollView
               ref={tvScroll}
-              style={s.flex}
+              style={s.tvRows}
               contentContainerStyle={{ paddingBottom: Math.max(bottomPad, endPad) }}
               onLayout={(e) => setListH(e.nativeEvent.layout.height)}>
               <View ref={tvContent} onLayout={(e) => measureEnd(e.nativeEvent.layout.height)}>
@@ -166,6 +166,8 @@ export default function HomeScreen() {
 
 const makeStyles = createStyles(({ c }: AppTheme) => ({
   flex: { flex: 1, backgroundColor: c.bg },
+  // No background: the billboard art fades out behind the first row.
+  tvRows: { flex: 1 },
   content: { paddingBottom: spacing.huge * 2 },
   headerRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.md },
 }));
