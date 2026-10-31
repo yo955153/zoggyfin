@@ -7,8 +7,15 @@
  * 4. All channels,
  * 5. Favourites, when it is empty (it explains how to add one),
  * 6. the sections of other kinds of content (for example films and series),
- * 7. a "Groups" heading and the provider's groups, in the provider's order,
- * 8. Providers (add, edit, reload or remove one), last.
+ * 7. with two providers or more, a "Providers" heading: "All providers" and
+ *    each provider (picking one switches the page to it),
+ * 8. a "Groups" heading and the provider's groups, in the provider's order,
+ * 9. Manage providers (add, edit, reload or remove one), last.
+ *
+ * "All providers" (`mergedBrowseEntries`): Search, Favourites, Recently
+ * watched of every provider, then the "Providers" heading and its entries,
+ * and Manage providers. Groups, All channels, films and series stay per
+ * provider: picking a provider shows them.
  * Pure, so it is unit-tested.
  */
 import { ALL_GROUP, FAVOURITES_GROUP, type GroupView, RECENTS_GROUP } from './lists';
@@ -27,9 +34,26 @@ export type BrowseEntry =
   | { kind: 'group'; key: string; group: GroupView }
   | { kind: 'section'; key: string; section: BrowseSection }
   | { kind: 'heading'; key: string; label: string }
+  | { kind: 'provider'; key: string; providerId: string; label: string }
   | { kind: 'providers'; key: typeof PROVIDERS_ENTRY };
 
-export function browseEntries(groups: readonly GroupView[], sections: readonly BrowseSection[] = []): BrowseEntry[] {
+/** A provider to switch to (`providerId` is ALL_PROVIDERS for "All providers"). */
+export interface ProviderEntry {
+  providerId: string;
+  label: string;
+}
+
+/** The browse key of a provider entry. */
+export const providerEntryKey = (providerId: string) => `provider:${providerId}`;
+
+function pushProviders(out: BrowseEntry[], providers: readonly ProviderEntry[]): void {
+  if (providers.length < 2) return;
+  out.push({ kind: 'heading', key: 'heading:providers', label: 'Providers' });
+  for (const p of providers) out.push({ kind: 'provider', key: providerEntryKey(p.providerId), providerId: p.providerId, label: p.label });
+}
+
+/** `providers`: "All providers" and each provider, shown when there are two real providers or more. */
+export function browseEntries(groups: readonly GroupView[], sections: readonly BrowseSection[] = [], providers: readonly ProviderEntry[] = []): BrowseEntry[] {
   const byKey = new Map(groups.map((g) => [g.key, g]));
   const fav = byKey.get(FAVOURITES_GROUP);
   const recent = byKey.get(RECENTS_GROUP);
@@ -44,12 +68,33 @@ export function browseEntries(groups: readonly GroupView[], sections: readonly B
   group(all);
   if (fav && fav.count === 0) group(fav);
   for (const s of sections) out.push({ kind: 'section', key: `section:${s.key}`, section: s });
+  pushProviders(out, providers);
   if (own.length) {
     out.push({ kind: 'heading', key: 'heading:groups', label: 'Groups' });
     for (const g of own) group(g);
   }
   out.push({ kind: 'providers', key: PROVIDERS_ENTRY });
   return out;
+}
+
+/** The browse column of "All providers": the merged lists, then the providers. */
+export function mergedBrowseEntries(favourites: number, recents: number, providers: readonly ProviderEntry[]): BrowseEntry[] {
+  const fav: GroupView = { key: FAVOURITES_GROUP, label: 'Favourites', count: favourites };
+  const recent: GroupView = { key: RECENTS_GROUP, label: 'Recently watched', count: recents };
+  const out: BrowseEntry[] = [
+    { kind: 'search', key: SEARCH_ENTRY },
+    { kind: 'group', key: fav.key, group: fav },
+    { kind: 'group', key: recent.key, group: recent },
+  ];
+  pushProviders(out, providers);
+  out.push({ kind: 'providers', key: PROVIDERS_ENTRY });
+  return out;
+}
+
+/** "All providers" opens on Favourites when there are some, else Recently watched when there are some. */
+export function mergedDefaultGroup(favourites: number, recents: number, picked: string | null): string {
+  if (picked === FAVOURITES_GROUP || picked === RECENTS_GROUP) return picked;
+  return favourites > 0 || recents === 0 ? FAVOURITES_GROUP : RECENTS_GROUP;
 }
 
 /** The group a provider opens on: Favourites when it has channels, else All channels. */

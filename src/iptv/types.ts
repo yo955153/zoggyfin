@@ -51,6 +51,11 @@ export interface ProvidersSnapshot {
   providers: Record<string, ProviderRecord>;
   /** Provider ids in the user's order. */
   order: string[];
+  /**
+   * What Live TV opens on: a provider id, `ALL_PROVIDERS` ("All providers"), or null for the
+   * last one used. Optional: older snapshots have none (the last one used).
+   */
+  startWith?: string | null;
 }
 
 /** One live channel. Empty fields are left out, so the cache file stays small. */
@@ -85,7 +90,17 @@ export interface ChannelsFile {
   channels: Channel[];
 }
 
-export const LISTS_SCHEMA_VERSION = 1;
+/**
+ * v1: favourites and recents as channel ids.
+ * v2: adds `snaps`, so "All providers" can show them with no channel list in memory.
+ */
+export const LISTS_SCHEMA_VERSION = 2;
+
+/**
+ * What a list row needs of a channel when its provider's list is not loaded:
+ * no stream URL and no user agent (those stay in the channel files).
+ */
+export type ChannelSnap = Pick<Channel, 'id' | 'name' | 'group' | 'logo' | 'number' | 'epgId' | 'streamId'>;
 
 /** Favourites and recently watched channels of one provider (MMKV). */
 export interface ChannelLists {
@@ -94,6 +109,8 @@ export interface ChannelLists {
   favourites: string[];
   /** Channel ids with the time they last played, newest first. */
   recents: { id: string; at: number }[];
+  /** The channels of the favourites and recents, by id. A v1 list has none until its channels load. */
+  snaps: Record<string, ChannelSnap>;
 }
 
 /** A programme in the guide. Times in ms since the epoch. */

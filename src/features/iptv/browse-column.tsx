@@ -1,7 +1,8 @@
 /**
  * The Live TV browse column (wide windows and TV): Search, the lists
- * (Favourites, Recently watched, All channels), other sections, the
- * provider's groups and Providers last. The order is `iptv/browse.ts`.
+ * (Favourites, Recently watched, All channels), other sections, with two
+ * providers or more "All providers" and each provider, the provider's
+ * groups and Manage providers last. The order is `iptv/browse.ts`.
  * The selected entry has the `accentSoft` fill; on TV the focus adds the
  * shared row fill (§7.19). On TV the selected entry takes the first focus.
  */
@@ -10,7 +11,7 @@ import { FlatList, Text, View } from 'react-native';
 
 import { Icon, type IconName } from '@/components/icon';
 import { Touchable } from '@/components/touchable';
-import { ALL_GROUP, type BrowseEntry, FAVOURITES_GROUP, RECENTS_GROUP } from '@/iptv';
+import { ALL_GROUP, ALL_PROVIDERS, type BrowseEntry, FAVOURITES_GROUP, RECENTS_GROUP } from '@/iptv';
 import { isTV } from '@/platform/tv';
 import { createStyles, type AppTheme, font, iconSize, radius, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
 
@@ -33,11 +34,12 @@ export function BrowseColumn({
   onGroup,
   onSection,
   onProviders,
+  onProvider,
 }: {
   entries: BrowseEntry[];
   sections: LiveTvSection[];
-  /** The selected entry key: a group key, or 'search'. */
-  selected: string;
+  /** The selected entries: a group key or 'search', and the key of the provider shown. */
+  selected: readonly string[];
   width: number;
   bottomPad: number;
   /** The Search entry (Back from a search gives the focus back to it). */
@@ -46,6 +48,8 @@ export function BrowseColumn({
   onGroup: (key: string) => void;
   onSection: (section: LiveTvSection) => void;
   onProviders: () => void;
+  /** Switches the page to a provider, or to ALL_PROVIDERS. */
+  onProvider: (providerId: string) => void;
 }) {
   const s = useStyles(makeStyles);
   const { c } = useTheme();
@@ -64,7 +68,7 @@ export function BrowseColumn({
             </Text>
           );
         }
-        const on = item.key === selected;
+        const on = selected.includes(item.key);
         let icon: IconName | null = null;
         let label = '';
         let count: number | null = null;
@@ -89,11 +93,17 @@ export function BrowseColumn({
             if (section) onSection(section);
           };
           a11y = label;
+        } else if (item.kind === 'provider') {
+          const all = item.providerId === ALL_PROVIDERS;
+          icon = all ? 'square.stack' : 'tv';
+          label = item.label;
+          press = () => onProvider(item.providerId);
+          a11y = all ? 'All providers: favourites, recently watched and search of every provider' : `Provider ${label}`;
         } else {
           icon = 'gearshape';
-          label = 'Providers';
+          label = 'Manage providers';
           press = onProviders;
-          a11y = 'Providers: add, edit, reload or remove';
+          a11y = 'Manage providers: add, edit, reorder, reload or remove';
         }
         const end = item.kind === 'section' || item.kind === 'providers';
         return (
@@ -103,7 +113,7 @@ export function BrowseColumn({
             radius={radius.md}
             onPress={press}
             // TV: focus comes into the page on the selected entry.
-            firstFocus={isTV && on}
+            firstFocus={isTV && item.key === selected[0]}
             accessibilityRole="button"
             accessibilityState={{ selected: on }}
             accessibilityLabel={a11y}

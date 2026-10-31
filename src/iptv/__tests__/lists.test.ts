@@ -130,7 +130,7 @@ describe('migrations', () => {
       expect(() => migrateChannelsFile(junk, 'p')).not.toThrow();
     }
     expect(migrateProviders(null)).toBe(EMPTY_PROVIDERS);
-    expect(migrateLists({ favourites: ['a', 'a', 3], recents: [{ id: 'b', at: 1 }, { id: 2 }] })).toEqual({ schemaVersion: 1, favourites: ['a'], recents: [{ id: 'b', at: 1 }] });
+    expect(migrateLists({ favourites: ['a', 'a', 3], recents: [{ id: 'b', at: 1 }, { id: 2 }] })).toEqual({ schemaVersion: 2, favourites: ['a'], recents: [{ id: 'b', at: 1 }], snaps: {} });
   });
 
   it('reads the channel file only for its own provider and version', () => {

@@ -14,7 +14,22 @@ import { createStyles, type AppTheme, font, iconSize, radius, scaled, sizes, spa
 
 import { ChannelLogo } from './channel-logo';
 
-export function ChannelDetails({ providerId, channel, now, favourite, width }: { providerId: string; channel: Channel | null; now: number; favourite: boolean; width: number }) {
+export function ChannelDetails({
+  providerId,
+  channel,
+  providerLabel,
+  now,
+  favourite,
+  width,
+}: {
+  providerId: string;
+  channel: Channel | null;
+  /** The provider's name, in "All providers". */
+  providerLabel?: string;
+  now: number;
+  favourite: boolean;
+  width: number;
+}) {
   const s = useStyles(makeStyles);
   const { c } = useTheme();
   const nn = useNowNext(providerId, channel, now);
@@ -42,7 +57,7 @@ export function ChannelDetails({ providerId, channel, now, favourite, width }: {
         <View style={s.groupLine}>
           {favourite ? <Icon name="heart.fill" size={scaled(iconSize.sm - 6)} color={c.accent} /> : null}
           <Text style={s.group} numberOfLines={1}>
-            {[favourite ? 'Favourite' : null, channel.group || null].filter(Boolean).join(' · ') || 'Live'}
+            {[favourite ? 'Favourite' : null, providerLabel ?? null, channel.group || null].filter(Boolean).join(' · ') || 'Live'}
           </Text>
         </View>
       </View>
