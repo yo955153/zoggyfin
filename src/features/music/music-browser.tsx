@@ -21,6 +21,7 @@ import { usePullRefresh } from '@/lib/use-pull-refresh';
 import { usePlayer } from '@/player';
 import { readJson, writeJson } from '@/storage/json';
 import { storage } from '@/storage/kv';
+import { isTV } from '@/platform/tv';
 import { spacing, useLayout, useTheme } from '@/theme';
 import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
@@ -133,7 +134,7 @@ function SortBar({ tab, options, onChange }: { tab: MusicTab; options: MusicOpti
   );
 }
 
-/** "Recently played" and "Most played" above the albums. Hidden while empty. */
+/** "Recently played" and "Most played" above the albums. Hidden while empty. TV: the first row shown takes the first focus. */
 function PlayedRows({ libraryId }: { libraryId: string }) {
   const recent = usePlayedSongs(libraryId, 'recent');
   const most = usePlayedSongs(libraryId, 'most');
@@ -144,8 +145,26 @@ function PlayedRows({ libraryId }: { libraryId: string }) {
   };
   return (
     <View>
-      <ItemRow title="Recently played" shape="square" items={recent.data} isLoading={recent.isPending} hideWhenEmpty onPress={play(recent.data)} tileSubtitle={(i) => i.Artists?.[0] ?? i.Album} />
-      <ItemRow title="Most played" shape="square" items={most.data} isLoading={most.isPending} hideWhenEmpty onPress={play(most.data)} tileSubtitle={(i) => i.Artists?.[0] ?? i.Album} />
+      <ItemRow
+        title="Recently played"
+        shape="square"
+        items={recent.data}
+        isLoading={recent.isPending}
+        hideWhenEmpty
+        onPress={play(recent.data)}
+        tileSubtitle={(i) => i.Artists?.[0] ?? i.Album}
+        preferredFocus={isTV && !!recent.data?.length}
+      />
+      <ItemRow
+        title="Most played"
+        shape="square"
+        items={most.data}
+        isLoading={most.isPending}
+        hideWhenEmpty
+        onPress={play(most.data)}
+        tileSubtitle={(i) => i.Artists?.[0] ?? i.Album}
+        preferredFocus={isTV && !recent.data?.length && !!most.data?.length}
+      />
     </View>
   );
 }
@@ -168,8 +187,9 @@ function MusicPage({ libraryId, tab }: { libraryId: string; tab: MusicTab }) {
   };
 
   const bar = <SortBar tab={tab} options={options} onChange={setOptions} />;
+  const played = tab === 'albums' && options.sortBy === 'SortName' && !options.favorites;
   const header =
-    tab === 'albums' && options.sortBy === 'SortName' && !options.favorites ? (
+    played ? (
       <View>
         <PlayedRows libraryId={libraryId} />
         {bar}
@@ -233,6 +253,8 @@ function MusicPage({ libraryId, tab }: { libraryId: string; tab: MusicTab }) {
       // The grid has its own side padding; the chips and rows bring theirs.
       ListHeaderComponent={<View style={{ marginHorizontal: -l.gutter, marginTop: -spacing.lg }}>{header}</View>}
       ListEmptyComponent={empty}
+      // TV: the played rows sit above the grid; the first tile is off screen.
+      focusFirstTile={!played}
       onPress={tab === 'genres' ? (g) => router.push(genreHref(group, g, libraryId)) : undefined}
     />
   );
