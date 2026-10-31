@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -8,14 +8,16 @@ import { Icon } from '@/components/icon';
 import { ChannelLogo } from '@/features/iptv/channel-logo';
 import { TogetherChip } from '@/features/together/together-pill';
 import { ItemImage } from '@/components/item-image';
+import { Touchable } from '@/components/touchable';
 import { episodeLabel } from '@/lib/format';
 import { activePlayback, openFullPlayer } from '@/player';
 import { artistLine } from '@/player/audio/item';
 import { useAudioStore } from '@/player/audio/store';
 import { useShowsPause } from '@/player/control-gate';
+import { isTV } from '@/platform/tv';
 import { usePlayerStore } from '@/player/store';
 
-import { createStyles, type AppTheme, font, useStyles, useTheme } from '@/theme';
+import { createStyles, type AppTheme, font, tv, useStyles, useTheme } from '@/theme';
 
 import { Glass } from './glass';
 import { iconSize, motion, radius, spacing, type } from './tokens';
@@ -94,13 +96,13 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
 
   const content = (
     // The buttons are siblings of the "open" area, not inside it: no nested buttons on web.
-    <View style={styles.row}>
+    <View style={[styles.row, isTV && styles.rowTV]}>
       {inline && isAudio ? (
-        <Pressable onPress={() => activePlayback.previous()} hitSlop={4} style={styles.buttonSmall} accessibilityRole="button" accessibilityLabel="Previous track">
+        <Touchable radius={16} onPress={() => activePlayback.previous()} hitSlop={4} style={styles.buttonSmall} accessibilityRole="button" accessibilityLabel="Previous track">
           <Icon name="backward.fill" size={iconSize.sm} color={c.text} />
-        </Pressable>
+        </Touchable>
       ) : null}
-      <Pressable onPress={openFullPlayer} accessibilityRole="button" accessibilityLabel={`Now playing: ${item.Name ?? ''}. Opens the player`} style={styles.open}>
+      <Touchable radius={radius.pill} onPress={openFullPlayer} containerStyle={[styles.openArea, isTV && styles.openAreaTV]} accessibilityRole="button" accessibilityLabel={`Now playing: ${item.Name ?? ''}. Opens the player`} style={styles.open}>
         {!inline ? art : null}
         <Animated.View style={[styles.text, shiftStyle]}>
           <Text style={styles.title} numberOfLines={1}>
@@ -112,20 +114,20 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
             </Text>
           ) : null}
         </Animated.View>
-      </Pressable>
+      </Touchable>
       <TogetherChip iconOnly={inline} />
-      <Pressable onPress={toggle} hitSlop={6} style={styles.button} accessibilityRole="button" accessibilityLabel={showsPause ? 'Pause' : 'Play'}>
+      <Touchable radius={22} onPress={toggle} hitSlop={6} style={styles.button} accessibilityRole="button" accessibilityLabel={showsPause ? 'Pause' : 'Play'}>
         <Icon name={showsPause ? 'pause.fill' : 'play.fill'} size={iconSize.md} color={c.text} weight="semibold" />
-      </Pressable>
+      </Touchable>
       {isAudio ? (
-        <Pressable onPress={() => activePlayback.next()} hitSlop={inline ? 4 : 6} style={inline ? styles.buttonSmall : styles.button} accessibilityRole="button" accessibilityLabel="Next track">
+        <Touchable radius={inline ? 16 : 22} onPress={() => activePlayback.next()} hitSlop={inline ? 4 : 6} style={inline ? styles.buttonSmall : styles.button} accessibilityRole="button" accessibilityLabel="Next track">
           <Icon name="forward.fill" size={inline ? iconSize.sm : iconSize.md - 2} color={c.text} />
-        </Pressable>
+        </Touchable>
       ) : null}
       {!inline ? (
-        <Pressable onPress={() => activePlayback.stop()} hitSlop={6} style={styles.button} accessibilityRole="button" accessibilityLabel="Stop playback">
+        <Touchable radius={22} onPress={() => activePlayback.stop()} hitSlop={6} style={styles.button} accessibilityRole="button" accessibilityLabel="Stop playback">
           <Icon name="xmark" size={iconSize.sm} color={c.text2} weight="semibold" />
-        </Pressable>
+        </Touchable>
       ) : null}
     </View>
   );
@@ -168,7 +170,11 @@ const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
   },
   fillWrap: { flex: 1, justifyContent: 'center', overflow: 'hidden', borderRadius: radius.pill },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.sm, paddingRight: spacing.xs, minHeight: 52 },
-  open: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, alignSelf: 'stretch' },
+  openArea: { flex: 1, minWidth: 0, alignSelf: 'stretch' },
+  // TV: room inside the capsule (it clips) for the focus ring.
+  rowTV: { paddingVertical: tv.focusRingWidth + tv.focusRingGap, paddingLeft: spacing.md },
+  openAreaTV: { alignSelf: 'center' },
+  open: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   text: { flex: 1, minWidth: 0 },
   title: { ...font(type.tileTitle), color: c.text },
   sub: { ...font(type.caption1), color: c.text2 },
