@@ -80,6 +80,11 @@ first commit to today. All of it was built in the first weeks of the project.
 
 ### Changed
 
+- **Compact tab pages.** The first page of each tab (Home, Library, Music, Live TV, Search, Downloads)
+  has no large title any more: the tab bar already shows where you are, and the content starts at the
+  top of the screen. A slim bar stays only where a page has buttons in it (the profile button on Home,
+  the library picker on Music, the search field on iPhone and Android). Library and genre pages show
+  their name in a normal-size title.
 - **Live TV.** A new layout, made for the TV first: a browse column (Search, Favourites, Recently
   watched, All channels, the groups, Providers), the channel list with numbers, logos and what is on
   now, and on TV a panel with now and next for the focused channel. Search is one step away (the

@@ -31,7 +31,6 @@ import { useOpenItem } from '@/lib/navigation';
 import { useRootScreenOptions } from '@/lib/stack-options';
 import { usePlayer } from '@/player';
 import { createStyles, type AppTheme, font, iconSize, motion, radius, scaled, scriptStyle, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
-import { useSidebarInset } from '@/theme/sidebar-inset';
 import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 /**
@@ -44,14 +43,13 @@ export default function DownloadsScreen() {
   const bottomPad = useTabBottomPadding();
   const { c } = useTheme();
   const l = useLayout();
-  const root = useRootScreenOptions();
-  // The iPad sidebar floats over the content: center the column in the space beside it.
-  const sidebar = useSidebarInset();
   const { inProgress, sections, appBytes } = useDownloadLists();
   const empty = inProgress.length === 0 && sections.length === 0;
   const allPaused = inProgress.length > 0 && inProgress.every((r) => r.state === 'paused' || r.state === 'failed');
   // Opened from the sign-in screen with no account (route /offline): a way back, no library links.
   const signedIn = useSessionStore((st) => !!st.session);
+  // A slim header only for the "Sign in" link. The options keep the iPad sidebar out of the content.
+  const root = useRootScreenOptions({ bar: !signedIn, background: c.bgGrouped });
 
   return (
     <>
@@ -59,9 +57,6 @@ export default function DownloadsScreen() {
         options={{
           ...root,
           title: 'Downloads',
-          headerStyle: { backgroundColor: c.bgGrouped },
-          headerLargeStyle: { backgroundColor: c.bgGrouped },
-          contentStyle: { backgroundColor: c.bgGrouped },
           ...(signedIn
             ? null
             : {
@@ -73,7 +68,7 @@ export default function DownloadsScreen() {
               }),
         }}
       />
-      <ScrollView contentInsetAdjustmentBehavior="automatic" style={s.page} contentContainerStyle={[s.content, { paddingHorizontal: l.gutter, paddingLeft: sidebar + l.gutter, paddingBottom: bottomPad }]}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" style={s.page} contentContainerStyle={[s.content, { paddingHorizontal: l.gutter, paddingBottom: bottomPad }]}>
         {!downloadsSupported ? (
           <EmptyState
             icon="arrow.down.circle"

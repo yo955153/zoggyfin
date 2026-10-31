@@ -22,7 +22,7 @@ export default function LibraryGridScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: view?.Name ?? name ?? 'Library', headerLargeTitleEnabled: true }} />
+      <Stack.Screen options={{ title: view?.Name ?? name ?? 'Library' }} />
       <FadeInAfterLoad loading={lib.isPending}>
         {lib.isPending ? (
           <GridSkeleton shape={kind === 'music' ? 'square' : 'poster'} />

@@ -197,7 +197,9 @@ export function LiveTvScreen() {
     list.current?.scrollToOffset({ offset: 0, animated: false });
   }, [groupKey, query, providerId, searching]);
 
-  const title = <Stack.Screen options={{ ...root, title: 'Live TV' }} />;
+  // The Live TV tab's root page has no header (`useRootScreenOptions`); opened from Home or
+  // Library it is a pushed page with a plain header and a back button.
+  const title = <Stack.Screen options={group === '(live)' ? { ...root, title: 'Live TV' } : { title: 'Live TV', headerLargeTitleEnabled: false }} />;
 
   if (!providers.length || !providerId) {
     return (

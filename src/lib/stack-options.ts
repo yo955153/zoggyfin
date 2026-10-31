@@ -1,9 +1,11 @@
 import type { NativeStackNavigationOptions } from 'expo-router/native-stack';
 import { useMemo } from 'react';
 import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isTV } from '@/platform/tv';
-import { type AppTheme, font, fontFamily, type, useLayout, useTheme } from '@/theme';
+import { type AppTheme, font, fontFamily, spacing, type, useLayout, useTheme } from '@/theme';
+import { useSidebarInset } from '@/theme/sidebar-inset';
 
 /** Native stack options for a tab stack, in the active scheme. */
 export function stackOptionsFor({ c }: AppTheme): NativeStackNavigationOptions {
@@ -39,30 +41,63 @@ export function useTabStackOptions(inset: number): NativeStackNavigationOptions 
   );
 }
 
-/** For a tab's first screen: a large title, like the iOS apps. */
-export function useRootScreenOptions(): NativeStackNavigationOptions {
+/** The slim web header of a root page (the default React Navigation header is 64 px). */
+export const WEB_ROOT_BAR_HEIGHT = 44;
+
+/**
+ * For a tab's first screen: a compact header, so the content starts at the
+ * top of the window. The tab bar (or the iPad sidebar) already says where
+ * the person is, so a root page shows no title.
+ *
+ * - `bar: false` (the default): no header at all. The screen pads its top
+ *   by the safe-area inset (the status bar), so the first row starts right
+ *   under it.
+ * - `bar: true`: a slim header with no title, for a page that has buttons
+ *   or a native search field in it (Home: the profile button). A page can
+ *   still set a short `headerTitle` when the title carries information
+ *   (the picked Music library).
+ *
+ * `title` stays the screen's name (the web page title, accessibility).
+ * Scroll views keep `contentInsetAdjustmentBehavior="automatic"` for the
+ * bottom (the iOS tab bar). TV shows no header (`stackOptionsFor`).
+ */
+export function useRootScreenOptions({ bar = false, background }: { bar?: boolean; background?: string } = {}): NativeStackNavigationOptions {
   const { c } = useTheme();
   const { gutter } = useLayout();
-  return useMemo(
-    () => ({
-      headerLargeTitleEnabled: true,
-      headerLargeTitleStyle: { color: c.text },
-      headerLargeStyle: { backgroundColor: c.bg },
-      // Web has no large titles: a large left-aligned title in the bar instead.
+  const top = useSafeAreaInsets().top;
+  const sidebar = useSidebarInset();
+  const bg = background ?? c.bg;
+  return useMemo((): NativeStackNavigationOptions => {
+    // iPad: the content starts after the sidebar, as in useTabStackOptions (a screen's contentStyle replaces the stack's).
+    const side = sidebar > 0 ? { paddingLeft: sidebar } : null;
+    if (!bar || isTV) {
+      return {
+        headerShown: false,
+        headerLargeTitleEnabled: false,
+        // The header held the status bar inset; the screen keeps it, so nothing sits under the clock.
+        contentStyle: [{ backgroundColor: bg, paddingTop: isTV ? 0 : top + spacing.xs }, side],
+      };
+    }
+    return {
+      headerShown: true,
+      headerLargeTitleEnabled: false,
+      headerTitle: '',
+      headerStyle: { backgroundColor: bg },
+      contentStyle: [{ backgroundColor: bg }, side],
       ...(Platform.OS === 'web'
         ? {
             headerTitleAlign: 'left' as const,
-            headerTitleStyle: { color: c.text, fontSize: type.largeTitle.fontSize, fontWeight: type.largeTitle.fontWeight, fontFamily: fontFamily.web },
+            headerTitleStyle: { color: c.text, fontSize: type.headline.fontSize, fontWeight: font(type.headline).fontWeight, fontFamily: fontFamily.web },
             // The web header (React Navigation elements) takes these; the native-stack types do not list them.
             ...({
+              headerStyle: { backgroundColor: bg, height: WEB_ROOT_BAR_HEIGHT },
               headerTitleContainerStyle: { marginLeft: gutter },
               headerRightContainerStyle: { paddingRight: gutter },
             } as NativeStackNavigationOptions),
           }
         : null),
-    }),
-    [c, gutter],
-  );
+    };
+  }, [c, gutter, bar, bg, top, sidebar]);
 }
 
 /** Detail pages draw their own hero under a transparent header. */

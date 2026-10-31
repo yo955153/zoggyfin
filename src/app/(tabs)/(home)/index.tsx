@@ -29,7 +29,7 @@ export default function HomeScreen() {
   const bottomPad = useTabBottomPadding();
   const { c } = useTheme();
   const l = useLayout();
-  const root = useRootScreenOptions();
+  const root = useRootScreenOptions({ bar: true });
   const { session, scope } = useApi();
   const qc = useQueryClient();
   const sections = useSyncExternalStore(homeSections.subscribe, homeSections.list, homeSections.list);

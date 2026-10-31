@@ -27,6 +27,8 @@ interface ItemGridProps {
   autoInset?: boolean;
   /** TV: the first tile takes the first focus. Off when the header holds rows of tiles above the grid. Default true. */
   focusFirstTile?: boolean;
+  /** The screen has no header bar (a tab's root page): the iOS 26 refresh spinner sits higher. */
+  headerless?: boolean;
 }
 
 /**
@@ -52,13 +54,14 @@ export function ItemGrid({
   onPress,
   autoInset = true,
   focusFirstTile = true,
+  headerless = false,
 }: ItemGridProps) {
   const l = useLayout();
   const tabBottomPad = useTabBottomPadding(spacing.huge * 2, { autoInset });
   const { c } = useTheme();
   const openItem = useOpenItem();
   const pull = usePullRefresh(onRefresh);
-  useRefreshSpinner(pull.refreshing);
+  useRefreshSpinner(pull.refreshing, headerless);
   const open = onPress ?? openItem;
   const prefetch = usePrefetchItemOnFocus();
   const [measured, setMeasured] = useState(0);

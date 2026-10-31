@@ -25,7 +25,7 @@ export default function GenreScreen() {
   );
   return (
     <>
-      <Stack.Screen options={{ title: name || 'Genre', headerLargeTitleEnabled: true }} />
+      <Stack.Screen options={{ title: name || 'Genre' }} />
       <FadeInAfterLoad loading={q.isPending}>
         {q.isPending ? (
           <GridSkeleton shape="square" />
