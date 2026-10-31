@@ -85,6 +85,12 @@ first commit to today. All of it was built in the first weeks of the project.
 - TV: Right in the open side menu gives the focus back to the content.
 - TV: The Home billboard no longer cuts off the top and bottom of the backdrop.
 - TV: No Picture in Picture button. Google TV refused it, so the button did nothing.
+- TV: The focus stays on the page you see. Each page in a tab stack keeps its own focus. Settings
+  and every other page take the focus when they open or come back. Back from a page no longer opens
+  the side menu, and content that loads late takes a lost focus. Before, the focus could stay on the
+  page under the open one, and the remote seemed to do nothing.
+- Android and TV: Back closes a confirm dialog (for example "Clear cache?"). Before, only its buttons closed it.
+- TV: Extension pages are not offered on TV. The remote cannot use them.
 
 ## Mac app releases
 
