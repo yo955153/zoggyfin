@@ -5,7 +5,7 @@
 import { useSessionStore } from '@/auth/session-store';
 import { readJson, writeJson } from '@/storage/json';
 
-import { EMPTY_TRACK_PREFS, migrateTrackPrefs, type TrackPrefs } from './track-prefs';
+import { EMPTY_TRACK_PREFS, migrateTrackPrefs, type TrackPrefs, withoutProvider } from './track-prefs';
 
 function key(): string | null {
   const s = useSessionStore.getState().session;
@@ -19,6 +19,13 @@ export function loadTrackPrefs(): TrackPrefs {
   if (!k) return EMPTY_TRACK_PREFS;
   if (cache?.key !== k) cache = { key: k, prefs: migrateTrackPrefs(readJson<unknown>(k, null)) };
   return cache.prefs;
+}
+
+/** A provider was removed from this account: its track choices go too. */
+export function forgetProviderTracks(providerId: string): void {
+  const prefs = loadTrackPrefs();
+  const next = withoutProvider(prefs, providerId);
+  if (next !== prefs) saveTrackPrefs(next);
 }
 
 export function saveTrackPrefs(prefs: TrackPrefs): void {

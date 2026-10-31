@@ -312,7 +312,9 @@ class VideoSession {
     }
     const live = now?.live;
     const ch = live?.channels[live.index];
-    return live && ch ? titleKey(live.source.providerId, { kind: 'live', id: ch.id }) : null;
+    if (!live || !ch) return null;
+    const t = live.source.titleOf?.(ch.id) ?? { providerId: live.source.providerId, channelId: ch.id };
+    return titleKey(t.providerId, { kind: 'live', id: t.channelId });
   }
 
   /** A new stream loads: its tracks are not known yet. */
@@ -601,7 +603,8 @@ class VideoSession {
     const ch = request.channels[index];
     if (!ch) return;
     const live: LiveNow = { channels: request.channels, index, source: request.source };
-    const item: BaseItemDto = { Id: `iptv:${request.source.providerId}:${ch.id}`, Name: ch.name, Type: 'TvChannel' };
+    const t = request.source.titleOf?.(ch.id) ?? { providerId: request.source.providerId, channelId: ch.id };
+    const item: BaseItemDto = { Id: `iptv:${t.providerId}:${t.channelId}`, Name: ch.name, Type: 'TvChannel' };
     setPlayerState({
       ...initialPlayerState,
       rate: 1,

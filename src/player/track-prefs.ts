@@ -81,6 +81,16 @@ export function migrateTrackPrefs(raw: unknown): TrackPrefs {
   };
 }
 
+/** A provider was removed: its titles' choices go. The same object when it had none. */
+export function withoutProvider(prefs: TrackPrefs, providerId: string): TrackPrefs {
+  const prefix = `${providerId}|`;
+  const keys = Object.keys(prefs.titles);
+  if (!keys.some((k) => k.startsWith(prefix))) return prefs;
+  const titles: Record<string, TitleChoice> = {};
+  for (const k of keys) if (!k.startsWith(prefix)) titles[k] = prefs.titles[k];
+  return { ...prefs, titles };
+}
+
 export function toPick(t: EmbeddedTrack): TrackPick {
   return { language: t.language, title: t.title, codec: t.codec, forced: t.isForced };
 }

@@ -1215,13 +1215,14 @@ function channelSections(live: LiveNow, play: (index: number) => void, search: (
   const rows = live.channels.slice(from, to).map((ch, i) => ({
     key: ch.id,
     label: ch.number != null ? `${ch.number}  ${ch.name}` : ch.name,
-    detail: ch.group || null,
+    // A list of several providers ("All providers") names each channel's provider.
+    detail: [ch.provider, ch.group].filter(Boolean).join(' · ') || null,
     selected: from + i === live.index,
     onPress: () => play(from + i),
   }));
   return [
     { title: 'Search', rows: [{ key: 'search', label: 'Search channels', detail: 'By name or number, in Live TV', selected: false, onPress: search }] },
-    { title: live.channels[live.index]?.group || 'Channels', rows },
+    { title: live.channels[live.index]?.provider ? 'Channels' : live.channels[live.index]?.group || 'Channels', rows },
   ];
 }
 

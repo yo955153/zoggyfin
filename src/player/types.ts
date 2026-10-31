@@ -31,6 +31,8 @@ export interface LiveChannelRef {
   logo: string | null;
   number: number | null;
   group: string;
+  /** The provider's name, when the list mixes providers ("All providers"). */
+  provider?: string;
 }
 
 /** A programme on a live channel. Times in ms since the epoch. */
@@ -71,6 +73,12 @@ export interface LiveSource {
   nowNext?(channelId: string): LiveNowNext;
   /** A channel started to play (Recently watched). */
   onStart?(channelId: string): void;
+  /**
+   * The provider and the provider's own channel id, when the source mixes
+   * providers and its channel ids are its own keys. The track choices and
+   * the item id use these. Left out: `providerId` and the channel id.
+   */
+  titleOf?(channelId: string): { providerId: string; channelId: string };
 }
 
 /** What a screen asks the player for to play a live stream: no Jellyfin item, no progress reports. */

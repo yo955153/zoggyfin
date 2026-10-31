@@ -1,5 +1,5 @@
 import type { EmbeddedTrack, EmbeddedTracks } from '../engine-types';
-import { chooseTracks, EMPTY_TRACK_PREFS, MAX_TITLES, matchPick, migrateTrackPrefs, rememberChoice, titleKey, toPick } from '../track-prefs';
+import { chooseTracks, EMPTY_TRACK_PREFS, MAX_TITLES, matchPick, migrateTrackPrefs, rememberChoice, titleKey, toPick, withoutProvider } from '../track-prefs';
 
 const t = (id: string, p: Partial<EmbeddedTrack> = {}): EmbeddedTrack => ({ id, title: null, language: null, codec: null, isDefault: false, isForced: false, ...p });
 
@@ -110,5 +110,13 @@ describe('migrateTrackPrefs', () => {
     expect(migrateTrackPrefs(JSON.parse(JSON.stringify(saved)))).toEqual(saved);
     const odd = migrateTrackPrefs({ version: 1, audioLanguage: 5, subtitleLanguage: 'off', titles: { a: 3, b: { audio: 'x', subtitle: { language: 'en' } } } });
     expect(odd).toEqual({ version: 1, audioLanguage: null, subtitleLanguage: 'off', titles: { b: { at: 0, subtitle: { language: 'en', title: null, codec: null, forced: false } } } });
+  });
+});
+
+describe('withoutProvider', () => {
+  it('drops the choices of one provider and keeps the rest', () => {
+    const prefs = { ...EMPTY_TRACK_PREFS, titles: { 'p1|film:1': { at: 1 }, 'p10|film:1': { at: 2 }, 'p2|live:3': { at: 3 } } };
+    expect(Object.keys(withoutProvider(prefs, 'p1').titles)).toEqual(['p10|film:1', 'p2|live:3']);
+    expect(withoutProvider(prefs, 'p3')).toBe(prefs);
   });
 });
