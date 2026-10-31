@@ -56,7 +56,7 @@ Everything else in `src/` and bundled assets can ship as an OTA update.
 
   A local or new native module must load with `requireOptionalNativeModule` and work (or hide the feature) when it is `null`. Examples: `src/native/zoggyfin-native.native.ts`, `src/together/nearby-native.native.ts`, `src/servers/discovery/backend.native.ts`.
 - Keep JS workarounds for native bugs while old binaries are in use. Example: `src/player/engine.native.tsx` passes `artist` and `artwork` to expo-video; `patches/expo-video@58.0.13.patch` fixes only new builds.
-- The `tv` EAS profile is on the `production` channel. An update to `production` reaches TV builds too: check the TV layout (web `?tv=1` at least).
+- The `tv` EAS profile has its own `tv` channel. An update to `production` does not reach TV builds: publish to `tv` with `--platform android` as well, and check the TV layout (web `?tv=1` at least). TV APKs built before this change are on `production`.
 
 ## 5. Before shipping
 
@@ -75,7 +75,7 @@ grep NowPlayingManager.swift build.log      # no match: the patch is not in the 
 
 | Target | How it ships |
 |---|---|
-| iOS, Android, TV, JS only | OTA: `eas update --channel <channel> --message "<summary>"`. Channels in `eas.json`: `development`, `preview`, `production` |
+| iOS, Android, TV, JS only | OTA: `eas update --channel <channel> --message "<summary>"`. Channels in `eas.json`: `development`, `preview`, `production`, `tv` |
 | iOS, Android, TV, native change | New build with the EAS profile (`production`, `tv`, `preview`), then store or TestFlight submission |
 | Mac app | A desktop release (`pnpm desktop:release`, `pnpm desktop:publish`): the app embeds the web build, so OTA updates do not reach it. Notes go in `desktop/CHANGELOG.md` |
 | Web | A new `pnpm expo export --platform web`, then host `dist/` |

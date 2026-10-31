@@ -291,7 +291,7 @@ The Mac app and the web are different: the Mac app embeds the web build (`fronte
 - Patches apply through `pnpm.patchedDependencies` in `pnpm-workspace.yaml` during `pnpm install`. To change one: `pnpm patch <pkg>@<version>`, edit, then `pnpm patch-commit <dir>`. A patch file name pins the exact version: upgrade the package and the patch together.
 - **A native patch of an Expo module works only if that module builds from source.** On iOS, Expo uses precompiled xcframeworks for most `expo-*` modules (`EXPO_USE_PRECOMPILED_MODULES`). A precompiled module ignores the patched Swift in `node_modules`. Put each patched Expo module in the `expo.autolinking.ios.buildFromSource` list in `package.json` (now: `expo-video`). After `pnpm expo prebuild --clean --platform ios`, the module must not appear in the "Precompiled modules" list of the pod install output.
 - **Verify a native patch in the build log.** Build for iOS and search the log for the patched file, for example `grep NowPlayingManager.swift <build-log>`. No match means the patch is not in the binary.
-- EAS profiles (`eas.json`): `development` (dev client), `preview`, `production`, and `tv` (`EXPO_TV=1`, an Android TV APK on the production channel). An OTA update to `production` also reaches the TV build: check TV too.
+- EAS profiles (`eas.json`): `development` (dev client), `preview`, `production`, and `tv` (`EXPO_TV=1`, an Android TV APK on its own `tv` channel). An OTA update to `production` does not reach TV builds: publish to `tv` too (`--platform android`), and check TV. TV APKs built before this change are on `production`.
 
 ## 6. Gotchas learned the hard way
 
