@@ -36,6 +36,7 @@ import { audioOptions, audioSwitchNeedsStream, pickSource, planStream, playbackI
 import { chaptersOf, pickTrickplay } from './timeline';
 import type { LivePlayRequest, LiveStreamChoice, PlayRequest } from './types';
 import { parseVtt } from './vtt';
+import { tsBridge } from '@/native/ts-bridge';
 
 interface Ctx {
   api: Api;
@@ -149,6 +150,8 @@ interface LiveAttempt {
   next: number;
   userAgent: string | null;
   unsupported: string | null;
+  /** The TS bridge session this attempt started (iOS), stopped when the attempt ends. */
+  bridgeId?: string;
 }
 
 interface LoadOptions {
@@ -295,6 +298,8 @@ class VideoSession {
   /** Starts an item. Containers (show, season, collection) resolve to an episode or item first. */
   async play(request: PlayRequest): Promise<void> {
     const id = ++this.loadId;
+    // A server item replaces a live channel: its TS bridge session (iOS) ends too.
+    this.endLiveAttempt();
     await this.finishCurrent();
     this.lastRequest = request;
     setPlayerState({ ...initialPlayerState, status: 'loading', presentation: 'full' });
@@ -488,7 +493,7 @@ class VideoSession {
     await this.finishCurrent();
     if (id !== this.loadId) return;
     this.lastRequest = null;
-    this.liveAttempt = null;
+    this.endLiveAttempt();
     const index = Math.min(Math.max(0, request.index), request.channels.length - 1);
     const ch = request.channels[index];
     if (!ch) return;
@@ -509,6 +514,13 @@ class VideoSession {
     if (!this.loadNextLive()) this.liveFailed(undefined);
   }
 
+  /** Ends the live attempt and its TS bridge session, if any. */
+  private endLiveAttempt(): void {
+    const bridgeId = this.liveAttempt?.bridgeId;
+    this.liveAttempt = null;
+    if (bridgeId) void tsBridge?.stop(bridgeId).catch(() => undefined);
+  }
+
   /** Loads the next stream form of the live channel, or shows why it does not play. True when one loads. */
   private loadNextLive(): boolean {
     const a = this.liveAttempt;
@@ -518,6 +530,36 @@ class VideoSession {
     const choice = a.candidates[a.next];
     if (!choice) return false;
     a.next++;
+    if (choice.bridge) {
+      if (!tsBridge) return this.loadNextLive();
+      setPlayerState({ status: 'loading', error: null });
+      // The bridge waits for its first segments (a few seconds), then serves a local HLS playlist.
+      const headers: Record<string, string> = a.userAgent ? { 'User-Agent': a.userAgent } : {};
+      tsBridge.start(choice.url, headers).then(
+        (session) => {
+          if (this.liveAttempt !== a || a.id !== this.loadId) {
+            void tsBridge?.stop(session.id).catch(() => undefined);
+            return;
+          }
+          a.bridgeId = session.id;
+          this.loadLiveSource(a, { url: session.playlistUrl, isHls: true });
+        },
+        () => {
+          // Never show the bridge's error: it may hold the stream URL. The attempt's message says enough.
+          if (this.liveAttempt === a && a.id === this.loadId) this.liveFailed(undefined);
+        },
+      );
+      return true;
+    }
+    this.loadLiveSource(a, choice);
+    return true;
+  }
+
+  /** Points the engine at one stream form of the live channel. */
+  private loadLiveSource(a: LiveAttempt, choice: LiveStreamChoice): void {
+    const now = playerState().now;
+    const live = now?.live;
+    if (!now || !live) return;
     const ch = live.channels[live.index];
     setPlayerState({ now: { ...now, plan: livePlan(choice.url, choice.isHls) }, status: 'loading', error: null });
     this.engine.load({
@@ -530,7 +572,6 @@ class VideoSession {
       autoplay: true,
       userAgent: a.userAgent,
     });
-    return true;
   }
 
   /** A live stream failed: try its next form, else show the source's message or the player's. */
@@ -914,7 +955,7 @@ class VideoSession {
   /** Ends playback, reports the last position and refreshes Continue Watching. */
   async stop(): Promise<void> {
     this.loadId++;
-    this.liveAttempt = null;
+    this.endLiveAttempt();
     await this.finishCurrent();
     setPlayerState({ ...initialPlayerState });
   }

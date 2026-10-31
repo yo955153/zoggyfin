@@ -134,6 +134,21 @@ describe('stream choice', () => {
     expect(liveStreamFor(plain, m3u, null, 'web').unsupported).toMatch(/browser/);
   });
 
+  it('adds the TS bridge after the HLS form on iOS when the binary has it', () => {
+    const ch: Channel = { id: '1', name: 'A', group: '', url: 'http://panel.example.com/live/jane/secret/1001.ts' };
+    expect(liveStreamFor(ch, m3u, null, 'ios', true).candidates).toEqual([
+      { url: 'http://panel.example.com/live/jane/secret/1001.m3u8', isHls: true },
+      { url: ch.url, isHls: true, bridge: true },
+    ]);
+    const plain: Channel = { id: '2', name: 'B', group: '', url: 'http://example.com/channels/news.ts' };
+    expect(liveStreamFor(plain, m3u, null, 'ios', true).candidates).toEqual([{ url: plain.url, isHls: true, bridge: true }]);
+    // Never on the web or Apple TV, and never for a stream that is HLS already.
+    expect(liveStreamFor(plain, m3u, null, 'web', true).candidates).toEqual([]);
+    expect(liveStreamFor(plain, m3u, null, 'tvos', true).candidates).toEqual([]);
+    const hls: Channel = { id: '3', name: 'C', group: '', url: 'http://example.com/live/news.m3u8' };
+    expect(liveStreamFor(hls, m3u, null, 'ios', true).candidates).toEqual([{ url: hls.url, isHls: true }]);
+  });
+
   it('keeps the original URL on Android and the Mac app', () => {
     const ch: Channel = { id: '1', name: 'A', group: '', url: 'http://panel.example.com/live/jane/secret/1001.ts' };
     expect(liveStreamFor(ch, m3u, null, 'android').candidates).toEqual([{ url: ch.url, isHls: false }]);

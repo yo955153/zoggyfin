@@ -62,6 +62,8 @@ export function liveStreamFor(
   provider: { kind: ProviderKind; userAgent: string | null },
   login: XtreamLogin | null,
   platform: StreamPlatform,
+  /** The iOS TS bridge is in this binary: a progressive .ts stream can play through it. */
+  tsBridge = false,
 ): LiveStream {
   const userAgent = channel.userAgent ?? provider.userAgent ?? null;
   if (provider.kind === 'xtream') {
@@ -75,6 +77,8 @@ export function liveStreamFor(
   if (!needsHls(platform)) return { candidates: [{ url, isHls: false }], userAgent, unsupported: null };
   const hls = xtreamHlsForm(url);
   const candidates: StreamChoice[] = hls ? [{ url: hls, isHls: true }] : [];
+  // The HLS form first (no bridge work when the panel serves it), then the bridge on iOS.
+  if ((isTsUrl(url) || hls) && tsBridge && platform === 'ios') candidates.push({ url, isHls: true, bridge: true });
   if (isTsUrl(url) || hls) return { candidates, userAgent, unsupported: unsupportedFormatText(platform) };
   // An unknown format: try it as it is; the player says what failed.
   return { candidates: [{ url, isHls: false }], userAgent, unsupported: null };

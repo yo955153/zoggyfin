@@ -127,6 +127,8 @@ export interface NowNext {
 export interface StreamChoice {
   url: string;
   isHls: boolean;
+  /** iOS: play the progressive MPEG-TS `url` through the TS bridge (`@/native/ts-bridge`). */
+  bridge?: boolean;
 }
 
 export interface LiveStream {

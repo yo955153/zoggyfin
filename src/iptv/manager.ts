@@ -8,6 +8,7 @@ import { Platform } from 'react-native';
 
 import { useSessionStore } from '@/auth/session-store';
 import { randomId } from '@/lib/id';
+import { tsBridge } from '@/native/ts-bridge';
 import { isDesktop } from '@/platform/desktop';
 import { isTV } from '@/platform/tv';
 import type { LiveChannelRef, LivePlayRequest, LiveSource } from '@/player';
@@ -487,7 +488,7 @@ function sourceFor(providerId: string): LiveSource {
       const record = providerById(providerId);
       const channel = find(channelId);
       if (!record || !channel) return { candidates: [], userAgent: null, unsupported: 'This channel is not in the list any more.' };
-      return liveStreamFor(channel, record, xtreamLogin(record, readSecrets(providerId)), streamPlatform);
+      return liveStreamFor(channel, record, xtreamLogin(record, readSecrets(providerId)), streamPlatform, tsBridge !== null);
     },
     nowLine(channelId) {
       const channel = find(channelId);

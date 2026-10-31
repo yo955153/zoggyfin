@@ -37,6 +37,8 @@ export interface LiveChannelRef {
 export interface LiveStreamChoice {
   url: string;
   isHls: boolean;
+  /** iOS: play the progressive MPEG-TS `url` through the TS bridge (`@/native/ts-bridge`). */
+  bridge?: boolean;
 }
 
 /**
