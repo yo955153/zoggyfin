@@ -78,6 +78,11 @@ beforeEach(() => {
   setIptvState({ scope: null });
 });
 
+/** Switches the signed-in account (the mock store holds only the ids the manager reads). */
+function setSession(userId: string): void {
+  (useSessionStore as unknown as { setState(s: unknown): void }).setState({ session: { serverId: 's1', userId } });
+}
+
 function mmkvText(): string {
   return [...mockKv.values()].join('\n');
 }
@@ -165,10 +170,10 @@ describe('IPTV manager', () => {
   it('keeps providers per account', async () => {
     mockTexts.set(PLAYLIST, SAMPLE_M3U);
     await saveProvider({ kind: 'm3u', name: 'L', playlistUrl: PLAYLIST, guideUrl: null, userAgent: null });
-    useSessionStore.setState({ session: { serverId: 's1', userId: 'u2' } });
+    setSession('u2');
     // Another call that needs the scope moves the store to the new account.
     await expect(saveProvider({ kind: 'm3u', name: '', playlistUrl: 'nope', guideUrl: null, userAgent: null })).rejects.toBeTruthy();
     expect(iptvState().providers.order).toEqual([]);
-    useSessionStore.setState({ session: { serverId: 's1', userId: 'u1' } });
+    setSession('u1');
   });
 });
