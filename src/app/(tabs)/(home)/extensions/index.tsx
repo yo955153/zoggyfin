@@ -12,6 +12,7 @@ import { requestInstall } from '@/extensions/runtime';
 import { safeHost } from '@/extensions/schema';
 import { useExtensions } from '@/extensions/store';
 import { Group, makeSettingsStyles, SettingsRow } from '@/features/settings/rows';
+import { features } from '@/platform/tv';
 import { spacing, useStyles, useTheme } from '@/theme';
 import { useSidebarInset } from '@/theme/sidebar-inset';
 import { useTabBottomPadding } from '@/lib/tab-bar-inset';
@@ -23,7 +24,8 @@ export default function ExtensionsScreen() {
   const sidebar = useSidebarInset();
   const list = useExtensions((st) => st.list);
   const [address, setAddress] = useState('');
-  const panels = list.filter((e) => e.enabled).flatMap((e) => (e.manifest.contributes.panels ?? []).map((p) => ({ ext: e, panel: p })));
+  // TV has no extension panels (web pages the remote cannot use).
+  const panels = features.extensionPanels ? list.filter((e) => e.enabled).flatMap((e) => (e.manifest.contributes.panels ?? []).map((p) => ({ ext: e, panel: p }))) : [];
   const takesLinks = list.some((e) => e.enabled && (e.manifest.contributes.shareTargets?.length ?? 0) > 0);
 
   const add = () => {

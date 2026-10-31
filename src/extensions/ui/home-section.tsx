@@ -18,6 +18,7 @@ import { RowHeader } from '@/components/item-row';
 import { Tile, tileAspect, type TileShape } from '@/components/tile';
 import { Touchable } from '@/components/touchable';
 import { useOpenItem } from '@/lib/navigation';
+import { features } from '@/platform/tv';
 import { createStyles, type AppTheme, font, iconSize, mediaColors, radius, scaled, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
 
 import { parseFeed, type FeedEntry } from '../feed';
@@ -98,7 +99,7 @@ function FeedRow({ title, rows, shape, extId }: { title: string; rows: Row[]; sh
 }
 
 function openEntry(e: FeedEntry, extId: string) {
-  if (e.panel) router.push({ pathname: '/extension-panel', params: { ext: extId, panel: e.panel } });
+  if (e.panel && features.extensionPanels) router.push({ pathname: '/extension-panel', params: { ext: extId, panel: e.panel } });
   else if (e.link) void Linking.openURL(e.link);
 }
 
@@ -106,7 +107,8 @@ const Card = memo(function Card({ entry, width, shape, onPress }: { entry: FeedE
   const s = useStyles(makeStyles);
   const { c } = useTheme();
   const height = width / tileAspect(shape);
-  const pressable = !!entry.panel || !!entry.link;
+  // TV has no extension panels: an entry that only opens one is not a button there.
+  const pressable = (!!entry.panel && features.extensionPanels) || !!entry.link;
   const body = (
     <View style={{ width }}>
       <View style={[s.art, { width, height }]}>
