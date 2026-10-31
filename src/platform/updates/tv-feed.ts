@@ -4,15 +4,19 @@
  * the desktop feed:
  *
  *   {
- *     "versionName": "0.2.0",          the version people see
- *     "versionCode": 12,               the Android build number: it decides what is newer
- *     "url": "https://…/zoggyfin-tv-0.2.0-12.apk",
+ *     "versionName": "0.1.0",          the version people see (shown with the build: "0.1.0 (25)")
+ *     "versionCode": 25,               the Android build number: the only thing that decides what is newer
+ *     "url": "https://…/zoggyfin-tv-0.1.0-25.apk",
  *     "sha256": "<64 hex digits>",     the app checks the file before it installs it
  *     "size": 48123456,                bytes
  *     "notes": "- One line per item",  the CHANGELOG section, as on the desktop
  *     "pub_date": "2026-10-23T10:00:00Z",
  *     "minVersionCode": 10             optional: older builds must update ("Later" does not hide it)
  *   }
+ *
+ * Every release keeps the version name of app.json, because the OTA runtime
+ * version follows it (AGENTS.md section 5). So nothing here compares or keys
+ * on `versionName`: newer, "Later" and the cache file name use `versionCode`.
  */
 import type { UpdateOffer } from './machine';
 import { parseReleaseNotes } from './notes';

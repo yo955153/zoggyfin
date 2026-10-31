@@ -3,6 +3,11 @@
 # latest.json, and uploads both to the same Cloudflare R2 bucket as the Mac app. The app reads
 # the feed and updates itself (src/platform/updates/tv.ts).
 #
+# Every release keeps the version name of app.json (0.1.0: the OTA runtime version, see AGENTS.md
+# section 5). Only the versionCode tells releases apart. EAS sets it (appVersionSource remote,
+# autoIncrement), shared with the Play builds. The script refuses an APK whose versionCode is not
+# higher than the one in the published feed.
+#
 #   bash scripts/release-android-tv.sh
 #
 # R2 layout (public at $R2_PUBLIC_URL; <prefix> is $R2_PREFIX, <tv> is $TV_PREFIX):
@@ -20,11 +25,12 @@
 #                     Default: `eas build --local --platform android --profile tv`.
 #   ABIS              default armeabi-v7a,arm64-v8a (32-bit Fire TV sticks and 64-bit-only boxes).
 #   APK=<file>        publish this APK and do not build (it must be a `tv` profile build).
-#   NOTES_FILE        the release notes (one "- item" per line). Default: the "## [<versionName>]"
-#                     section of CHANGELOG.md, if there is one.
+#   NOTES_FILE        the release notes (one "- item" per line). Without it the release has no notes:
+#                     the version name does not change, so it cannot pick a CHANGELOG section.
 #   MIN_VERSION_CODE  older builds must update ("Later" does not hide the card).
 #   ALLOW_UNPUSHED=1  build although HEAD is not on origin/main (test releases only)
-#   REPUBLISH=1       replace a build that is already on R2 (test releases only)
+#   REPUBLISH=1       replace a build that is already on R2, or publish a versionCode that is not
+#                     higher than the feed's (test releases only)
 # The build runs in a clean git worktree of HEAD ($BUILD_DIR/src-tv), so uncommitted files in
 # the checkout never ship.
 set -euo pipefail
@@ -100,6 +106,12 @@ print(*m.groups()) if m else sys.exit(1)' <<<"$BADGING") || die "aapt2 cannot re
 grep -q "uses-permission: name='android.permission.REQUEST_INSTALL_PACKAGES'" <<<"$BADGING" \
   || die "the APK has no REQUEST_INSTALL_PACKAGES: it is not a build of the profile tv"
 grep -q "leanback-launchable-activity" <<<"$BADGING" || die "the APK has no TV launcher activity (EXPO_TV was not set)"
+# The OTA channel: TV builds use `tv` (eas.json). A build on another channel would miss TV updates.
+CHANNEL="$("$AAPT2" dump xmltree --file AndroidManifest.xml "$APK" | python3 -c '
+import re, sys
+m = re.search(r"expo-channel-name\"?\s*:\s*\"?([A-Za-z0-9_.-]+)", sys.stdin.read())
+print(m.group(1) if m else "")')"
+[ "$CHANNEL" = tv ] || die "the APK is on the update channel '${CHANNEL:-none}', not tv"
 NATIVE="$(sed -n "s/^native-code: //p" <<<"$BADGING")"
 IFS=',' read -r -a WANT <<<"$ABIS"
 for abi in "${WANT[@]}"; do
@@ -121,18 +133,23 @@ exists=$(r2 -o /dev/null -w '%{http_code}' -I "${R2_ENDPOINT%/}/$R2_BUCKET/$KEY_
 if [ "$exists" = 200 ] && [ "${REPUBLISH:-}" != 1 ]; then
   die "$NAME is on R2 already. Make a new build (EAS sets a new versionCode)."
 fi
+# The apps compare versionCodes only: a feed that goes back or stays the same updates nobody.
+PUBLISHED="$(curl -s -H 'Cache-Control: no-cache' "$PUBLIC/latest.json" | python3 -c '
+import json, sys
+try:
+    print(int(json.load(sys.stdin)["versionCode"]))
+except Exception:
+    print(0)')"
+if [ "$VERSION_CODE" -le "$PUBLISHED" ] && [ "${REPUBLISH:-}" != 1 ]; then
+  die "the feed has versionCode $PUBLISHED; this APK has $VERSION_CODE. Make a new build."
+fi
 
 # 3. The notes and latest.json.
 if [ -n "${NOTES_FILE:-}" ]; then
   NOTES="$(cat "$NOTES_FILE")"
 else
-  NOTES="$(python3 - "$ROOT/CHANGELOG.md" "$VERSION_NAME" <<'PY'
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-m = re.search(r"^## \[?v?" + re.escape(sys.argv[2]) + r"\]?[^\n]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
-print(m.group(1).strip() if m else "")
-PY
-)"
+  NOTES=""
+  echo "  no NOTES_FILE: the release has no notes"
 fi
 OUT="$BUILD_DIR/out"
 mkdir -p "$OUT"

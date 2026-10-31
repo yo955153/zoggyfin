@@ -370,7 +370,7 @@ maintainer has. See [desktop/README.md](desktop/README.md).
 
 ### Android TV app (Google TV, Fire TV)
 
-Two EAS profiles make the TV app. Both set `EXPO_TV=1`.
+Two EAS profiles make the TV app. Both set `EXPO_TV=1` and use the `tv` update channel.
 
 | Profile | Output | Self-update |
 |---|---|---|
@@ -379,7 +379,9 @@ Two EAS profiles make the TV app. Both set `EXPO_TV=1`.
 
 The `tv` app reads `https://releases.zog-tech.com/zoggyfin/android-tv/latest.json` 10 s after
 start and every 4 hours. When the feed has a higher `versionCode`, the update card offers the
-new version. "Install" downloads the APK to the app cache, checks its SHA-256, and opens the
+new version. Every release keeps the version name of `app.json` (0.1.0, the runtime version of
+over-the-air updates), so only the `versionCode` counts. The card shows both, for example
+"0.1.0 (25)". "Install" downloads the APK to the app cache, checks its SHA-256, and opens the
 system installer. The first time, Android asks to let Zoggyfin install apps: the card opens that
 settings page. The updater runs only when the build's manifest has the install permission, so an
 over-the-air update cannot turn it on in the Play build. A test build can read another feed with
@@ -387,12 +389,15 @@ over-the-air update cannot turn it on in the Play build. A test build can read a
 
 Release (maintainer): `pnpm tv:release` (`scripts/release-android-tv.sh`). It builds the `tv`
 profile for `armeabi-v7a,arm64-v8a` from a clean checkout of `HEAD`, checks the APK with `aapt2`
-(versionCode, TV launcher, install permission, both ABIs), and uploads three files to the R2
+(versionCode, TV launcher, install permission, the `tv` channel, both ABIs). It refuses an APK
+whose `versionCode` is not higher than the one in the published feed. Then it uploads three files to the R2
 bucket of the Mac releases, under `zoggyfin/android-tv/`:
 `zoggyfin-tv-<versionName>-<versionCode>.apk`, `zoggyfin-tv-latest.apk` (the website link) and
 `latest.json` (last). EAS sets the `versionCode` (`appVersionSource: remote`). The script reads
 the R2 settings from the same file as `desktop/scripts/publish.sh`; the top of the script lists
 all settings (`EAS_LOCAL_WRAPPER`, `APK`, `TV_PREFIX`, `NOTES_FILE`, `MIN_VERSION_CODE`).
+Pass the release notes with `NOTES_FILE`: the version name does not change, so the script cannot
+pick a `CHANGELOG.md` section.
 
 A sideloaded APK and the Play app have different signing keys: a TV cannot update one with the
 other. Uninstall first to switch.

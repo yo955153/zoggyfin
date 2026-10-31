@@ -56,7 +56,7 @@ class ZoggyfinUpdaterModule : Module() {
     Function("info") {
       val info = packageInfo()
       mapOf(
-        "selfUpdate" to (info?.requestedPermissions?.contains(INSTALL_PERMISSION) == true),
+        "selfUpdate" to selfUpdate(info),
         "versionCode" to info?.let { versionCodeOf(it).toDouble() },
         "versionName" to info?.versionName,
       )
@@ -86,6 +86,15 @@ class ZoggyfinUpdaterModule : Module() {
 
   private fun context(): Context? = appContext.reactContext?.applicationContext
 
+  /** True only when the manifest declares REQUEST_INSTALL_PACKAGES (the sideload build). */
+  private fun selfUpdate(info: PackageInfo? = packageInfo()): Boolean =
+    info?.requestedPermissions?.contains(INSTALL_PERMISSION) == true
+
+  /** The download and the install refuse to run in a build without self-update (Play, phones). */
+  private fun requireSelfUpdate() {
+    if (!selfUpdate()) throw UpdateException("ERR_DISABLED", "This build does not update itself.")
+  }
+
   private fun packageInfo(): PackageInfo? {
     val context = context() ?: return null
     return try {
@@ -107,6 +116,7 @@ class ZoggyfinUpdaterModule : Module() {
 
   private suspend fun download(url: String, sha256: String, size: Long, name: String): String {
     val context = context() ?: throw UpdateException("ERR_DOWNLOAD", "The app is not ready.")
+    requireSelfUpdate()
     if (!name.matches(Regex("^[0-9A-Za-z._-]+\\.apk$"))) throw UpdateException("ERR_DOWNLOAD", "Bad file name.")
     val dir = updatesDir(context)
     val target = File(dir, name)
@@ -225,6 +235,7 @@ class ZoggyfinUpdaterModule : Module() {
 
   private fun install(file: File) {
     val context = context() ?: throw UpdateException("ERR_INSTALL", "The app is not ready.")
+    requireSelfUpdate()
     val dir = updatesDir(context).canonicalFile
     val apk = file.canonicalFile
     if (apk.parentFile != dir || !apk.isFile) throw UpdateException("ERR_INSTALL", "The downloaded file is missing.")

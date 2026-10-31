@@ -35,7 +35,7 @@ import {
   useUpdateStore,
   type UpdateState,
 } from '@/platform/updates';
-import { isBusy } from '@/platform/updates/machine';
+import { currentLabel, isBusy, offerLabel } from '@/platform/updates/machine';
 import { NOTES_INLINE_MAX, progressFraction, progressLabel } from '@/platform/updates/notes';
 import { createStyles, type AppTheme, font, iconSize, motion, radius, scaled, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
 
@@ -258,9 +258,9 @@ function titleFor(state: UpdateState, tv: boolean): string {
     case 'current':
       return 'Zoggyfin is up to date';
     case 'downloading':
-      return `Downloading Zoggyfin ${offer?.version ?? ''}`.trim();
+      return `Downloading Zoggyfin ${offer ? offerLabel(offer) : ''}`.trim();
     case 'installing':
-      return `Installing Zoggyfin ${offer?.version ?? ''}`.trim();
+      return `Installing Zoggyfin ${offer ? offerLabel(offer) : ''}`.trim();
     case 'permission':
       return tv ? 'Allow Zoggyfin to install the update' : 'Zoggyfin';
     case 'error':
@@ -270,12 +270,13 @@ function titleFor(state: UpdateState, tv: boolean): string {
           ? 'The download failed'
           : 'The update did not install';
     default:
-      return offer ? `Zoggyfin ${offer.version} is available` : 'Zoggyfin';
+      return offer ? `Zoggyfin ${offerLabel(offer)} is available` : 'Zoggyfin';
   }
 }
 
 function subtitleFor(state: UpdateState, tv: boolean): string {
-  const { phase, current } = state;
+  const { phase } = state;
+  const current = currentLabel(state);
   switch (phase.kind) {
     case 'current':
       return `Version ${current} is the newest version.`;

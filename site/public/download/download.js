@@ -32,8 +32,10 @@
   });
   load('/download/tv-latest.json', function (feed) {
     if (typeof feed.versionName !== 'string') return;
+    // TV releases share one version name; the build number (versionCode) tells them apart.
+    var build = typeof feed.versionCode === 'number' ? ' (' + feed.versionCode + ')' : '';
     var size = typeof feed.size === 'number' ? ', ' + Math.round(feed.size / 1e6) + ' MB' : '';
-    document.getElementById('tv-version').textContent = 'Version ' + feed.versionName + released(feed.pub_date) + size + '.';
+    document.getElementById('tv-version').textContent = 'Version ' + feed.versionName + build + released(feed.pub_date) + size + '.';
     showNotes(feed.notes, 'tv-notes-list', 'tv-notes');
   });
 })();

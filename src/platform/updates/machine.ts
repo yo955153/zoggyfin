@@ -19,7 +19,10 @@
  *   version (kept per device). A manual check opens it anyway.
  * - A version that is not newer than the running version is not an update.
  *   When the offer and the app both have a build number (Android
- *   `versionCode`), the build number decides.
+ *   `versionCode`), only the build number decides: Android TV releases keep
+ *   the same version name (the OTA runtime version), so the name never does.
+ * - Labels show the build number next to the version where there is one
+ *   ("0.1.0 (25)"), so two releases with the same name look different.
  * - A required offer (the running build is older than the oldest build that
  *   the feed supports) opens the card even after "Later".
  * - During a download or the install, checks and "Later" do nothing.
@@ -95,6 +98,17 @@ export function isNewerOffer(offer: UpdateOffer, state: Pick<UpdateState, 'curre
   if (typeof offer.build === 'number' && state.currentBuild !== null) return offer.build > state.currentBuild;
   return isNewer(offer.version, state.current);
 }
+
+/** The version as the card shows it: "0.1.0 (25)" when there is a build number, else "0.1.0". */
+export function versionLabel(version: string, build?: number | null): string {
+  return typeof build === 'number' ? `${version} (${build})` : version;
+}
+
+/** The label of the offer. */
+export const offerLabel = (offer: UpdateOffer): string => versionLabel(offer.version, offer.build);
+
+/** The label of the app that runs now. */
+export const currentLabel = (state: Pick<UpdateState, 'current' | 'currentBuild'>): string => versionLabel(state.current, state.currentBuild);
 
 /** True while bytes move or the app installs: nothing may stop it. */
 export function isBusy(state: UpdateState): boolean {

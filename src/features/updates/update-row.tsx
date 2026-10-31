@@ -6,6 +6,7 @@
  */
 import { SettingsRow } from '@/features/settings/rows';
 import { checkForUpdates, reopenUpdateCard, updatesSupported, useUpdateStore, type UpdateState } from '@/platform/updates';
+import { offerLabel } from '@/platform/updates/machine';
 
 function statusOf(state: UpdateState): string | undefined {
   switch (state.phase.kind) {
@@ -20,7 +21,7 @@ function statusOf(state: UpdateState): string | undefined {
     case 'error':
       return 'Failed';
     default:
-      if (state.offer) return `${state.offer.version} is available`;
+      if (state.offer) return `${offerLabel(state.offer)} is available`;
       return state.checkedAt ? 'Up to date' : undefined;
   }
 }
