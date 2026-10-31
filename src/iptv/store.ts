@@ -11,7 +11,7 @@ import { storage } from '@/storage/kv';
 
 import { EMPTY_LISTS } from './lists';
 import { EMPTY_PROVIDERS, migrateLists, migrateProviders } from './migrate';
-import type { SearchIndex } from './search';
+import { migrateRecentSearches, type RecentSearches, type SearchIndex } from './search';
 import type { Channel, ChannelLists, GuideWindow, ProvidersSnapshot } from './types';
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -45,6 +45,8 @@ export interface IptvState {
   /** M3U: XMLTV display names (lower case) to guide ids. */
   guideNames: Record<string, Record<string, string>>;
   guideStatus: Record<string, LoadStatus>;
+  /** Recent channel searches per provider (loaded on first use). */
+  searches: Record<string, RecentSearches>;
 }
 
 export const useIptvStore = create<IptvState>(() => ({
@@ -56,6 +58,7 @@ export const useIptvStore = create<IptvState>(() => ({
   guides: {},
   guideNames: {},
   guideStatus: {},
+  searches: {},
 }));
 
 export const iptvState = () => useIptvStore.getState();
@@ -65,6 +68,7 @@ export const scopeId = (s: Scope) => `${s.serverId}:${s.userId}`;
 const providersKey = (s: Scope) => `iptv.providers.${s.serverId}.${s.userId}`;
 const activeKey = (s: Scope) => `iptv.active.${s.serverId}.${s.userId}`;
 const listsKey = (providerId: string) => `iptv.lists.${providerId}`;
+const searchesKey = (providerId: string) => `iptv.searches.${providerId}`;
 
 export function loadProviders(s: Scope): ProvidersSnapshot {
   return migrateProviders(readJson<unknown>(providersKey(s), null));
@@ -94,6 +98,15 @@ export function saveLists(providerId: string, lists: ChannelLists): void {
 
 export function removeLists(providerId: string): void {
   storage.remove(listsKey(providerId));
+  storage.remove(searchesKey(providerId));
+}
+
+export function loadSearches(providerId: string): RecentSearches {
+  return migrateRecentSearches(readJson<unknown>(searchesKey(providerId), null));
+}
+
+export function saveSearches(providerId: string, searches: RecentSearches): void {
+  writeJson(searchesKey(providerId), searches);
 }
 
 /** Sets part of one provider's data. */

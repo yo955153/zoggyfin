@@ -28,7 +28,7 @@ import {
 } from '@/iptv';
 import { toast } from '@/lib/toast';
 import { isTV } from '@/platform/tv';
-import { createStyles, type AppTheme, font, iconSize, mediaColors, radius, scaled, scriptStyle, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
+import { createStyles, type AppTheme, font, iconSize, mediaColors, radius, scaled, scriptStyle, sizes, spacing, tvRowInset, type, useLayout, useStyles, useTheme } from '@/theme';
 
 import { VodArt } from './vod-art';
 import { type VodAction, VodDetail } from './vod-detail';
@@ -38,6 +38,7 @@ export function SeriesDetailScreen({ id, providerId: wanted }: { id: string; pro
   const s = useStyles(makeStyles);
   const { c } = useTheme();
   const l = useLayout();
+  const inset = isTV ? tvRowInset(l.gutter) : null;
   const active = useActiveProviderId();
   const pid = wanted || active;
   const item = useVodTitle(pid, 'series', id);
@@ -131,7 +132,9 @@ export function SeriesDetailScreen({ id, providerId: wanted }: { id: string; pro
                 onPress={() => play(ep, resumeAt(lists, 'episode', ep.id))}
                 accessibilityRole="button"
                 accessibilityLabel={[ep.title, episodeLine(ep), watched ? 'watched' : null, progress !== null ? `${Math.round(progress * 100)} percent watched` : null].filter(Boolean).join(', ')}
-                style={({ pressed, hovered, focused }) => [s.episode, { paddingHorizontal: l.gutter }, (pressed || hovered || focused) && s.active]}>
+                radius={inset ? radius.md : 0}
+                containerStyle={inset ? { marginLeft: inset.marginLeft, marginRight: inset.marginRight } : undefined}
+                style={({ pressed, hovered, focused }) => [s.episode, { paddingHorizontal: inset ? inset.padX : l.gutter }, (pressed || hovered || (focused && !isTV)) && s.active]}>
                 <View>
                   <VodArt uri={ep.still ?? poster} name={ep.title} id={ep.id} kind="episode" width={scaled(sizes.episodeThumb)} aspectRatio={16 / 9} rounded={radius.sm} showTitle={false} />
                   {progress !== null ? (

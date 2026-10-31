@@ -76,12 +76,25 @@ first commit to today. All of it was built in the first weeks of the project.
 
 ### Changed
 
+- **Live TV.** A new layout, made for the TV first: a browse column (Search, Favourites, Recently
+  watched, All channels, the groups, Providers), the channel list with numbers, logos and what is on
+  now, and on TV a panel with now and next for the focused channel. Search is one step away (the
+  Search entry, a Search button, the field on phones); it opens the keyboard on TV, shows results as
+  you type, finds channel numbers, and keeps recent searches. Favourites come first when there are
+  some. The loading, empty and error states are new.
+- **Live TV player on TV.** Up, Down and the channel keys step through the channels in a zap banner
+  (number, logo, now and next with times and progress); the player tunes when you stop pressing, or
+  at once with Select, and Back cancels. The controls show a card for the channel that plays, and
+  the channel list previews the focused channel's programmes. "Search channels" in the channel list
+  goes to the Live TV search.
 - The invite flow, the nearby transport and the rendezvous crypto use one design on every platform:
   ChaCha20-Poly1305, with CryptoKit on Apple platforms.
 - A saved server stays one entry when its address or its Id changes.
 
 ### Fixed
 
+- TV: the Films and Series pages use the single focus mark and stay inside the overscan-safe area.
+  A focused track or episode row no longer runs to the edge of the screen.
 - TV: Down on the last Home row no longer scrolls the rows out of view.
 - TV: Settings, and other pages with no preferred focus, take the focus when they open. Before, the
   focus stayed on the page they covered and the remote could not reach them.
@@ -110,6 +123,10 @@ first commit to today. All of it was built in the first weeks of the project.
 - TV: The music library picker shows above the Music tabs. The first focus goes to the first
   visible tile on Music and on library grids, not to a tile below the screen edge or the Sort chip.
 - TV: The Live TV channel list uses its full width.
+- TV: A focused row (Settings, sheets, Live TV, search) shows one fill and no ring. Before, it showed a
+  ring and a fill at the same time. Tiles and buttons keep the ring and the focus scale.
+- TV: Nothing is cut off on a TV that crops the edges of the picture (overscan, for example Fire TV).
+  The side menu, the pages, the player controls, toasts and sheets stay inside 5 % of each edge.
 
 ## Mac app releases
 

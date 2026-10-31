@@ -35,8 +35,12 @@ export function VodGrid({
   const [measured, setMeasured] = useState(0);
   const width = measured || l.contentWidth;
   const { columns, tileWidth, gap, gutter } = gridLayout('poster', width, l.tv, l.width);
-  // TV: room above the first row for the focus scale and ring.
-  const topPad = l.tv ? tvFocusBleed(tileHeight('poster', tileWidth)) + spacing.lg : spacing.sm;
+  // TV: room above the first row for the focus scale and ring. With a
+  // header, the room goes between the header and the first row, or the
+  // grown tile's ring touches the header.
+  const bleed = l.tv ? tvFocusBleed(tileHeight('poster', tileWidth)) + spacing.lg : 0;
+  const topPad = l.tv && !ListHeaderComponent ? bleed : spacing.sm;
+  const header = l.tv && ListHeaderComponent ? <View style={{ paddingBottom: bleed }}>{ListHeaderComponent}</View> : ListHeaderComponent;
 
   const onLayout = (e: LayoutChangeEvent) => {
     const w = Math.round(e.nativeEvent.layout.width);
@@ -67,7 +71,7 @@ export function VodGrid({
       contentContainerStyle={{ paddingHorizontal: gutter, paddingBottom: bottomPad, paddingTop: topPad }}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
-      ListHeaderComponent={ListHeaderComponent}
+      ListHeaderComponent={header}
       ListEmptyComponent={ListEmptyComponent}
       renderItem={renderItem}
     />

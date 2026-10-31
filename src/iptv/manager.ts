@@ -19,7 +19,7 @@ import { EMPTY_GUIDE, guideIdFor, isStale, nowNext, withProgrammes } from './gui
 import { addRecent, EMPTY_LISTS, toggleFavourite as toggleIn } from './lists';
 import { parseM3u } from './m3u';
 import { migrateChannelsFile, migrateGuide } from './migrate';
-import { buildSearchIndex } from './search';
+import { buildSearchIndex, EMPTY_RECENT_SEARCHES, rememberSearch, type RecentSearches } from './search';
 import { readSecrets, removeSecrets, writeSecrets } from './secrets';
 import {
   EMPTY_DATA,
@@ -27,11 +27,13 @@ import {
   loadActive,
   loadLists,
   loadProviders,
+  loadSearches,
   patchData,
   removeLists,
   saveActive,
   saveLists,
   saveProviders,
+  saveSearches,
   type Scope,
   scopeId,
   setIptvState,
@@ -362,6 +364,26 @@ export function markWatched(providerId: string, channelId: string): void {
   setLists(providerId, (l) => addRecent(l, channelId, Date.now()));
 }
 
+// ---- Recent searches --------------------------------------------------------------------
+
+export function recentSearchesOf(providerId: string): RecentSearches {
+  return iptvState().searches[providerId] ?? loadSearches(providerId);
+}
+
+/** Keeps a search the person used (they played a result). */
+export function rememberSearchFor(providerId: string, query: string): void {
+  const current = recentSearchesOf(providerId);
+  const next = rememberSearch(current, query);
+  if (next === current && iptvState().searches[providerId]) return;
+  setIptvState({ searches: { ...iptvState().searches, [providerId]: next } });
+  saveSearches(providerId, next);
+}
+
+export function clearSearches(providerId: string): void {
+  setIptvState({ searches: { ...iptvState().searches, [providerId]: EMPTY_RECENT_SEARCHES } });
+  saveSearches(providerId, EMPTY_RECENT_SEARCHES);
+}
+
 // ---- Guide ----------------------------------------------------------------------------
 
 function setGuide(id: string, guide: GuideWindow): void {
@@ -481,12 +503,24 @@ export function requestNowNext(providerId: string, channels: readonly Channel[])
 }
 
 /** Now and next of a channel from the loaded guide. */
+/** The guide's display names as a Map, built once per guide (every row asks). */
+const namesMaps = new WeakMap<Record<string, string>, Map<string, string>>();
+function namesMap(names: Record<string, string> | undefined): Map<string, string> | null {
+  if (!names) return null;
+  let m = namesMaps.get(names);
+  if (!m) {
+    m = new Map(Object.entries(names));
+    namesMaps.set(names, m);
+  }
+  return m;
+}
+
 export function nowNextOf(providerId: string, channel: Channel, at: number): NowNext {
   const st = iptvState();
   const guide = st.guides[providerId];
   if (!guide) return { now: null, next: null };
   const record = st.providers.providers[providerId];
-  const key = record?.kind === 'xtream' ? channel.id : guideIdFor(channel, new Map(Object.entries(st.guideNames[providerId] ?? {})));
+  const key = record?.kind === 'xtream' ? channel.id : guideIdFor(channel, namesMap(st.guideNames[providerId]));
   return key ? nowNext(guide.channels[key], at) : { now: null, next: null };
 }
 
@@ -511,6 +545,14 @@ function sourceFor(providerId: string): LiveSource {
       if (!channel) return null;
       requestNowNext(providerId, [channel]);
       return nowNextOf(providerId, channel, Date.now()).now?.title ?? null;
+    },
+    nowNext(channelId) {
+      const channel = find(channelId);
+      if (!channel) return { now: null, next: null };
+      requestNowNext(providerId, [channel]);
+      const nn = nowNextOf(providerId, channel, Date.now());
+      const brief = (p: typeof nn.now) => (p ? { title: p.title, start: p.start, stop: p.stop } : null);
+      return { now: brief(nn.now), next: brief(nn.next) };
     },
     onStart(channelId) {
       markWatched(providerId, channelId);

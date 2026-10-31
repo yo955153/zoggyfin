@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { isTV } from '@/platform/tv';
-import { createStyles, type AppTheme, font, mediaColors, motion, radius, scaled, sizes, spacing, type, useStyles, withAlpha } from '@/theme';
+import { createStyles, type AppTheme, font, motion, radius, scaled, sizes, spacing, type, useStyles } from '@/theme';
 
 import { shouldDismiss } from './sheet-dismiss';
 import { Touchable } from './touchable';
@@ -123,12 +123,10 @@ export function SheetRow({
       kind="row"
       onPress={onPress}
       hasTVPreferredFocus={preferredFocus}
-      // TV: the group clips a ring, so the focused row is filled and marked instead.
-      ring={!isTV}
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={checked === undefined ? undefined : { checked }}
-      style={({ pressed, hovered, focused }) => [s.row, (pressed || hovered || focused) && s.rowActive, isTV && focused && s.rowFocusTV]}>
+      style={({ pressed, hovered, focused }) => [s.row, (pressed || hovered || (focused && !isTV)) && s.rowActive]}>
       <View style={[s.rowInner, !last && s.rowLine]}>{children}</View>
     </Touchable>
   );
@@ -171,7 +169,6 @@ const makeStyles = createStyles(({ c, shadow }: AppTheme) => ({
   done: { ...font(type.headline), color: c.accent },
   row: { backgroundColor: c.surface, paddingLeft: spacing.lg },
   rowActive: { backgroundColor: c.surface3 },
-  rowFocusTV: { backgroundColor: withAlpha(mediaColors.white, 0.22), borderLeftWidth: 4, borderLeftColor: mediaColors.white },
   rowInner: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

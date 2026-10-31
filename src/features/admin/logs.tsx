@@ -13,6 +13,7 @@ import { Icon } from '@/components/icon';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { Group, LeadingIcon, makeSettingsStyles } from '@/features/settings/rows';
 import { Touchable } from '@/components/touchable';
+import { isTV } from '@/platform/tv';
 import { useDebounced } from '@/lib/use-debounced';
 import { formatBytes } from '@/lib/format';
 import { createStyles, type AppTheme, font, iconSize, radius, scaled, sizes, spacing, type, useStyles, useTheme, webInput } from '@/theme';
@@ -53,7 +54,7 @@ export function LogsSection({ target, selected, onOpen }: { target: AdminTarget;
             accessibilityRole="button"
             accessibilityState={{ selected: on }}
             accessibilityLabel={`${f.Name}, ${formatBytes(f.Size ?? 0)}, changed ${formatSince(f.DateModified, new Date()) ?? ''}`}
-            style={({ pressed, hovered, focused }) => [rs.rowPad, (pressed || hovered || focused) && rs.rowPressed, on && { backgroundColor: c.accentSoft }]}>
+            style={({ pressed, hovered, focused }) => [rs.rowPad, (pressed || hovered || (focused && !isTV)) && rs.rowPressed, on && { backgroundColor: c.accentSoft }]}>
             <LeadingIcon name="doc.text" />
             <View style={[rs.row, rs.rowBody, i < list.length - 1 && rs.rowBorder]}>
               <View style={s.fileText}>

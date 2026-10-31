@@ -23,6 +23,7 @@ import { Icon } from '@/components/icon';
 import type { IconName } from '@/components/icon-names';
 import { makeSheetStyles, Sheet, SheetRow } from '@/components/sheet';
 import { Touchable } from '@/components/touchable';
+import { isTV } from '@/platform/tv';
 import { downloadsSupported } from '@/downloads';
 import { useDownloadsStore } from '@/downloads/store';
 import { openAdmin } from '@/features/admin/nav';
@@ -136,7 +137,7 @@ function AccountHeader({ open, onToggle }: { open: boolean; onToggle: () => void
       accessibilityState={{ expanded: open }}
       accessibilityLabel={`${session.userName} on ${session.serverName}, ${place.text}`}
       accessibilityHint="Switch the account or the server"
-      style={({ pressed, hovered, focused }) => [s.header, (pressed || hovered || focused) && s.active]}>
+      style={({ pressed, hovered, focused }) => [s.header, (pressed || hovered || (focused && !isTV)) && s.active]}>
       <Avatar session={session} size={sizes.avatarLarge} />
       <View style={s.flex}>
         <Text style={s.name} numberOfLines={1}>

@@ -17,7 +17,7 @@ import { videoSession } from './session';
 import { playerState, setPlayerState } from './store';
 import type { LivePlayRequest, PlayerController, PlayRequest, VodPlayRequest } from './types';
 
-export type { LiveChannelRef, LivePlayRequest, LiveSource, LiveStreamChoice, PlayerController, PlayRequest, VodPlayRequest, VodRef, VodSource } from './types';
+export type { LiveChannelRef, LiveNowNext, LivePlayRequest, LiveProgramme, LiveSource, LiveStreamChoice, PlayerController, PlayRequest, VodPlayRequest, VodRef, VodSource } from './types';
 export { usePlayerStore } from './store';
 export { playRouter } from './play-router';
 

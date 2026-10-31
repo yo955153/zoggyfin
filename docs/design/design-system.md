@@ -568,6 +568,89 @@ Disabled: 40 % opacity, `accessibilityState={{ disabled: true }}`, no press feed
   When Zoggyfin may not install apps yet, the title is "Allow Zoggyfin to install the update",
   one `footnote` line says where the switch is, and the buttons are "Later" and "Open Settings".
 
+### 7.19 TV focus
+
+A focused control on TV shows **one** focus mark, never two (a ring around a fill reads as two
+things in focus). `Touchable` applies the mark from its `kind`, so screens do not draw their own.
+
+| Control | `kind` | TV focus mark |
+|---|---|---|
+| Tile (poster, thumb, square) | `tile` | White 3-pt ring with a 3-pt gap, and the focus scale (1.1). No shadow |
+| Round tile (person, artist) | `plain`, ring on the circle | The same ring and scale, on the circle only |
+| Button, chip, icon button, round detail button | `button`, `icon` | White ring and the focus scale |
+| Row and list item (Settings, sheets, Live TV groups and channels, search results, admin) | `row` | `tvRowFocus` fill (white 22 %) under the content. No ring, no scale. The text keeps its colours |
+| Side menu item | own `Pressable` | Solid `text` fill with `bg` text (the navigation is the strongest mark on screen) |
+| Text field | `TextField` | White 3-pt border |
+| Player pill button (over video) | own `Pressable` | White 35 % fill |
+
+- A row that is also *selected* (the current group, a checked option) keeps its selected look
+  (`accentSoft` fill or a check mark); the focus fill goes on top of it.
+- Phones, iPad, the Mac app and the web keep the keyboard focus ring of §8 on every control.
+
+### 7.20 TV safe area (overscan)
+
+Many TVs crop the edges of the picture (Fire TV does by default), and a TV reports no safe-area
+insets. Every control, text and focus mark stays inside 5 % of each edge: 96 x 54 points on the
+1920-point TV design width (48 x 27 dp at 1080p). Backgrounds and artwork may bleed to the edges.
+
+- One inset: `tv.safeX` and `tv.safeY` (`theme/layout.ts`), as `useLayout().safe`.
+- `TvSafeArea` (root layout) reports it as the safe-area insets on TV. Everything that keeps clear
+  of the insets (the video player's controls and overlays, toasts, sheets, Now Playing) is inside
+  with no TV code of its own.
+- The tab pages sit inside it at the top and the bottom (the side menu's content guide). Home is
+  the exception at the top: its billboard art runs to the top edge, and its text starts lower.
+- The side menu items, their focus fill and the menu glyph start at `safeX` and `safeY`. The page
+  margin (`tv.gutter`) is the same 5 %, so the trailing edge of a page is inside too.
+- Horizontal rows may run off the trailing edge (a part of the next tile shows that the row
+  scrolls). Their focused tile never does.
+- Full-width list rows (tracks, episodes, IPTV episodes) stop one gutter before the trailing edge
+  on TV, so their focus fill stays inside. `tvRowInset(gutter)` gives the margins and the padding
+  that keep the row's content on the page edge.
+
+### 7.21 Live TV
+
+TV first (TiviMate style), then the same parts in other windows.
+
+- **TV:** a header (Live TV, the provider and its channel count; provider chips when there is more
+  than one; Search, reload and Providers buttons), then three columns: the browse column (200 pt),
+  the channel list, and the details panel (290 pt, `surface`, radius `lg`) for the focused channel.
+- **Browse column** (`iptv/browse.ts`): Search; Favourites when it has channels; Recently watched
+  when it has channels; All channels; Favourites when it is empty; Films and Series when the provider has them (
+  `features/iptv/sections.ts`); a GROUPS heading and the provider's groups; Providers last. The
+  selected entry has the `accentSoft` fill and an accent icon. It takes the first focus on TV.
+- **Channel row** (64 pt on TV, 72 pt elsewhere): number (tabular, right-aligned), logo plate, name
+  (`headline`), the programme now (`subheadline`, `text2`) with a 36-pt progress bar. A heart button
+  at the end; a small filled heart after the name on TV. The playing channel is in `accent`. Narrow
+  and wide windows with no details panel show the next programme as a third line.
+- **Details panel:** the logo, number and name (`title3`), Favourite and the group; NOW with its
+  times, the title (`headline`), a progress bar with the time left and the description; NEXT with
+  its start and title; a hint for Select and the menu key at the bottom.
+- **Search:** one step from anywhere. TV: the Search entry and the header button open a field at the
+  top of the list and the keyboard at once (`disableFullscreenUI`, so the results show above the
+  keyboard). Elsewhere: the field in the toolbar. Results follow each key press: the channel number
+  first (exact, then numbers that start with the query, lowest first), then names that start with
+  the query, then a word that starts with it, then anywhere. Recent searches show as chips while the
+  field is empty; a search is kept when one of its channels plays. Back leaves the search.
+- **Favourites:** the heart, the menu key on a focused row (TV), and a long press (touch).
+- **States:** no provider (a 72-pt `accentSoft` circle with the TV glyph, two buttons), loading
+  (skeleton rows and one line), failed (the reason, Try again, Edit provider), an empty group or no
+  results (an icon, a title and one sentence; above the keyboard during a search).
+- **Narrow windows:** the toolbar (field, reload, Providers), chips for the lists, sections and
+  groups, and the list.
+- **Live player (TV, TiviMate style):**
+  - Up and Down change the channel while the controls are hidden, on the channel card, or with no
+    control focused; CH+ and CH- always do. On a button, Up and Down move the focus. Left and
+    Right never seek: they show the controls, and on the card they go to Play.
+  - **Zap banner** (`LiveChannelCard`, the bottom of the safe area): number, logo plate, name and
+    group, NOW with its times, the title, a progress bar and the time left, and NEXT. Quick presses
+    step through the channels in the banner; the player tunes 700 ms after the last press
+    (`player/zap.ts`), at once on Select. Back drops the choice. After a tune the banner stays 3 s.
+  - **Channel card:** the same card takes the scrubber's place in the controls and the first focus
+    (white 3-pt border on TV). Select opens the channel list.
+  - **Channel list:** the focused row's channel shows in the same card above the list, from the
+    guide. No preview opens a second stream (providers often allow one connection). "Search
+    channels" at the top stops the stream and opens the Live TV search.
+
 ---
 
 ## 8. iPad, Mac, keyboard and pointer

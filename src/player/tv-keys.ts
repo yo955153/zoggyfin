@@ -238,21 +238,39 @@ export function playerFocusOwner(s: { controlsVisible: boolean; promptShown: boo
   return s.promptShown && s.promptFocused ? 'prompt' : 'controls';
 }
 
-export type LiveKeyAction = { type: 'zap'; delta: 1 | -1 } | { type: 'wake' } | null;
+export type LiveKeyAction =
+  | { type: 'zap'; delta: 1 | -1 }
+  /** Show the controls (a live stream has nothing to seek). */
+  | { type: 'wake' }
+  /** Leave the channel card for the buttons above it. */
+  | { type: 'toButtons' }
+  | null;
 
 /**
- * Live TV keys, checked before the video keys. The channel keys always zap.
- * With the controls hidden, Up is channel up (the next channel, like CH+)
- * and Down is channel down. Left and Right only show the controls: a live
- * stream has nothing to seek. Null: the key keeps its video job (Back,
- * play and pause, and Up and Down while the controls show, which move the
- * focus).
+ * Where the TV focus is in the live player, for the zap keys.
+ * - `hidden`: the controls are hidden.
+ * - `card`: the controls show and the channel card (the LIVE row) has the focus.
+ * - `video`: the controls show and no control has the focus.
+ * - `buttons`: a button of the top or the centre row has the focus.
  */
-export function liveKeyAction(key: TvKey, controlsHidden: boolean): LiveKeyAction {
+export type LiveFocus = 'hidden' | 'card' | 'video' | 'buttons';
+
+/**
+ * Live TV keys, checked before the video keys (TiviMate style). The channel
+ * keys always zap. Up is the next channel (like CH+) and Down the one
+ * before, while the controls are hidden, on the channel card, or with no
+ * control focused; on a button they move the focus. Left and Right leave the
+ * card for the buttons, and elsewhere show the controls. Null: the key keeps
+ * its video job (Select, Back, play and pause). A sheet (the channel list)
+ * gets no keys here: the player stops listening while one is open.
+ */
+export function liveKeyAction(key: TvKey, focus: LiveFocus): LiveKeyAction {
   if (key === 'channelUp') return { type: 'zap', delta: 1 };
   if (key === 'channelDown') return { type: 'zap', delta: -1 };
-  if (controlsHidden && key === 'up') return { type: 'zap', delta: 1 };
-  if (controlsHidden && key === 'down') return { type: 'zap', delta: -1 };
+  const zaps = focus !== 'buttons';
+  if (zaps && key === 'up') return { type: 'zap', delta: 1 };
+  if (zaps && key === 'down') return { type: 'zap', delta: -1 };
+  if (focus === 'card' && (key === 'left' || key === 'right')) return { type: 'toButtons' };
   if (key === 'left' || key === 'right' || key === 'rewind' || key === 'fastForward') return { type: 'wake' };
   return null;
 }

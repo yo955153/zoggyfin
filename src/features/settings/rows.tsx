@@ -6,6 +6,7 @@ import { Platform, Text, View } from 'react-native';
 
 import { Icon, type IconName } from '@/components/icon';
 import { Touchable } from '@/components/touchable';
+import { isTV } from '@/platform/tv';
 import { createStyles, type AppTheme, font, iconSize, mediaColors, radius, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
 
 /** RN Web paints the "on" thumb green unless told otherwise; the RN types do not list the prop. */
@@ -64,7 +65,7 @@ export function SettingsRow({
       accessibilityRole={role}
       accessibilityLabel={value ? `${label}: ${value}` : label}
       accessibilityState={checked === undefined ? undefined : { checked }}
-      style={({ pressed, hovered, focused }) => [styles.rowPad, (pressed || hovered || focused) && styles.rowPressed]}>
+      style={({ pressed, hovered, focused }) => [styles.rowPad, (pressed || hovered || (focused && !isTV)) && styles.rowPressed]}>
       <LeadingIcon name={icon} />
       <View style={[styles.row, styles.rowBody, !last && styles.rowBorder]}>
         <Text style={styles.label} numberOfLines={2}>
@@ -107,7 +108,7 @@ export function ActionRow({ label, onPress, disabled }: { label: string; onPress
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed, hovered, focused }) => [styles.row, styles.actionRow, (pressed || hovered || focused) && styles.rowPressed]}>
+      style={({ pressed, hovered, focused }) => [styles.row, styles.actionRow, (pressed || hovered || (focused && !isTV)) && styles.rowPressed]}>
       <Text style={styles.destructive}>{label}</Text>
     </Touchable>
   );
