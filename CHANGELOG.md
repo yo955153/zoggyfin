@@ -55,6 +55,9 @@ first commit to today. All of it was built in the first weeks of the project.
   bounce. Item, library and genre pages fade their content in after a loading skeleton.
 - **Home discovery.** "Because you watched" rows from the server's movie recommendations, a "Short on
   time" row of unwatched movies of 100 minutes or less, and a genre of the day that changes at midnight.
+- **TS bridge (iOS).** A native bridge that plays a progressive MPEG-TS stream (the `.ts` URLs of many
+  IPTV lists, which AVPlayer cannot open) as a live HLS playlist from a local server, with Picture in
+  Picture, AirPlay and the lock screen. The IPTV player will use it. Needs a new native iOS build.
 
 ### Changed
 
