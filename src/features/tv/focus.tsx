@@ -10,7 +10,7 @@ import { Platform, StyleSheet, TextInput, TVFocusGuideView, View, type ViewProps
 import type { TvKey } from '@/player/tv-keys';
 import { isNativeTV, isTV } from '@/platform/tv';
 
-import { type ClaimReason, createPageRegistry, type KeyMemory, NO_KEY, pageShouldTakeFocus } from './page-focus';
+import { claimTarget, type ClaimReason, createPageRegistry, type KeyMemory, NO_KEY, pageShouldTakeFocus } from './page-focus';
 
 /** A host view. react-native-tvos adds `requestTVFocus`; on web it is a DOM element with `focus`. */
 export type FocusTarget = ComponentRef<typeof View>;
@@ -84,9 +84,15 @@ export function noteRemoteKey(key: TvKey): void {
  */
 const pageFocus = isNativeTV && Platform.OS === 'android';
 
-/** A page of a tab stack: its focus guide. */
+/** Android TV: the tab pages manage their own first focus (see TvPage). */
+export const tvPageFocus = pageFocus;
+
+/** A page of a tab stack: its focus guide, and the control that asks for the page's first focus. */
 export interface TvPageHandle {
   guide: { current: FocusTarget | null };
+  preferred: { current: FocusTarget | null };
+  /** When the page last became the visible one (ms). */
+  openedAt: { current: number };
 }
 
 export const tvPages = createPageRegistry<TvPageHandle>();
@@ -115,17 +121,40 @@ const SETTLE_MS = 60;
 function claimFocus(page: TvPageHandle, reason: ClaimReason, delay: number): ReturnType<typeof setTimeout> {
   return setTimeout(() => {
     if (tvPages.active() !== page) return;
+    const textFocused = !!TextInput.State.currentlyFocusedInput();
     const take = pageShouldTakeFocus({
       reason,
       focusOnPage: controlFocused && focusPage === page,
       focusOnHiddenPage: controlFocused && tvPages.isHidden(focusPage),
-      focusNowhere: !controlFocused && !menuFocused && !TextInput.State.currentlyFocusedInput(),
+      focusNowhere: !controlFocused && !menuFocused && !textFocused,
       menuFocused,
       last: lastKey,
       now: Date.now(),
+      keyedSinceOpen: lastKey.at > page.openedAt.current,
+      textFocused,
     });
-    if (take) focusView(page.guide.current);
+    if (!take) return;
+    const target = claimTarget(reason, controlFocused && focusPage === page, !!page.preferred.current);
+    if (target === 'preferred' && focusView(page.preferred.current)) return;
+    focusView(page.guide.current);
   }, delay);
+}
+
+/**
+ * Android TV: the control that asks for its page's first focus mounted (on)
+ * or went away (off). The page's claims give it the focus, so the first tile
+ * of a grid wins over a chip above it, whichever mounts first. (A native
+ * `hasTVPreferredFocus` asks before the view is laid out; in a grid that
+ * mounts twice it left the focus search unable to enter the page.)
+ */
+export function notePreferredControl(page: TvPageHandle | null, view: FocusTarget | null, on: boolean): void {
+  if (!pageFocus || !page || !view) return;
+  if (!on) {
+    if (page.preferred.current === view) page.preferred.current = null;
+    return;
+  }
+  page.preferred.current = view;
+  claimFocus(page, 'firstFocusMounted', SETTLE_MS);
 }
 
 /**
@@ -175,11 +204,14 @@ interface PageNavigation {
  */
 function TvPage({ navigation, children }: { navigation: PageNavigation; children: ReactElement }) {
   const guide = useRef<FocusTarget | null>(null);
-  const [handle] = useState<TvPageHandle>(() => ({ guide }));
+  const preferred = useRef<FocusTarget | null>(null);
+  const openedAt = useRef(0);
+  const [handle] = useState<TvPageHandle>(() => ({ guide, preferred, openedAt }));
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     let seen = false;
     const onFocus = () => {
+      openedAt.current = Date.now();
       tvPages.focus(handle);
       timers.push(seen ? claimFocus(handle, 'return', 0) : claimFocus(handle, 'open', SETTLE_MS));
       seen = true;

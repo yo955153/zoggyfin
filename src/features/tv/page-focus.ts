@@ -83,7 +83,9 @@ export type ClaimReason =
   /** The page opened, or one of its transitions ended. */
   | 'open'
   /** A control of the page mounted (its content loaded). */
-  | 'controlMounted';
+  | 'controlMounted'
+  /** The control that asks for the page's first focus mounted (the first tile of a grid). */
+  | 'firstFocusMounted';
 
 export interface ClaimState {
   reason: ClaimReason;
@@ -96,6 +98,10 @@ export interface ClaimState {
   menuFocused: boolean;
   last: KeyMemory;
   now: number;
+  /** A remote key came after the page opened: the person has moved the focus. */
+  keyedSinceOpen?: boolean;
+  /** A text field has the focus (the search field). */
+  textFocused?: boolean;
 }
 
 /**
@@ -109,5 +115,26 @@ export interface ClaimState {
 export function pageShouldTakeFocus(s: ClaimState): boolean {
   if (!pageMayTakeFocus(s.menuFocused, s.last, s.now)) return false;
   if (s.reason === 'controlMounted') return !s.focusOnPage && (s.focusOnHiddenPage || s.focusNowhere);
+  if (s.reason === 'firstFocusMounted') {
+    // The guide may have given the focus to a chip above the grid before the
+    // first tile mounted: the tile takes it, until the person moves it.
+    if (s.textFocused) return false;
+    return s.focusOnHiddenPage || s.focusNowhere || !s.keyedSinceOpen;
+  }
   return true;
+}
+
+/**
+ * Where a claim sends the focus. The page's guide gives it to the control
+ * the page had last, or else to its first control, which is often a chip or
+ * a tab above the content. A control that asks for the first focus (the
+ * first tile of a grid) gets it instead, while the person has not put the
+ * focus on the page yet (or, when it mounts, while the person has not moved
+ * the focus: pageShouldTakeFocus). A page that comes back keeps the control
+ * it had.
+ */
+export function claimTarget(reason: ClaimReason, focusOnPage: boolean, hasPreferred: boolean): 'preferred' | 'guide' {
+  if (!hasPreferred || reason === 'return') return 'guide';
+  if (focusOnPage && reason !== 'firstFocusMounted') return 'guide';
+  return 'preferred';
 }
