@@ -64,6 +64,9 @@ first commit to today. All of it was built in the first weeks of the project.
   it, checks its SHA-256 and opens the system installer. The Play build (`tv-play`) has no self-update.
   The website has a download for TV. TV releases keep the version 0.1.0; the build number
   (versionCode) tells them apart.
+- **TS bridge (iOS).** A native bridge that plays a progressive MPEG-TS stream (the `.ts` URLs of many
+  IPTV lists, which AVPlayer cannot open) as a live HLS playlist from a local server, with Picture in
+  Picture, AirPlay and the lock screen. Live TV uses it on iPhone and iPad. Needs a new native iOS build.
 
 ### Changed
 

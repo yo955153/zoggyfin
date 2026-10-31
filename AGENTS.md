@@ -50,6 +50,7 @@ Use pnpm (version 10), not npm or yarn. Node 22 or later.
 | `pnpm expo start --web --port 8082` then `pnpm desktop:dev` | The Mac app in development (needs `brew install mpv` and Rust) |
 | `pnpm desktop:build` | An unsigned Mac app for testing |
 | `pnpm test:crypto-swift` | Checks the Swift rendezvous crypto against the shared test vectors (macOS) |
+| `pnpm test:ts-bridge-swift` | Tests the Swift MPEG-TS segmenter and playlist builder of the TS bridge (macOS; with ffmpeg it also checks real streams with ffprobe) |
 | `pnpm bench:together`, `pnpm stress:controls` | Watch-together benchmarks (see `docs/perf/together-bench.md`) |
 
 `desktop:release`, `desktop:publish`, `desktop:version` and `site:deploy` are for the maintainer. They need keys that are not in the repository.
@@ -210,6 +211,7 @@ Pure logic sits in its own file with tests (for example `admin/logic.ts`, `playl
 | `zoggyfin-native` (`ZoggyfinNative`, `ZoggyfinVolume`, `ZoggyfinTogether`, `ZoggyfinAndroid`) | iOS, Android | `src/native/zoggyfin-native.native.ts`, `src/together/nearby-native.native.ts`, `src/features/music-player/volume-slider.native.tsx` | Hardware decoders, key input, volume slider, seekable MP4, nearby transport, CryptoKit, D-pad repeat throttle |
 | `zoggyfin-discovery` | iOS, Android | `src/servers/discovery/backend.native.ts` | UDP server discovery, local network access check |
 | `zoggyfin-share` | Android | `src/extensions/share-intake.native.ts` | Links shared from other apps |
+| `zoggyfin-native` (`ZoggyfinTsBridge`) | iOS | `src/native/ts-bridge.native.ts` (contract in `ts-bridge-types.ts`) | TS bridge: plays a progressive MPEG-TS stream (IPTV `.ts` URL) as a live HLS playlist on 127.0.0.1, for AVPlayer. Pure parsing in `TsSegmenter.swift` |
 
 The Mac app links the iOS nearby Swift code through `desktop/src-tauri/swift/`. A change in `modules/zoggyfin-native/ios/Nearby*.swift` also changes the Mac app.
 
@@ -274,6 +276,7 @@ The "Manual check" column lists what unit tests cannot see. The `verify-change` 
 | `src/native/`, `modules/` | `src/native/__tests__/seekable-mp4.test.ts` | Player capabilities, key input, together, discovery, share | Native build on iOS and Android. An OTA to an older binary must not crash (section 5) |
 | `src/iptv/` | `src/iptv/__tests__/` (m3u, xmltv, xtream, text, lists, manager; parsers have 10k+ entry performance tests) | Live TV pages, player live mode, Mac `iptv_fetch` | Add an M3U and an Xtream provider; groups, search, favourite; play, channel up and down, channel list; a refresh; a provider with no CORS on the plain web shows the message |
 | `src/features/iptv/`, live mode in `src/features/player/` | `src/player/__tests__/tv-keys.test.ts` (live keys) | Live TV routes, mini player | Phone, iPad width, web and TV: the list scrolls fast; TV: D-pad reaches every row, Left reaches the side menu, Up and Down zap with the controls hidden |
+| TS bridge (`modules/zoggyfin-native/ios/TsSegmenter.swift`, `TsBridge.swift`, `ZoggyfinTsBridgeModule.swift`, `src/native/ts-bridge*.ts`) | `pnpm test:ts-bridge-swift`, `src/native/__tests__/ts-bridge.test.ts` | IPTV playback on iOS | Native iOS build. Play a progressive `.ts` stream through `tsBridge.start()` on the simulator (a local source: `ffmpeg -re -stream_loop -1 -i x.ts -c copy -f mpegts` behind a small HTTP server): video and audio play, zapping stops the old session, a dropped source reconnects, Picture in Picture and background audio keep playing |
 | `src/lib/ota.ts` | `ota.test.ts` | Settings row, client version sent to the server | Settings shows the update |
 | `desktop/` | Rust: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` | Mac app only | `pnpm desktop:dev`: video, downloads, media keys, window state |
 | `site/` | `src/invite/__tests__/join-page.test.ts` covers the join page | Invite links | Open the pages locally; check `/join` with a test invite |
