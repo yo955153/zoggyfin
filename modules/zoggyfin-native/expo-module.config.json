@@ -4,6 +4,10 @@
     "modules": ["ZoggyfinNativeModule", "ZoggyfinVolumeModule", "ZoggyfinTogetherModule"]
   },
   "android": {
-    "modules": ["expo.modules.zoggyfinnative.ZoggyfinAndroidModule", "expo.modules.zoggyfinnative.ZoggyfinTogetherModule"]
+    "modules": [
+      "expo.modules.zoggyfinnative.ZoggyfinAndroidModule",
+      "expo.modules.zoggyfinnative.ZoggyfinTogetherModule",
+      "expo.modules.zoggyfinnative.ZoggyfinUpdaterModule"
+    ]
   }
 }

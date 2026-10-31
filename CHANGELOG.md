@@ -55,6 +55,10 @@ first commit to today. All of it was built in the first weeks of the project.
   bounce. Item, library and genre pages fade their content in after a loading skeleton.
 - **Home discovery.** "Because you watched" rows from the server's movie recommendations, a "Short on
   time" row of unwatched movies of 100 minutes or less, and a genre of the day that changes at midnight.
+- **Android TV updates.** The sideloaded Android TV app (Google TV, Fire TV) finds a new APK, downloads
+  it, checks its SHA-256 and opens the system installer. The Play build (`tv-play`) has no self-update.
+  The website has a download for TV. TV releases keep the version 0.1.0; the build number
+  (versionCode) tells them apart.
 
 ### Changed
 

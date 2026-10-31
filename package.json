@@ -95,6 +95,7 @@
     "desktop:publish": "bash desktop/scripts/publish.sh",
     "desktop:version": "bash desktop/scripts/version.sh",
     "site:deploy": "bash site/scripts/deploy.sh",
+    "tv:release": "bash scripts/release-android-tv.sh",
     "test:crypto-swift": "bash scripts/rendezvous-vectors/run.sh",
     "bench:together": "bash scripts/together-bench/run.sh",
     "stress:controls": "pnpm dlx tsx@4.20.5 --tsconfig scripts/together-bench/tsconfig.json scripts/together-bench/controls-stress.ts"
