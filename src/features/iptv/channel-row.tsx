@@ -5,14 +5,15 @@
  * the row (every remote has Right); the menu key on the focused row and a
  * long press on touch also favourite it. Fixed height, so the list can jump
  * to any row (`getItemLayout`). On TV the focus mark is the shared row fill
- * (Touchable, design system §7.19).
+ * (Touchable, design system §7.19). In "All providers" a small label after
+ * the name says which provider the channel comes from.
  */
 import { memo } from 'react';
 import { Text, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
 import { Touchable } from '@/components/touchable';
-import { type Channel, progressOf, useNowNext } from '@/iptv';
+import { type ProviderChannel, progressOf, useNowNext } from '@/iptv';
 import { isTV } from '@/platform/tv';
 import { createStyles, type AppTheme, font, iconSize, radius, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
 
@@ -26,20 +27,20 @@ export const HEART_TV = scaled(36);
 export const CHANNEL_ROW_HEIGHT = scaled(isTV ? 64 : 72);
 
 export const ChannelRow = memo(function ChannelRow({
-  providerId,
-  channel,
+  row,
   favourite,
   playing,
   now,
   showNext,
   numbered,
+  providerLabel,
   preferredFocus,
   onPlay,
   onToggleFavourite,
   onFocusRow,
 }: {
-  providerId: string;
-  channel: Channel;
+  /** The channel and its provider. */
+  row: ProviderChannel;
   favourite: boolean;
   /** This channel plays now. */
   playing: boolean;
@@ -49,18 +50,22 @@ export const ChannelRow = memo(function ChannelRow({
   showNext: boolean;
   /** Keep a number column (some channels of the list have numbers), so the logos line up. */
   numbered: boolean;
+  /** The provider's name, in a list that mixes providers. */
+  providerLabel?: string;
   preferredFocus?: boolean;
-  onPlay: (channel: Channel) => void;
-  onToggleFavourite: (channel: Channel) => void;
-  onFocusRow?: (channel: Channel | null) => void;
+  onPlay: (row: ProviderChannel) => void;
+  onToggleFavourite: (row: ProviderChannel) => void;
+  onFocusRow?: (row: ProviderChannel | null) => void;
 }) {
   const s = useStyles(makeStyles);
   const { c } = useTheme();
+  const { providerId, channel } = row;
   const nn = useNowNext(providerId, channel, now);
   const nowText = nn.now ? nn.now.title : null;
   const nextText = nn.next ? `${clock(nn.next.start)}  ${nn.next.title}` : null;
   const label = [
     channel.number !== undefined ? `${channel.number} ${channel.name}` : channel.name,
+    providerLabel ? `from ${providerLabel}` : null,
     playing ? 'Playing' : null,
     nowText ? `Now: ${nowText}` : null,
     nn.next ? `Next at ${clock(nn.next.start)}: ${nn.next.title}` : null,
@@ -74,11 +79,11 @@ export const ChannelRow = memo(function ChannelRow({
         kind="row"
         radius={radius.md}
         containerStyle={s.flex}
-        onPress={() => onPlay(channel)}
-        onLongPress={() => onToggleFavourite(channel)}
+        onPress={() => onPlay(row)}
+        onLongPress={() => onToggleFavourite(row)}
         delayLongPress={450}
         hasTVPreferredFocus={preferredFocus}
-        onFocus={() => onFocusRow?.(channel)}
+        onFocus={() => onFocusRow?.(row)}
         onBlur={() => onFocusRow?.(null)}
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -97,6 +102,11 @@ export const ChannelRow = memo(function ChannelRow({
               {channel.name}
             </Text>
             {favourite && isTV ? <Icon name="heart.fill" size={scaled(iconSize.sm - 6)} color={c.accent} /> : null}
+            {providerLabel ? (
+              <Text style={s.provider} numberOfLines={1}>
+                {providerLabel}
+              </Text>
+            ) : null}
           </View>
           {nn.now ? (
             <View style={s.nowLine}>
@@ -122,8 +132,8 @@ export const ChannelRow = memo(function ChannelRow({
       <Touchable
         kind="icon"
         radius={radius.pill}
-        onPress={() => onToggleFavourite(channel)}
-        onFocus={() => onFocusRow?.(channel)}
+        onPress={() => onToggleFavourite(row)}
+        onFocus={() => onFocusRow?.(row)}
         hitSlop={8}
         accessibilityRole="button"
         accessibilityLabel={favourite ? `Remove ${channel.name} from Favourites` : `Add ${channel.name} to Favourites`}
@@ -150,6 +160,18 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   rowPressed: { backgroundColor: c.surface2 },
   number: { ...font(type.subheadline), fontVariant: ['tabular-nums' as const], color: c.text2, width: scaled(34), textAlign: 'right' as const },
   playingText: { color: c.accent },
+  provider: {
+    ...font(type.caption2),
+    fontWeight: '600' as const,
+    color: c.text2,
+    backgroundColor: c.surface2,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.xs + 1,
+    paddingVertical: 1,
+    overflow: 'hidden' as const,
+    flexShrink: 0,
+    maxWidth: scaled(120),
+  },
   body: { flex: 1, minWidth: 0, gap: sizes.tileMetaGap },
   titleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs },
   title: { ...font(type.headline), color: c.text, flexShrink: 1 },

@@ -14,6 +14,13 @@
  * in the TV header, and the field on phones. Results follow every key press
  * and match the channel name and number; a search used to play a channel is
  * kept as a recent search.
+ *
+ * Several providers: "All providers" (two providers or more) merges
+ * Favourites, Recently watched and Search of every provider; each row names
+ * its provider, and channel up and down move through the merged list. The
+ * provider switch is in the browse column on TV and wide windows, and a
+ * chip row on phones. Groups, All channels, films and series stay per
+ * provider: picking a provider shows them.
  */
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { type ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -28,18 +35,29 @@ import { focusView } from '@/features/tv/focus';
 import { useTvBack } from '@/features/tv/use-tv-back';
 import { useTvRemote } from '@/features/tv/use-tv-remote';
 import {
+  ALL_PROVIDERS,
+  asProviderChannel,
   browseEntries,
   type Channel,
   FAVOURITES_GROUP,
   iptv,
+  mergedBrowseEntries,
+  mergedDefaultGroup,
+  type ProviderChannel,
+  providerChannelKey,
+  providerEntryKey,
+  RECENTS_GROUP,
   resolveGroup,
   SEARCH_ENTRY,
-  useActiveProviderId,
-  useChannelLists,
   useChannels,
   useChannelView,
+  useFavouriteKeys,
+  useLiveView,
+  useMergedLists,
+  useMergedSearch,
   useMinute,
   usePlayChannel,
+  usePlayMerged,
   useProviders,
   useRecentSearches,
   useVodKinds,
@@ -73,16 +91,19 @@ export function LiveTvScreen() {
   const bottomPad = useTabBottomPadding(isTV ? spacing.xxl : undefined);
   const group = useLiveGroup();
   const providers = useProviders();
-  const providerId = useActiveProviderId();
+  // A provider id, or ALL_PROVIDERS ("All providers").
+  const liveView = useLiveView();
+  const all = liveView === ALL_PROVIDERS;
+  const providerId = all ? null : liveView;
   const provider = providers.find((p) => p.id === providerId) ?? null;
   const data = useChannels(providerId);
-  const lists = useChannelLists(providerId);
-  const recentSearches = useRecentSearches(providerId);
+  const recentSearches = useRecentSearches(liveView);
+  const names = useMemo(() => new Map(providers.map((p) => [p.id, p.name])), [providers]);
 
-  // The group picked for a provider (another provider starts on its own default group).
-  const [pick, setPick] = useState<{ providerId: string | null; key: string } | null>(null);
-  const picked = pick && pick.providerId === providerId ? pick.key : null;
-  const setPicked = useCallback((key: string) => setPick({ providerId, key }), [providerId]);
+  // The group picked for a view (another provider starts on its own default group).
+  const [pick, setPick] = useState<{ view: string | null; key: string } | null>(null);
+  const picked = pick && pick.view === liveView ? pick.key : null;
+  const setPicked = useCallback((key: string) => setPick({ view: liveView, key }), [liveView]);
 
   // Search: the field text, and (TV and wide windows) the open Search entry.
   const [text, setText] = useState('');
@@ -98,48 +119,78 @@ export function LiveTvScreen() {
   const sections = useMemo(() => liveTvSections.filter((x) => x.available(kinds)), [kinds]);
 
   const base = useChannelView(providerId, '', '');
-  const groupKey = resolveGroup(base.groups, picked);
+  // "All providers": Favourites and Recently watched of every provider, and a search over all of them.
+  const merged = useMergedLists(all);
+  const mergedSearch = useMergedSearch(all && searching, query);
+  const groupKey = all ? mergedDefaultGroup(merged.favourites.length, merged.recents.length, picked) : resolveGroup(base.groups, picked);
   const view = useChannelView(providerId, groupKey, searching ? query : '');
-  const entries = useMemo(() => browseEntries(base.groups, sections), [base.groups, sections]);
-  const channels = searching && !query ? EMPTY : view.channels;
+  // The provider switch, with two providers or more: "All providers" first, then the user's order.
+  const providerEntries = useMemo(
+    () => (providers.length > 1 ? [{ providerId: ALL_PROVIDERS, label: 'All providers' }, ...providers.map((p) => ({ providerId: p.id, label: p.name }))] : []),
+    [providers],
+  );
+  const entries = useMemo(
+    () => (all ? mergedBrowseEntries(merged.favourites.length, merged.recents.length, providerEntries) : browseEntries(base.groups, sections, providerEntries)),
+    [all, merged.favourites.length, merged.recents.length, providerEntries, base.groups, sections],
+  );
+  // The rows: one provider's channels, or the merged list (each row knows its provider).
+  const rows: readonly (Channel | ProviderChannel)[] = useMemo(() => {
+    if (searching && !query) return EMPTY;
+    if (!all) return view.channels;
+    if (searching) return mergedSearch.results;
+    return groupKey === RECENTS_GROUP ? merged.recents : merged.favourites;
+  }, [all, searching, query, view.channels, mergedSearch.results, groupKey, merged.recents, merged.favourites]);
+  const rowOf = useCallback((r: Channel | ProviderChannel): ProviderChannel => ('channel' in r ? r : asProviderChannel(providerId ?? '', r)), [providerId]);
 
   const now = useMinute();
   const play = usePlayChannel();
-  const playingId = usePlayerStore((st) => (st.now?.live && st.now.live.source.providerId === providerId ? (st.now.live.channels[st.now.live.index]?.id ?? null) : null));
-  const favourites = useMemo(() => new Set(lists.favourites), [lists.favourites]);
-  // A number column only when the provider numbers its channels.
-  const numbered = useMemo(() => data.channels.some((ch) => ch.number !== undefined), [data.channels]);
+  const playMerged = usePlayMerged();
+  // The channel that plays, as a merged key (a merged list's channel ids are keys already).
+  const playingKey = usePlayerStore((st) => {
+    const live = st.now?.live;
+    const id = live?.channels[live.index]?.id;
+    if (!live || !id) return null;
+    return live.source.providerId === ALL_PROVIDERS ? id : providerChannelKey(live.source.providerId, id);
+  });
+  const favourites = useFavouriteKeys();
+  // A number column only when the list numbers its channels.
+  const numbered = useMemo(
+    () => (all ? rows.some((r) => rowOf(r).channel.number !== undefined) : data.channels.some((ch) => ch.number !== undefined)),
+    [all, rows, rowOf, data.channels],
+  );
+  const searchCount = all ? mergedSearch.results.length : view.channels.length;
 
   const toggle = useCallback(
-    (ch: Channel) => {
-      if (!providerId) return;
+    (row: ProviderChannel) => {
       // The list stays where it is: the first favourite does not switch the page to Favourites.
       if (!picked) setPicked(groupKey);
-      const on = iptv.toggleFavourite(providerId, ch.id);
+      const on = iptv.toggleFavourite(row.providerId, row.channel);
+      const ch = row.channel;
       toast(on ? `${ch.name} is in Favourites` : `${ch.name} is no longer in Favourites`, { icon: on ? 'heart.fill' : 'heart' });
     },
-    [providerId, picked, groupKey, setPicked],
+    [picked, groupKey, setPicked],
   );
   const onPlay = useCallback(
-    (ch: Channel) => {
-      if (!providerId) return;
-      if (searching && query) iptv.rememberSearch(providerId, query);
-      play(providerId, channels, ch);
+    (row: ProviderChannel) => {
+      if (searching && query && liveView) iptv.rememberSearch(liveView, query);
+      // Channel up and down move through the list the channel was played from.
+      if (all) playMerged(rows.map(rowOf), row);
+      else if (providerId) play(providerId, rows as Channel[], row.channel);
     },
-    [providerId, play, channels, searching, query],
+    [all, providerId, liveView, play, playMerged, rows, rowOf, searching, query],
   );
 
   // TV: the focused row (the menu key favourites it; the details panel shows it).
-  const focused = useRef<Channel | null>(null);
-  const [focusedRow, setFocusedRow] = useState<{ providerId: string | null; channel: Channel } | null>(null);
-  const shown = focusedRow && focusedRow.providerId === providerId ? focusedRow.channel : null;
+  const focused = useRef<ProviderChannel | null>(null);
+  const [focusedRow, setFocusedRow] = useState<{ view: string | null; row: ProviderChannel } | null>(null);
+  const shown = focusedRow && focusedRow.view === liveView ? focusedRow.row : null;
   const onFocusRow = useCallback(
-    (ch: Channel | null) => {
-      if (!ch) return;
-      focused.current = ch;
-      setFocusedRow({ providerId, channel: ch });
+    (row: ProviderChannel | null) => {
+      if (!row) return;
+      focused.current = row;
+      setFocusedRow({ view: liveView, row });
     },
-    [providerId],
+    [liveView],
   );
   useTvRemote(isNativeTV, (e) => {
     if (e.eventType === 'menu' && Number(e.eventKeyAction ?? -1) !== 0 && focused.current) toggle(focused.current);
@@ -180,26 +231,42 @@ export function LiveTvScreen() {
     if (providerId) router.push(x.href(group, providerId));
   }, [group, providerId]);
   const openProviders = useCallback(() => router.push(providersHref(group)), [group]);
+  const switchProvider = useCallback((id: string) => {
+    setSearchOpen(false);
+    setText('');
+    iptv.setActive(id);
+  }, []);
 
-  // Xtream: now and next load for the rows on screen.
+  // Xtream: now and next load for the rows on screen (in a merged list, per provider).
   const providerRef = useRef(providerId);
   useEffect(() => {
     providerRef.current = providerId;
   }, [providerId]);
   // FlatList needs the same function for its whole life.
-  const [onViewable] = useState(() => ({ viewableItems }: { viewableItems: { item?: Channel | null }[] }) => {
-    const id = providerRef.current;
-    if (id) iptv.requestNowNext(id, viewableItems.map((v) => v.item).filter((x): x is Channel => !!x));
+  const [onViewable] = useState(() => ({ viewableItems }: { viewableItems: { item?: Channel | ProviderChannel | null }[] }) => {
+    const byProvider = new Map<string, Channel[]>();
+    for (const v of viewableItems) {
+      const r = v.item;
+      if (!r) continue;
+      const pid = 'channel' in r ? r.providerId : providerRef.current;
+      if (!pid) continue;
+      const shownRows = byProvider.get(pid) ?? [];
+      shownRows.push('channel' in r ? r.channel : r);
+      byProvider.set(pid, shownRows);
+    }
+    for (const [pid, chs] of byProvider) iptv.requestNowNext(pid, chs);
   });
 
-  const list = useRef<ComponentRef<typeof FlatList<Channel>>>(null);
+  const list = useRef<ComponentRef<typeof FlatList<Channel | ProviderChannel>>>(null);
   useEffect(() => {
     list.current?.scrollToOffset({ offset: 0, animated: false });
-  }, [groupKey, query, providerId, searching]);
+  }, [groupKey, query, liveView, searching]);
 
-  const title = <Stack.Screen options={{ ...root, title: 'Live TV' }} />;
+  // The Live TV tab's root page has no header (`useRootScreenOptions`); opened from Home or
+  // Library it is a pushed page with a plain header and a back button.
+  const title = <Stack.Screen options={group === '(live)' ? { ...root, title: 'Live TV' } : { title: 'Live TV', headerLargeTitleEnabled: false }} />;
 
-  if (!providers.length || !providerId) {
+  if (!providers.length || !liveView) {
     return (
       <>
         {title}
@@ -225,7 +292,8 @@ export function LiveTvScreen() {
   }
 
   const busy = data.status === 'loading' || data.refreshing;
-  const refreshButton = (
+  // "All providers" has no reload: each provider reloads on its own page or in Manage providers.
+  const refreshButton = !providerId ? null : (
     <Touchable
       kind="icon"
       radius={radius.pill}
@@ -275,11 +343,18 @@ export function LiveTvScreen() {
     </View>
   );
 
+  // Phones: the provider switch as chips ("All providers" first). TV and wide windows: the browse column.
   const providerChips =
-    providers.length > 1 ? (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={[s.chipsContent, chipRowTV(), { paddingHorizontal: isTV ? spacing.sm : l.gutter }]}>
-        {providers.map((p) => (
-          <Chip key={p.id} label={p.name} icon="tv" selected={p.id === providerId} onPress={() => iptv.setActive(p.id)} />
+    providerEntries.length && !wide ? (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chips} contentContainerStyle={[s.chipsContent, { paddingHorizontal: l.gutter }]}>
+        {providerEntries.map((p) => (
+          <Chip
+            key={p.providerId}
+            label={p.label}
+            icon={p.providerId === ALL_PROVIDERS ? 'square.stack' : 'tv'}
+            selected={p.providerId === liveView}
+            onPress={() => switchProvider(p.providerId)}
+          />
         ))}
       </ScrollView>
     ) : null;
@@ -290,10 +365,9 @@ export function LiveTvScreen() {
       <View style={s.tvTitleBlock}>
         <Text style={s.tvTitle}>Live TV</Text>
         <Text style={s.tvSubtitle} numberOfLines={1}>
-          {[provider?.name, data.channels.length ? `${data.channels.length} channels` : null].filter(Boolean).join(' · ')}
+          {all ? `All providers · ${providers.length} providers` : [provider?.name, data.channels.length ? `${data.channels.length} channels` : null].filter(Boolean).join(' · ')}
         </Text>
       </View>
-      {providerChips}
       <Button title="Search" icon="magnifyingglass" variant="smallTonal" onPress={openSearch} />
       {refreshButton}
       {providersButton}
@@ -316,7 +390,7 @@ export function LiveTvScreen() {
           {recentSearches.map((q) => (
             <Chip key={q} label={q} icon="clock.arrow.circlepath" onPress={() => setText(q)} accessibilityLabel={`Search again for ${q}`} />
           ))}
-          <Chip label="Clear" onPress={() => iptv.clearSearches(providerId)} accessibilityLabel="Clear recent searches" />
+          <Chip label="Clear" onPress={() => iptv.clearSearches(liveView)} accessibilityLabel="Clear recent searches" />
         </ScrollView>
       </View>
     ) : null;
@@ -339,7 +413,7 @@ export function LiveTvScreen() {
   ) : null;
 
   const banner =
-    data.error && data.channels.length ? (
+    !all && data.error && data.channels.length ? (
       <View style={[s.banner, { marginHorizontal: l.gutter }]} accessibilityRole="alert">
         <Icon name="exclamationmark.triangle" size={scaled(iconSize.sm)} color={c.danger} />
         <Text style={s.bannerText} numberOfLines={3}>
@@ -356,22 +430,28 @@ export function LiveTvScreen() {
       ? {
           icon: 'heart',
           title: 'No favourites yet',
-          text: isTV ? 'Press the menu key on a channel, or move Right to its heart, to add it here.' : 'Tap the heart on a channel, or press and hold it, to add it here.',
+          text:
+            (isTV ? 'Press the menu key on a channel, or move Right to its heart, to add it here.' : 'Tap the heart on a channel, or press and hold it, to add it here.') +
+            (all ? ' Favourites of every provider show here.' : ''),
         }
-      : { icon: 'tv', title: 'No channels here', text: 'This group is empty. Load the channel list again to update it.' };
+      : all && groupKey === RECENTS_GROUP
+        ? { icon: 'clock.arrow.circlepath', title: 'Nothing watched yet', text: 'Channels you play from any provider show here, newest first.' }
+        : { icon: 'tv', title: 'No channels here', text: 'This group is empty. Load the channel list again to update it.' };
 
   // The list's width (TV: react-native-tvos puts a list in a focus guide with no size of its
   // own, so in a row it took the width of its content).
   const listWidth = wide ? Math.max(0, l.contentWidth - l.gutter * 2 - COLUMN_WIDTH - COLUMN_GAP - (details ? DETAILS_WIDTH + COLUMN_GAP : 0)) : undefined;
 
-  const results = searching && query && channels.length ? (
-    <Text style={s.resultCount}>
-      {channels.length >= 300 ? 'More than 300 channels match' : `${channels.length} ${channels.length === 1 ? 'channel matches' : 'channels match'}`}
-    </Text>
-  ) : null;
+  const results =
+    searching && query && (searchCount || (all && mergedSearch.loading)) ? (
+      <Text style={s.resultCount}>
+        {searchCount >= 300 ? 'More than 300 channels match' : `${searchCount} ${searchCount === 1 ? 'channel matches' : 'channels match'}`}
+        {all ? (mergedSearch.loading ? ' · loading the channel lists of every provider' : ` in ${providers.length} providers`) : ''}
+      </Text>
+    ) : null;
 
-  const loading = data.status === 'loading' && !data.channels.length;
-  const failed = data.status === 'error' && !data.channels.length;
+  const loading = !all && data.status === 'loading' && !data.channels.length;
+  const failed = !all && data.status === 'error' && !data.channels.length;
 
   const channelsList = loading ? (
     <View style={s.flex}>
@@ -386,15 +466,15 @@ export function LiveTvScreen() {
       <Text style={s.emptyTitle}>The channels did not load</Text>
       <Text style={s.emptyText}>{data.error}</Text>
       <View style={s.emptyActions}>
-        <Button title="Try again" icon="arrow.clockwise" onPress={() => void iptv.refresh(providerId)} preferredFocus={isTV} />
-        <Button title="Edit provider" variant="tonal" onPress={() => router.push(providerFormHref(group, { id: providerId }))} />
+        <Button title="Try again" icon="arrow.clockwise" onPress={() => providerId && void iptv.refresh(providerId)} preferredFocus={isTV} />
+        <Button title="Edit provider" variant="tonal" onPress={() => providerId && router.push(providerFormHref(group, { id: providerId }))} />
       </View>
     </View>
   ) : (
     <FlatList
       ref={list}
-      data={channels}
-      keyExtractor={(ch) => ch.id}
+      data={rows}
+      keyExtractor={(r) => ('channel' in r ? r.key : r.id)}
       style={[s.flex, listWidth !== undefined ? { width: listWidth } : null]}
       // TV: room for the heart's focus scale and ring at the trailing edge (the list clips).
       contentContainerStyle={{ paddingLeft: wide ? 0 : l.gutter, paddingRight: isTV ? tvFocusBleed(HEART_TV) : wide ? 0 : l.gutter, paddingBottom: bottomPad, paddingTop: spacing.xs, flexGrow: 1 }}
@@ -416,7 +496,9 @@ export function LiveTvScreen() {
             {recentChips}
             {results}
           </>
-        ) : undefined
+        ) : (
+          (results ?? undefined)
+        )
       }
       ListEmptyComponent={
         <View style={[s.listEmpty, searching && s.listEmptyTop]}>
@@ -425,20 +507,23 @@ export function LiveTvScreen() {
           <Text style={s.listEmptyText}>{empty.text}</Text>
         </View>
       }
-      renderItem={({ item }) => (
-        <ChannelRow
-          providerId={providerId}
-          channel={item}
-          favourite={favourites.has(item.id)}
-          playing={item.id === playingId}
-          now={now}
-          showNext={!details}
-          numbered={numbered}
-          onPlay={onPlay}
-          onToggleFavourite={toggle}
-          onFocusRow={onFocusRow}
-        />
-      )}
+      renderItem={({ item }) => {
+        const row = rowOf(item);
+        return (
+          <ChannelRow
+            row={row}
+            favourite={favourites.has(row.key)}
+            playing={row.key === playingKey}
+            now={now}
+            showNext={!details}
+            numbered={numbered}
+            providerLabel={all ? names.get(row.providerId) : undefined}
+            onPlay={onPlay}
+            onToggleFavourite={toggle}
+            onFocusRow={onFocusRow}
+          />
+        );
+      }}
     />
   );
 
@@ -447,7 +532,7 @@ export function LiveTvScreen() {
       {title}
       <View style={s.page}>
         {isTV ? tvHeader : toolbar}
-        {isTV ? null : providerChips}
+        {providerChips}
         {!wide ? recentChips : null}
         {groupChips}
         {banner}
@@ -456,7 +541,7 @@ export function LiveTvScreen() {
             <BrowseColumn
               entries={entries}
               sections={sections}
-              selected={searching ? SEARCH_ENTRY : groupKey}
+              selected={[searching ? SEARCH_ENTRY : groupKey, providerEntryKey(liveView)]}
               width={COLUMN_WIDTH}
               bottomPad={bottomPad}
               searchRef={searchEntry}
@@ -464,9 +549,19 @@ export function LiveTvScreen() {
               onGroup={pickGroup}
               onSection={openSection}
               onProviders={openProviders}
+              onProvider={switchProvider}
             />
             {channelsList}
-            {details && !loading && !failed ? <ChannelDetails providerId={providerId} channel={shown} now={now} favourite={!!shown && favourites.has(shown.id)} width={DETAILS_WIDTH} /> : null}
+            {details && !loading && !failed ? (
+              <ChannelDetails
+                providerId={shown?.providerId ?? providerId ?? ''}
+                channel={shown?.channel ?? null}
+                providerLabel={all && shown ? names.get(shown.providerId) : undefined}
+                now={now}
+                favourite={!!shown && favourites.has(shown.key)}
+                width={DETAILS_WIDTH}
+              />
+            ) : null}
           </View>
         ) : (
           channelsList

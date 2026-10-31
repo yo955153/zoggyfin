@@ -77,9 +77,23 @@ first commit to today. All of it was built in the first weeks of the project.
   channel stream and switches them (channels show it when they have two audio tracks or subtitles).
   The choice is kept per film, series or channel, and a new title starts in the languages picked
   last. Browsers other than Safari cannot switch the tracks inside an MP4 or MKV file.
+- **IPTV: All providers.** With two providers or more, Live TV has "All providers": Favourites,
+  Recently watched and channel search of every provider in one list, each channel with a small label
+  of its provider. Channel up and down in the player stay in that list. The provider switch is in the
+  browse column on TV and wide windows and a chip row on phones; groups, films and series stay per
+  provider. Favourites and recents keep a small copy of each channel (no stream address), so the
+  merged lists need no channel list in memory; only a search loads every list.
+- **IPTV providers.** Choose what Live TV opens on (the last one used, All providers or one
+  provider) and the order of the providers. Two providers never share a name ("Playlist 2"). Removing
+  a provider also removes its recent searches and the audio and subtitle choices of its titles.
 
 ### Changed
 
+- **Compact tab pages.** The first page of each tab (Home, Library, Music, Live TV, Search, Downloads)
+  has no large title any more: the tab bar already shows where you are, and the content starts at the
+  top of the screen. A slim bar stays only where a page has buttons in it (the profile button on Home,
+  the library picker on Music, the search field on iPhone and Android). Library and genre pages show
+  their name in a normal-size title.
 - **Live TV.** A new layout, made for the TV first: a browse column (Search, Favourites, Recently
   watched, All channels, the groups, Providers), the channel list with numbers, logos and what is on
   now, and on TV a panel with now and next for the focused channel. Search is one step away (the

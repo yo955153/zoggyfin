@@ -53,13 +53,15 @@ import { useTabBottomPadding } from '@/lib/tab-bar-inset';
 
 const RECENT_KEY = 'search.recent';
 const PLACEHOLDER = 'Movies, shows, music, people';
+const ownField = Platform.OS === 'web' || isTV;
 
 export default function SearchScreen() {
   const s = useStyles(makeStyles);
   const bottomPad = useTabBottomPadding();
   const { c } = useTheme();
   const l = useLayout();
-  const root = useRootScreenOptions();
+  // iOS and Android: the native search field lives in a slim header. Web and TV draw their own field.
+  const root = useRootScreenOptions({ bar: !ownField });
   const [text, setText] = useState('');
   const [filter, setFilter] = useState<SearchFilter>('all');
   const term = useDebounced(text.trim(), sizes.searchDebounce);
@@ -101,8 +103,6 @@ export default function SearchScreen() {
     setText(r);
     searchRef.current?.setText(r);
   };
-
-  const ownField = Platform.OS === 'web' || isTV;
 
   return (
     <>

@@ -12,11 +12,13 @@ import { tsBridge } from '@/native/ts-bridge';
 import { isDesktop } from '@/platform/desktop';
 import { isTV } from '@/platform/tv';
 import type { LiveChannelRef, LivePlayRequest, LiveSource } from '@/player';
+import { forgetProviderTracks } from '@/player/track-prefs-store';
 
 import { IptvError, iptvErrorText, isHttpUrl } from './errors';
 import { iptvFiles } from './files';
 import { EMPTY_GUIDE, guideIdFor, isStale, nowNext, withProgrammes } from './guide';
-import { addRecent, EMPTY_LISTS, toggleFavourite as toggleIn } from './lists';
+import { addRecent, EMPTY_LISTS, snapOf, toggleFavourite as toggleIn, withSnaps } from './lists';
+import { ALL_PROVIDERS, moveInOrder, type ProviderChannel, resolveActive, splitProviderChannelKey, uniqueProviderName } from './merged';
 import { parseM3u } from './m3u';
 import { migrateChannelsFile, migrateGuide } from './migrate';
 import { buildSearchIndex, EMPTY_RECENT_SEARCHES, rememberSearch, type RecentSearches } from './search';
@@ -83,8 +85,8 @@ function applyScope(scope: Scope | null): void {
   const id = scope ? scopeId(scope) : null;
   if (iptvState().scope === id) return;
   const providers = scope ? loadProviders(scope) : { schemaVersion: PROVIDERS_SCHEMA_VERSION, providers: {}, order: [] };
-  const saved = scope ? loadActive(scope) : null;
-  const activeId = saved && providers.providers[saved] ? saved : (providers.order[0] ?? null);
+  // The start the person chose (a provider or "All providers"), else the last one used.
+  const activeId = resolveActive(providers.startWith, scope ? loadActive(scope) : null, providers.order);
   // Another account: its providers only; the memory of the old ones goes.
   setIptvState({ scope: id, providers, activeId, data: {}, lists: {}, guides: {}, guideNames: {}, guideStatus: {} });
   resetVodState();
@@ -109,8 +111,10 @@ function requireScope(): Scope {
   return scope;
 }
 
-function saveSnapshot(scope: Scope, providers: Record<string, ProviderRecord>, order: string[]): void {
-  const snap = { schemaVersion: PROVIDERS_SCHEMA_VERSION, providers, order };
+function saveSnapshot(scope: Scope, providers: Record<string, ProviderRecord>, order: readonly string[], startWith = iptvState().providers.startWith ?? null): void {
+  // A removed provider is no longer the start; "All providers" needs two.
+  const start = startWith === ALL_PROVIDERS ? (order.length > 1 ? startWith : null) : startWith && providers[startWith] ? startWith : null;
+  const snap = { schemaVersion: PROVIDERS_SCHEMA_VERSION, providers, order: order.slice(), startWith: start };
   setIptvState({ providers: snap });
   saveProviders(scope, snap);
 }
@@ -119,6 +123,21 @@ export function setActiveProvider(id: string | null): void {
   const scope = currentScope();
   setIptvState({ activeId: id });
   if (scope) saveActive(scope, id);
+}
+
+/** Moves a provider one place up (-1) or down (+1) in the list (chips, the browse column, "All providers"). */
+export function moveProvider(id: string, delta: -1 | 1): void {
+  const scope = requireScope();
+  const st = iptvState();
+  const order = moveInOrder(st.providers.order, id, delta);
+  if (order !== st.providers.order) saveSnapshot(scope, st.providers.providers, order);
+}
+
+/** What Live TV opens on: a provider id, ALL_PROVIDERS, or null for the last one used. */
+export function setStartWith(startWith: string | null): void {
+  const scope = requireScope();
+  const st = iptvState();
+  saveSnapshot(scope, st.providers.providers, st.providers.order, startWith);
 }
 
 export function providerById(id: string): ProviderRecord | null {
@@ -175,6 +194,11 @@ function showChannels(id: string, entries: Channel[]): void {
   setM3uVod(id, split.vod);
   const channels = split.live;
   patchData(id, { status: 'ready', channels, index: buildSearchIndex(channels), error: null, refreshing: false });
+  // The favourites and recents keep a snap of their channels for "All providers" (new name, new logo).
+  const lists = iptvState().lists[id] ?? loadLists(id);
+  const next = withSnaps(lists, channels);
+  if (next !== lists || !iptvState().lists[id]) setIptvState({ lists: { ...iptvState().lists, [id]: next } });
+  if (next !== lists) saveLists(id, next);
 }
 
 /** The number of live channels shown for a provider. */
@@ -302,6 +326,8 @@ export async function saveProvider(input: ProviderInput, id?: string): Promise<s
   const full: ProviderSecrets = { ...secrets, playlistGuideUrl: r.playlistGuideUrl };
   writeSecrets(pid, full);
   const st = iptvState();
+  // Two providers never share a name: the chips and the labels in "All providers" tell them apart.
+  record.name = uniqueProviderName(record.name, st.providers.order.filter((x) => x !== pid).map((x) => st.providers.providers[x]?.name ?? ''));
   const saved: ProviderRecord = {
     ...record,
     refreshedAt: Date.now(),
@@ -321,19 +347,37 @@ export async function saveProvider(input: ProviderInput, id?: string): Promise<s
   return pid;
 }
 
-/** Removes a provider with its secrets, files, favourites and recents. */
+/** Everything but one key. */
+function without<T>(rec: Record<string, T>, id: string): Record<string, T> {
+  const { [id]: _gone, ...rest } = rec;
+  return rest;
+}
+
+/**
+ * Removes a provider with everything of it: the record, its secrets, the
+ * channel, guide and film files, favourites, recents and recent searches,
+ * films and series data, and the audio and subtitle choices of its titles.
+ * Live TV moves to the first provider left (or stays on "All providers"
+ * while two are left).
+ */
 export async function removeProvider(id: string): Promise<void> {
   const scope = requireScope();
   const st = iptvState();
-  const { [id]: _gone, ...rest } = st.providers.providers;
-  saveSnapshot(scope, rest, st.providers.order.filter((x) => x !== id));
+  const order = st.providers.order.filter((x) => x !== id);
+  saveSnapshot(scope, without(st.providers.providers, id), order);
   removeSecrets(id);
   removeLists(id);
   removeVodData(id);
-  const { [id]: _d, ...data } = st.data;
-  const { [id]: _g, ...guides } = st.guides;
-  setIptvState({ data, guides });
-  if (st.activeId === id) setActiveProvider(iptvState().providers.order[0] ?? null);
+  forgetProviderTracks(id);
+  setIptvState({
+    data: without(st.data, id),
+    guides: without(st.guides, id),
+    guideNames: without(st.guideNames, id),
+    guideStatus: without(st.guideStatus, id),
+    lists: without(st.lists, id),
+    searches: without(st.searches, id),
+  });
+  if (st.activeId === id || (st.activeId === ALL_PROVIDERS && order.length < 2)) setActiveProvider(order[0] ?? null);
   await iptvFiles.remove(dirOf(id));
 }
 
@@ -355,13 +399,23 @@ function setLists(id: string, update: (l: typeof EMPTY_LISTS) => typeof EMPTY_LI
   saveLists(id, next);
 }
 
-export function toggleFavourite(providerId: string, channelId: string): boolean {
-  setLists(providerId, (l) => toggleIn(l, channelId));
-  return (iptvState().lists[providerId]?.favourites ?? []).includes(channelId);
+/** Adds or removes a favourite. Returns true when the channel is a favourite now. */
+export function toggleFavourite(providerId: string, channel: Channel): boolean {
+  setLists(providerId, (l) => toggleIn(l, channel.id, snapOf(channel)));
+  return (iptvState().lists[providerId]?.favourites ?? []).includes(channel.id);
 }
 
 export function markWatched(providerId: string, channelId: string): void {
-  setLists(providerId, (l) => addRecent(l, channelId, Date.now()));
+  const channel = iptvState().data[providerId]?.channels.find((c) => c.id === channelId);
+  setLists(providerId, (l) => addRecent(l, channelId, Date.now(), channel ? snapOf(channel) : l.snaps[channelId]));
+}
+
+/** Loads the channel list of every provider (a search in "All providers"). One at a time, saved lists first. */
+export async function ensureAllLoaded(): Promise<void> {
+  for (const id of iptvState().providers.order) {
+    if (!providerById(id)) continue;
+    await ensureLoaded(id).catch(() => undefined);
+  }
 }
 
 // ---- Recent searches --------------------------------------------------------------------
@@ -536,6 +590,8 @@ function sourceFor(providerId: string): LiveSource {
     providerId,
     async resolve(channelId) {
       const record = providerById(providerId);
+      // A favourite of "All providers" can play before its provider's list is in memory.
+      if (record && !find(channelId)) await ensureLoaded(providerId).catch(() => undefined);
       const channel = find(channelId);
       if (!record || !channel) return { candidates: [], userAgent: null, unsupported: 'This channel is not in the list any more.' };
       return liveStreamFor(channel, record, xtreamLogin(record, readSecrets(providerId)), streamPlatform, tsBridge !== null);
@@ -564,4 +620,49 @@ function sourceFor(providerId: string): LiveSource {
 export function playRequest(providerId: string, list: readonly Channel[], channel: Channel): LivePlayRequest {
   const index = Math.max(0, list.findIndex((c) => c.id === channel.id));
   return { channels: (list.length ? list : [channel]).map(refOf), index, source: sourceFor(providerId) };
+}
+
+/**
+ * The source of a list that mixes providers ("All providers"). Its channel
+ * ids are merged keys (`merged.ts`); each call goes to the channel's own
+ * provider, so channel up and down move through the merged list.
+ */
+function mergedSource(): LiveSource {
+  const split = (key: string) => splitProviderChannelKey(key);
+  const none = { candidates: [], userAgent: null, unsupported: 'This channel is not in the list any more.' };
+  return {
+    providerId: ALL_PROVIDERS,
+    async resolve(key) {
+      const k = split(key);
+      return k ? sourceFor(k.providerId).resolve(k.channelId) : none;
+    },
+    nowLine(key) {
+      const k = split(key);
+      return k ? (sourceFor(k.providerId).nowLine?.(k.channelId) ?? null) : null;
+    },
+    nowNext(key) {
+      const k = split(key);
+      return k ? (sourceFor(k.providerId).nowNext?.(k.channelId) ?? { now: null, next: null }) : { now: null, next: null };
+    },
+    onStart(key) {
+      const k = split(key);
+      if (k) markWatched(k.providerId, k.channelId);
+    },
+    titleOf(key) {
+      const k = split(key);
+      return k ?? { providerId: ALL_PROVIDERS, channelId: key };
+    },
+  };
+}
+
+/** The play request for a channel in a merged list: channel up and down stay in that list. */
+export function playMergedRequest(list: readonly ProviderChannel[], item: ProviderChannel): LivePlayRequest {
+  const index = Math.max(0, list.findIndex((x) => x.key === item.key));
+  const items = list.length ? list : [item];
+  const st = iptvState();
+  return {
+    channels: items.map((x) => ({ ...refOf(x.channel), id: x.key, provider: st.providers.providers[x.providerId]?.name })),
+    index,
+    source: mergedSource(),
+  };
 }

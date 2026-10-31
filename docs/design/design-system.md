@@ -9,7 +9,7 @@ If the two files disagree, `theme.ts` is correct and this file needs an update.
 ## 0. Principles
 
 1. **Artwork is the hero.** Chrome is neutral graphite and glass. The only brand colour is Ember. Art supplies the rest.
-2. **Native first.** Use the native tab bar, native context menus, native sheets and native large titles. Build custom UI only where iOS has no control: tiles, the pager strip and player overlays.
+2. **Native first.** Use the native tab bar, native context menus, native sheets and compact native headers (tab root pages have no title: the tab bar names them). Build custom UI only where iOS has no control: tiles, the pager strip and player overlays.
 3. **Nothing is blank.** Every tile has a picture. Every list has a loading state, an empty state and an error state.
 4. **Motion follows the finger.** Gestures drive the UI on the UI thread. Animations can be interrupted and they keep velocity. Nothing animates for decoration.
 5. **Calm density.** Few weights, one accent, generous gaps between sections, tight gaps inside a group.
@@ -210,7 +210,7 @@ Sizes are the iOS "Large" (default) sizes. Text scales with the user's text size
 | Token | Size / line | Weight | Tracking | Dynamic Type style | maxScale | Use |
 |---|---|---|---|---|---|---|
 | `display` | 34 / 41 | 800 | 0.4 | largeTitle | 1.4 | Detail page title |
-| `largeTitle` | 34 / 41 | 700 | 0.4 | largeTitle | 1.6 | Native large title (tab roots) |
+| `largeTitle` | 34 / 41 | 700 | 0.4 | largeTitle | 1.6 | Page titles drawn in the page (TV, empty states) |
 | `title1` | 28 / 34 | 700 | 0.38 | title1 | 1.6 | iPad detail title |
 | `title2` | 22 / 28 | 700 | −0.26 | title2 | 1.8 | Album title, player title |
 | `title3` | 20 / 25 | 600 | −0.45 | title3 | 1.8 | Section headers |
@@ -480,7 +480,7 @@ The generated tile is a real tile (same press, hover and badge rules). It is not
 - Title `callout` 500. Status line `footnote` `text2` tabular: "812 MB of 1.4 GB · 8.6 MB/s · 1 min left". Progress bar 4 pt, track `surface3`, fill `accent`. Update the bar on the UI thread at most 4 times per second; animate between values with 240 ms linear so it never jumps.
 - Trailing control (36 circle, `surface2`): Pause (in progress), Resume (paused), × Cancel (queued). Failed: `danger` icon and reason in the status line ("Server not reachable", "Not enough space"), with a "Retry" pill in `accent`.
 - Done: the row moves from "In progress" to "On this device" with a 240 ms fade and a `success` haptic (once per batch, not per file).
-- **Downloads screen:** large title, a storage bar (8 pt, segments: Zoggyfin in `accent`, Other in `controlBorder`, free in `surface3`) with a legend line, then "In progress · N" with "Pause all", then "On this device" grouped by series/album with count and size. Swipe left to delete; Edit for multi-select. Destructive confirms state the size.
+- **Downloads screen:** no title (tab root), a storage bar (8 pt, segments: Zoggyfin in `accent`, Other in `controlBorder`, free in `surface3`) with a legend line, then "In progress · N" with "Pause all", then "On this device" grouped by series/album with count and size. Swipe left to delete; Edit for multi-select. Destructive confirms state the size.
 
 ### 7.12 Action sheet and context menu
 

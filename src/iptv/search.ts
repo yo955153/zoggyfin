@@ -48,8 +48,19 @@ export function buildSearchIndex(channels: readonly Channel[]): SearchIndex {
 /** The number of match steps (see the module comment). */
 const STEPS = 5;
 
+/** A search hit with its match step (0 is the best; see the module comment). */
+export interface RankedHit {
+  channel: Channel;
+  step: number;
+}
+
 /** Channels that match the query, best first (see the module comment). */
 export function searchChannels(index: SearchIndex, query: string, limit = 200): Channel[] {
+  return searchChannelsRanked(index, query, limit).map((h) => h.channel);
+}
+
+/** The same as `searchChannels`, with the match step of each hit, so hits of several lists can merge. */
+export function searchChannelsRanked(index: SearchIndex, query: string, limit = 200): RankedHit[] {
   const words = foldText(query).split(' ').filter(Boolean);
   if (!words.length) return [];
   const digits = /^\d+$/.test(query.trim()) ? query.trim() : null;
@@ -89,11 +100,11 @@ export function searchChannels(index: SearchIndex, query: string, limit = 200): 
   }
   // A number prefix: lower numbers first (10, 100, 101 … rather than the list order).
   buckets[1].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
-  const out: Channel[] = [];
-  for (const b of buckets) {
-    for (const c of b) {
+  const out: RankedHit[] = [];
+  for (let step = 0; step < STEPS; step++) {
+    for (const channel of buckets[step]) {
       if (out.length >= limit) return out;
-      out.push(c);
+      out.push({ channel, step });
     }
   }
   return out;

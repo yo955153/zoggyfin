@@ -60,7 +60,24 @@ jest.mock('@/auth/session-store', () => {
 });
 
 // eslint-disable-next-line import/first
-import { formValues, playRequest, refresh, removeProvider, saveProvider, toggleFavourite, ensureLoaded } from '../manager';
+import {
+  ensureLoaded,
+  formValues,
+  moveProvider,
+  playMergedRequest,
+  playRequest,
+  refresh,
+  rememberSearchFor,
+  removeProvider,
+  saveProvider,
+  setActiveProvider,
+  setStartWith,
+  toggleFavourite,
+} from '../manager';
+// eslint-disable-next-line import/first
+import { ALL_PROVIDERS, asProviderChannel } from '../merged';
+// eslint-disable-next-line import/first
+import { saveTrackPrefs } from '@/player/track-prefs-store';
 // eslint-disable-next-line import/first
 import { iptvState, patchData, setIptvState } from '../store';
 
@@ -157,7 +174,7 @@ describe('IPTV manager', () => {
     mockTexts.set(PLAYLIST, SAMPLE_M3U);
     const id = await saveProvider({ kind: 'm3u', name: 'L', playlistUrl: PLAYLIST, guideUrl: null, userAgent: null });
     const ch = iptvState().data[id].channels[0];
-    expect(toggleFavourite(id, ch.id)).toBe(true);
+    expect(toggleFavourite(id, ch)).toBe(true);
     expect(mockKv.has(`iptv.lists.${id}`)).toBe(true);
     await removeProvider(id);
     expect(iptvState().providers.order).toEqual([]);
@@ -175,5 +192,73 @@ describe('IPTV manager', () => {
     await expect(saveProvider({ kind: 'm3u', name: '', playlistUrl: 'nope', guideUrl: null, userAgent: null })).rejects.toBeTruthy();
     expect(iptvState().providers.order).toEqual([]);
     setSession('u1');
+  });
+});
+
+describe('several providers', () => {
+  const PLAYLIST2 = 'https://other.example.com/list.m3u?token=t2';
+
+  async function two(): Promise<[string, string]> {
+    mockTexts.set(PLAYLIST, SAMPLE_M3U);
+    mockTexts.set(PLAYLIST2, SAMPLE_M3U);
+    const a = await saveProvider({ kind: 'm3u', name: 'Playlist', playlistUrl: PLAYLIST, guideUrl: null, userAgent: null });
+    const b = await saveProvider({ kind: 'm3u', name: 'playlist', playlistUrl: PLAYLIST2, guideUrl: null, userAgent: null });
+    return [a, b];
+  }
+
+  it('gives a second provider with the same name a number', async () => {
+    const [a, b] = await two();
+    expect(iptvState().providers.providers[a].name).toBe('Playlist');
+    expect(iptvState().providers.providers[b].name).toBe('playlist 2');
+  });
+
+  it('moves a provider and keeps the start choice; a removed start goes back to the last one used', async () => {
+    const [a, b] = await two();
+    moveProvider(b, -1);
+    expect(iptvState().providers.order).toEqual([b, a]);
+    setStartWith(a);
+    expect(iptvState().providers.startWith).toBe(a);
+    moveProvider(a, 1);
+    expect(iptvState().providers.startWith).toBe(a);
+    await removeProvider(a);
+    expect(iptvState().providers.startWith).toBeNull();
+  });
+
+  it('keeps a snap of favourites without URLs, and plays a merged list across providers', async () => {
+    const [a, b] = await two();
+    const chA = iptvState().data[a].channels[0];
+    const chB = iptvState().data[b].channels[1];
+    toggleFavourite(a, chA);
+    toggleFavourite(b, chB);
+    const saved = mockKv.get(`iptv.lists.${a}`) ?? '';
+    expect(JSON.parse(saved).snaps[chA.id].name).toBe(chA.name);
+    expect(saved).not.toContain('stream.example.com');
+    const list = [asProviderChannel(a, chA), asProviderChannel(b, chB)];
+    const req = playMergedRequest(list, list[1]);
+    expect(req.index).toBe(1);
+    expect(req.source.providerId).toBe(ALL_PROVIDERS);
+    expect(req.channels.map((c) => c.provider)).toEqual(['Playlist', 'playlist 2']);
+    expect(req.source.titleOf?.(req.channels[1].id)).toEqual({ providerId: b, channelId: chB.id });
+    const stream = await req.source.resolve(req.channels[0].id);
+    expect(stream.candidates[0].url).toContain('stream.example.com');
+    req.source.onStart?.(req.channels[1].id);
+    expect(iptvState().lists[b].recents[0].id).toBe(chB.id);
+  });
+
+  it('removes everything of a provider: lists, searches, track choices, secrets and files', async () => {
+    const [a, b] = await two();
+    toggleFavourite(a, iptvState().data[a].channels[0]);
+    rememberSearchFor(a, 'news');
+    saveTrackPrefs({ version: 1, audioLanguage: null, subtitleLanguage: null, titles: { [`${a}|live:1`]: { at: 1 }, [`${b}|live:1`]: { at: 2 } } });
+    setActiveProvider(ALL_PROVIDERS);
+    await removeProvider(a);
+    expect(mockKv.has(`iptv.lists.${a}`)).toBe(false);
+    expect(mockKv.has(`iptv.searches.${a}`)).toBe(false);
+    expect(Object.keys(JSON.parse(mockKv.get('player.iptvTracks.s1.u1') ?? '{}').titles)).toEqual([`${b}|live:1`]);
+    expect([...mockSecure.keys()]).toEqual([`iptv.${b}`]);
+    expect([...mockFiles.keys()].every((k) => k.startsWith(`iptv/${b}/`))).toBe(true);
+    expect(iptvState().lists[a]).toBeUndefined();
+    // One provider is left: "All providers" goes, and Live TV shows that provider.
+    expect(iptvState().activeId).toBe(b);
   });
 });

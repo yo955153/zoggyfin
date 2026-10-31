@@ -63,7 +63,7 @@ export function ProviderForm({ id, kind: kindParam }: { id?: string; kind?: Prov
 
   const remove = async () => {
     if (!id) return;
-    if (!(await confirmDestructive('Remove provider?', 'Its channel list, favourites and saved login are removed from this device.', 'Remove'))) return;
+    if (!(await confirmDestructive('Remove provider?', 'Its channels, favourites, recently watched, films and series, watch positions, audio and subtitle choices and saved login are removed from this device.', 'Remove'))) return;
     await iptv.remove(id);
     toast('Provider removed', { icon: 'trash' });
     router.dismissTo(liveTvHref(group));

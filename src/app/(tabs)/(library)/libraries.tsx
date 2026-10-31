@@ -23,6 +23,7 @@ export default function LibraryScreen() {
           items={items}
           shape="thumb"
           onRefresh={views.refetch}
+          headerless
           ListHeaderComponent={<LiveTvEntry />}
           ListEmptyComponent={<EmptyState icon="square.stack" title="No libraries" message="This account has no libraries yet." />}
         />

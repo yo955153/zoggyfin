@@ -21,9 +21,10 @@ export default function MusicScreen() {
   const styles = useStyles(makeStyles);
   const { c } = useTheme();
   const l = useLayout();
-  const root = useRootScreenOptions();
   const views = useViews();
   const audio = (views.data ?? []).filter(isAudioView);
+  // A slim header only for the library picker (more than one music library); it names the picked library.
+  const root = useRootScreenOptions({ bar: audio.length > 1 });
   const [chosen, setChosen] = useState(() => storage.getString(KEY));
   const [picker, setPicker] = useState(false);
   const library = audio.find((v) => v.Id === chosen) ?? audio[0];
@@ -34,6 +35,7 @@ export default function MusicScreen() {
         options={{
           ...root,
           title: audio.length > 1 ? (library?.Name ?? 'Music') : 'Music',
+          ...(audio.length > 1 ? { headerTitle: library?.Name ?? 'Music' } : null),
           headerRight:
             audio.length > 1
               ? () => (

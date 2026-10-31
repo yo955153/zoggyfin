@@ -5,11 +5,17 @@
  *
  * v1: the shapes in types.ts (ProvidersSnapshot, ChannelLists, ChannelsFile,
  * GuideWindow). A later version adds its step here, with a test of the old shape.
+ * ChannelLists v2: `snaps` of the favourite and recent channels (a v1 list
+ * reads with none; they fill in when the provider's channels load).
+ * ProvidersSnapshot: the optional `startWith` (no version change; older
+ * snapshots have none).
  */
+import { ALL_PROVIDERS } from './merged';
 import {
   CHANNELS_SCHEMA_VERSION,
   type Channel,
   type ChannelLists,
+  type ChannelSnap,
   type ChannelsFile,
   GUIDE_SCHEMA_VERSION,
   type GuideWindow,
@@ -65,18 +71,40 @@ export function migrateProviders(raw: unknown): ProvidersSnapshot {
   const savedOrder = Array.isArray(raw.order) ? raw.order.filter((x): x is string => typeof x === 'string' && x in providers) : [];
   const order = [...new Set(savedOrder)];
   for (const id of Object.keys(providers)) if (!order.includes(id)) order.push(id);
-  return { schemaVersion: PROVIDERS_SCHEMA_VERSION, providers, order };
+  // What Live TV opens on: "All providers", a provider that still exists, or the last one used.
+  const startWith = raw.startWith === ALL_PROVIDERS || (typeof raw.startWith === 'string' && raw.startWith in providers) ? raw.startWith : null;
+  return { schemaVersion: PROVIDERS_SCHEMA_VERSION, providers, order, startWith };
 }
 
+/** A saved channel snap, or null. It never keeps fields that are not in the snap shape (no URLs). */
+function snap(id: string, v: unknown): ChannelSnap | null {
+  if (!isObject(v) || typeof v.name !== 'string') return null;
+  const s: ChannelSnap = { id, name: v.name, group: typeof v.group === 'string' ? v.group : '' };
+  if (typeof v.logo === 'string' && v.logo) s.logo = v.logo;
+  if (typeof v.number === 'number' && Number.isFinite(v.number)) s.number = v.number;
+  if (typeof v.epgId === 'string' && v.epgId) s.epgId = v.epgId;
+  if (typeof v.streamId === 'number' && Number.isFinite(v.streamId)) s.streamId = v.streamId;
+  return s;
+}
+
+/** v1 (ids only) and v2 (with snaps). A v1 list gets its snaps when the provider's channels load. */
 export function migrateLists(raw: unknown): ChannelLists {
-  if (!isObject(raw)) return { schemaVersion: LISTS_SCHEMA_VERSION, favourites: [], recents: [] };
+  if (!isObject(raw)) return { schemaVersion: LISTS_SCHEMA_VERSION, favourites: [], recents: [], snaps: {} };
   const favourites = Array.isArray(raw.favourites) ? [...new Set(raw.favourites.filter((x): x is string => typeof x === 'string'))] : [];
   const recents = Array.isArray(raw.recents)
     ? raw.recents
         .filter((r): r is { id: string; at: number } => isObject(r) && typeof r.id === 'string' && typeof r.at === 'number')
         .map((r) => ({ id: r.id, at: r.at }))
     : [];
-  return { schemaVersion: LISTS_SCHEMA_VERSION, favourites, recents };
+  const snaps: Record<string, ChannelSnap> = {};
+  if (isObject(raw.snaps)) {
+    const listed = new Set([...favourites, ...recents.map((r) => r.id)]);
+    for (const [id, v] of Object.entries(raw.snaps)) {
+      const s = listed.has(id) ? snap(id, v) : null;
+      if (s) snaps[id] = s;
+    }
+  }
+  return { schemaVersion: LISTS_SCHEMA_VERSION, favourites, recents, snaps };
 }
 
 function channel(v: unknown): Channel | null {
