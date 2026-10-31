@@ -1,7 +1,7 @@
 {
   "platforms": ["apple", "android"],
   "apple": {
-    "modules": ["ZoggyfinNativeModule", "ZoggyfinVolumeModule", "ZoggyfinTogetherModule"]
+    "modules": ["ZoggyfinNativeModule", "ZoggyfinVolumeModule", "ZoggyfinTogetherModule", "ZoggyfinTsBridgeModule"]
   },
   "android": {
     "modules": ["expo.modules.zoggyfinnative.ZoggyfinAndroidModule", "expo.modules.zoggyfinnative.ZoggyfinTogetherModule"]
