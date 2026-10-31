@@ -9,7 +9,8 @@ import { Text, View } from 'react-native';
 
 import { createStyles, type AppTheme, font, radius, type, useStyles } from '@/theme';
 
-function initials(name: string): string {
+/** The first letters of a channel name, for a logo that is missing. */
+export function initials(name: string): string {
   const words = name.replace(/[!-\/:-@[-`{-~]/g, ' ').trim().split(/\s+/).filter(Boolean);
   if (!words.length) return '#';
   return (words.length === 1 ? words[0].slice(0, 2) : `${words[0][0]}${words[1][0]}`).toUpperCase();

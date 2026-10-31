@@ -637,6 +637,19 @@ TV first (TiviMate style), then the same parts in other windows.
   results (an icon, a title and one sentence; above the keyboard during a search).
 - **Narrow windows:** the toolbar (field, reload, Providers), chips for the lists, sections and
   groups, and the list.
+- **Live player (TV, TiviMate style):**
+  - Up and Down change the channel while the controls are hidden, on the channel card, or with no
+    control focused; CH+ and CH- always do. On a button, Up and Down move the focus. Left and
+    Right never seek: they show the controls, and on the card they go to Play.
+  - **Zap banner** (`LiveChannelCard`, the bottom of the safe area): number, logo plate, name and
+    group, NOW with its times, the title, a progress bar and the time left, and NEXT. Quick presses
+    step through the channels in the banner; the player tunes 700 ms after the last press
+    (`player/zap.ts`), at once on Select. Back drops the choice. After a tune the banner stays 3 s.
+  - **Channel card:** the same card takes the scrubber's place in the controls and the first focus
+    (white 3-pt border on TV). Select opens the channel list.
+  - **Channel list:** the focused row's channel shows in the same card above the list, from the
+    guide. No preview opens a second stream (providers often allow one connection). "Search
+    channels" at the top stops the stream and opens the Live TV search.
 
 ---
 

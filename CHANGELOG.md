@@ -82,6 +82,11 @@ first commit to today. All of it was built in the first weeks of the project.
   Search entry, a Search button, the field on phones); it opens the keyboard on TV, shows results as
   you type, finds channel numbers, and keeps recent searches. Favourites come first when there are
   some. The loading, empty and error states are new.
+- **Live TV player on TV.** Up, Down and the channel keys step through the channels in a zap banner
+  (number, logo, now and next with times and progress); the player tunes when you stop pressing, or
+  at once with Select, and Back cancels. The controls show a card for the channel that plays, and
+  the channel list previews the focused channel's programmes. "Search channels" in the channel list
+  goes to the Live TV search.
 - The invite flow, the nearby transport and the rendezvous crypto use one design on every platform:
   ChaCha20-Poly1305, with CryptoKit on Apple platforms.
 - A saved server stays one entry when its address or its Id changes.

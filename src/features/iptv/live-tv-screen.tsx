@@ -15,7 +15,7 @@
  * and match the channel name and number; a search used to play a channel is
  * kept as a recent search.
  */
-import { router, Stack } from 'expo-router';
+import { router, Stack, useFocusEffect } from 'expo-router';
 import { type ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, ScrollView, Text, TextInput, View } from 'react-native';
 
@@ -56,6 +56,7 @@ import { BrowseColumn } from './browse-column';
 import { ChannelDetails } from './channel-details';
 import { CHANNEL_ROW_HEIGHT, ChannelRow, HEART_TV } from './channel-row';
 import { providerFormHref, providersHref, useLiveGroup } from './nav';
+import { takeChannelSearch } from './search-request';
 import { liveTvSections, type LiveTvSection } from './sections';
 
 const COLUMN_WIDTH = scaled(isTV ? 200 : 220);
@@ -161,6 +162,12 @@ export function LiveTvScreen() {
   }, []);
   // TV: Back leaves the search (the keyboard closes first, by itself).
   useTvBack(isTV && searchOpen, closeSearch);
+  // "Search channels" in the player's channel list: the player closed and left a request.
+  useFocusEffect(
+    useCallback(() => {
+      if (takeChannelSearch()) openSearch();
+    }, [openSearch]),
+  );
   const pickGroup = useCallback(
     (key: string) => {
       setSearchOpen(false);

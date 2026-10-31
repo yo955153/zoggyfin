@@ -239,24 +239,43 @@ describe('tap gate (controls hidden)', () => {
 
 describe('live TV keys', () => {
   it('zaps with the channel keys at any time', () => {
-    expect(liveKeyAction('channelUp', false)).toEqual({ type: 'zap', delta: 1 });
-    expect(liveKeyAction('channelDown', true)).toEqual({ type: 'zap', delta: -1 });
+    for (const f of ['hidden', 'card', 'video', 'buttons'] as const) {
+      expect(liveKeyAction('channelUp', f)).toEqual({ type: 'zap', delta: 1 });
+      expect(liveKeyAction('channelDown', f)).toEqual({ type: 'zap', delta: -1 });
+    }
     expect(tvKeyFromEvent({ eventType: 'channelUp', eventKeyAction: 1 })).toEqual({ key: 'channelUp', phase: 'press' });
     expect(tvKeyFromEvent({ eventType: 'next', eventKeyAction: 1 })).toEqual({ key: 'channelUp', phase: 'press' });
     expect(tvKeyFromWeb('PageDown')).toBe('channelDown');
   });
 
-  it('zaps with Up and Down only while the controls are hidden', () => {
-    expect(liveKeyAction('up', true)).toEqual({ type: 'zap', delta: 1 });
-    expect(liveKeyAction('down', true)).toEqual({ type: 'zap', delta: -1 });
-    expect(liveKeyAction('up', false)).toBeNull();
-    expect(liveKeyAction('down', false)).toBeNull();
+  it('zaps with Up and Down when no button needs them', () => {
+    for (const f of ['hidden', 'card', 'video'] as const) {
+      expect(liveKeyAction('up', f)).toEqual({ type: 'zap', delta: 1 });
+      expect(liveKeyAction('down', f)).toEqual({ type: 'zap', delta: -1 });
+    }
+  });
+
+  it('lets Up and Down move the focus on a button', () => {
+    expect(liveKeyAction('up', 'buttons')).toBeNull();
+    expect(liveKeyAction('down', 'buttons')).toBeNull();
+  });
+
+  it('leaves the channel card with Left and Right', () => {
+    expect(liveKeyAction('left', 'card')).toEqual({ type: 'toButtons' });
+    expect(liveKeyAction('right', 'card')).toEqual({ type: 'toButtons' });
   });
 
   it('never seeks: Left, Right, rewind and fast forward only show the controls', () => {
-    for (const k of ['left', 'right', 'rewind', 'fastForward'] as const) expect(liveKeyAction(k, true)).toEqual({ type: 'wake' });
-    expect(liveKeyAction('back', true)).toBeNull();
-    expect(liveKeyAction('playPause', true)).toBeNull();
+    for (const k of ['left', 'right', 'rewind', 'fastForward'] as const) expect(liveKeyAction(k, 'hidden')).toEqual({ type: 'wake' });
+    expect(liveKeyAction('rewind', 'card')).toEqual({ type: 'wake' });
+  });
+
+  it('leaves Select, Back and play and pause to the player', () => {
+    for (const f of ['hidden', 'card', 'video', 'buttons'] as const) {
+      expect(liveKeyAction('select', f)).toBeNull();
+      expect(liveKeyAction('back', f)).toBeNull();
+      expect(liveKeyAction('playPause', f)).toBeNull();
+    }
   });
 
   it('leaves video keys as they were', () => {
@@ -293,6 +312,6 @@ describe('player focus owner (TV)', () => {
   it('keeps the hidden-controls keys: a double Right seeks and Up zaps in live TV', () => {
     // The keys do not depend on the focus owner: they come from the remote handler.
     expect(playerKeyAction('right', true)).toEqual({ type: 'seek', seconds: 10 });
-    expect(liveKeyAction('up', true)).toEqual({ type: 'zap', delta: 1 });
+    expect(liveKeyAction('up', 'hidden')).toEqual({ type: 'zap', delta: 1 });
   });
 });
