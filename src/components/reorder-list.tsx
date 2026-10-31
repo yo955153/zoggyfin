@@ -2,18 +2,24 @@
  * A list whose rows reorder by drag (design system §7.10): drag the handle
  * or long-press a row, the other rows make room with the `smooth` spring,
  * and `onMove(from, to)` runs on drop (`to` is the final index). Rows have a
- * fixed height. Screen readers get Move up and Move down actions.
+ * fixed height. Screen readers get Move up and Move down actions. TV has no
+ * drag: the handle is a Move button with a menu of moves (lib/reorder-moves).
  */
 import * as Haptics from 'expo-haptics';
-import { memo, type ReactNode, useLayoutEffect } from 'react';
+import { type ComponentRef, memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { type AccessibilityActionEvent, Platform, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { type SharedValue, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { motion, useTheme } from '@/theme';
+import { focusView } from '@/features/tv/focus';
+import { reorderMoves } from '@/lib/reorder-moves';
+import { isTV } from '@/platform/tv';
+import { motion, radius, useTheme } from '@/theme';
 
 import { Icon } from './icon';
+import { OptionSheet } from './option-sheet';
+import { Touchable } from './touchable';
 
 function pickUpHaptic() {
   if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -60,6 +66,10 @@ export function ReorderList<T>({
       dropping.set(false);
     }
   };
+  // TV: the row whose move menu is open, and the row that moved last (its Move button keeps the focus).
+  const [menu, setMenu] = useState<number | null>(null);
+  const [moved, setMoved] = useState<string | null>(null);
+  const menuRow = menu !== null ? rows[menu] : undefined;
   return (
     <View>
       {rows.map((r, i) => (
@@ -73,10 +83,26 @@ export function ReorderList<T>({
           dropping={dropping}
           target={target}
           onCommit={commit}
+          onMenu={setMenu}
+          refocus={moved === rowKey(r, i)}
           name={label?.(r) ?? `item ${i + 1}`}>
           {(handle) => renderRow(r, i, handle)}
         </DragRow>
       ))}
+      {isTV ? (
+        <OptionSheet
+          visible={menu !== null && !!menuRow}
+          title={menuRow ? `Move ${label?.(menuRow) ?? 'item'}` : 'Move'}
+          options={menu !== null ? reorderMoves(menu, rows.length).map((m) => ({ value: m.to, label: m.label })) : []}
+          selected={[]}
+          onSelect={(to) => {
+            if (menu === null || to === menu || !menuRow) return;
+            setMoved(rowKey(menuRow, menu));
+            onMove(menu, to);
+          }}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -90,6 +116,8 @@ const DragRow = memo(function DragRow({
   dropping,
   target,
   onCommit,
+  onMenu,
+  refocus,
   name,
   children,
 }: {
@@ -101,6 +129,9 @@ const DragRow = memo(function DragRow({
   dropping: SharedValue<boolean>;
   target: SharedValue<number>;
   onCommit: (from: number, to: number) => void;
+  onMenu: (position: number) => void;
+  /** TV: this row just moved; its Move button takes the focus back. */
+  refocus: boolean;
   name: string;
   children: (handle: ReactNode) => ReactNode;
 }) {
@@ -147,7 +178,26 @@ const DragRow = memo(function DragRow({
     if (e.nativeEvent.actionName === 'moveDown' && position < total - 1) onCommit(position, position + 1);
   };
 
-  const handle = (
+  // TV: a moved row is a new native view at its new place; the focus would go back to the top of the page.
+  const moveButton = useRef<ComponentRef<typeof View> | null>(null);
+  useEffect(() => {
+    if (!isTV || !refocus) return;
+    const t = setTimeout(() => focusView(moveButton.current), 50);
+    return () => clearTimeout(t);
+  }, [refocus, position]);
+
+  const handle = isTV ? (
+    <Touchable
+      ref={moveButton}
+      kind="icon"
+      radius={radius.pill}
+      onPress={() => onMenu(position)}
+      style={styles.handle}
+      accessibilityRole="button"
+      accessibilityLabel={`Move ${name}`}>
+      <Icon name="arrow.up.arrow.down" size={18} color={c.text2} />
+    </Touchable>
+  ) : (
     <GestureDetector gesture={handleDrag}>
       <View style={styles.handle} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Icon name="line.3.horizontal" size={18} color={c.text3} />

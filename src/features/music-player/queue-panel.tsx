@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
-import { memo, useLayoutEffect, useMemo } from 'react';
-import { type AccessibilityActionEvent, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useLayoutEffect, useMemo, useState } from 'react';
+import { type AccessibilityActionEvent, Platform, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
@@ -16,12 +16,16 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { Icon, type IconName } from '@/components/icon';
 import { openAddToPlaylist } from '@/features/playlists/add-to-playlist';
 import { ItemImage } from '@/components/item-image';
+import { Touchable } from '@/components/touchable';
+import { reorderMoves } from '@/lib/reorder-moves';
+import { isTV } from '@/platform/tv';
 import { artistLine, type AudioItem } from '@/player/audio/item';
 import { queueSections, type QueueEntry } from '@/player/audio/queue';
 import { audioSession } from '@/player/audio/session';
 import { useAudioStore } from '@/player/audio/store';
-import { font, scriptStyle, type } from '@/theme';
+import { font, scriptStyle, tv, type } from '@/theme';
 
+import { PlayerSheet } from '../player/player-sheet';
 import { c, motion, radius, spacing } from '../player/tokens';
 
 export const QUEUE_ROW_HEIGHT = 60;
@@ -41,6 +45,8 @@ function haptic(kind: 'medium' | 'light' | 'selection') {
  * queue) and "Playing from {album}". Drag the handle (or long-press a row)
  * to reorder, swipe left to remove. Shuffle, Repeat and Clear sit at the top.
  * Screen readers and keyboards get Move up, Move down and Remove actions.
+ * TV has no drag or swipe: each row has a More button with the moves and
+ * Remove.
  */
 export function QueuePanel({ selectedKey, onSelect }: { selectedKey?: string | null; onSelect?: (key: string | null) => void }) {
   const queue = useAudioStore((s) => s.queue);
@@ -51,6 +57,20 @@ export function QueuePanel({ selectedKey, onSelect }: { selectedKey?: string | n
   const hidden = sections.rest.length - restShown.length;
   const repeatIcon: IconName = queue.repeat === 'one' ? 'repeat.1' : 'repeat';
   const repeatLabel = queue.repeat === 'off' ? 'Repeat off' : queue.repeat === 'all' ? 'Repeat all' : 'Repeat one';
+  // TV: the row whose menu is open, with the section it can move in.
+  const [menu, setMenu] = useState<RowMenu | null>(null);
+  const menuRow = menu ? menu.rows[menu.position] : undefined;
+  const menuRows = menu && menuRow
+    ? [
+        ...reorderMoves(menu.position, menu.rows.length).map((m) => ({
+          key: m.key,
+          label: m.label,
+          selected: false,
+          onPress: () => audioSession().move(menuRow.index, menu.rows[m.to]?.index ?? menuRow.index),
+        })),
+        { key: 'remove', label: 'Remove from the queue', selected: false, onPress: () => audioSession().remove(menuRow.entry.key) },
+      ]
+    : [];
 
   return (
     <View style={styles.root}>
@@ -58,21 +78,23 @@ export function QueuePanel({ selectedKey, onSelect }: { selectedKey?: string | n
         <Toggle icon="shuffle" label="Shuffle" active={queue.shuffle} onPress={() => s.toggleShuffle()} />
         <Toggle icon={repeatIcon} label={repeatLabel} active={queue.repeat !== 'off'} onPress={() => s.cycleRepeat()} />
         <View style={styles.flex} />
-        <Pressable
+        <Touchable
+          kind="button"
+          radius={radius.sm}
           onPress={() => openAddToPlaylist(queue.entries.map((e) => e.item))}
           accessibilityRole="button"
           accessibilityLabel="Save the queue to a playlist"
           hitSlop={8}
           style={styles.clear}>
           <Text style={styles.clearText}>Save</Text>
-        </Pressable>
+        </Touchable>
         {sections.upNext.length + sections.rest.length > 0 ? (
-          <Pressable onPress={() => s.clearQueue()} accessibilityRole="button" accessibilityLabel="Clear the queue" hitSlop={8} style={styles.clear}>
+          <Touchable kind="button" radius={radius.sm} onPress={() => s.clearQueue()} accessibilityRole="button" accessibilityLabel="Clear the queue" hitSlop={8} style={styles.clear}>
             <Text style={styles.clearText}>Clear</Text>
-          </Pressable>
+          </Touchable>
         ) : null}
       </View>
-      <ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.flex} contentContainerStyle={[styles.content, isTV && styles.contentTV]} showsVerticalScrollIndicator={false}>
         {sections.current ? (
           <>
             <Text style={styles.header} accessibilityRole="header">
@@ -86,7 +108,7 @@ export function QueuePanel({ selectedKey, onSelect }: { selectedKey?: string | n
             <Text style={styles.header} accessibilityRole="header">
               Up next
             </Text>
-            <ReorderList rows={sections.upNext} selectedKey={selectedKey} onSelect={onSelect} />
+            <ReorderList rows={sections.upNext} selectedKey={selectedKey} onSelect={onSelect} onMenu={setMenu} />
           </>
         ) : null}
         {restShown.length ? (
@@ -94,19 +116,29 @@ export function QueuePanel({ selectedKey, onSelect }: { selectedKey?: string | n
             <Text style={styles.header} accessibilityRole="header" numberOfLines={1}>
               {sourceName ? `Playing from ${sourceName}` : 'Playing next'}
             </Text>
-            <ReorderList rows={restShown} selectedKey={selectedKey} onSelect={onSelect} />
+            <ReorderList rows={restShown} selectedKey={selectedKey} onSelect={onSelect} onMenu={setMenu} />
             {hidden > 0 ? <Text style={styles.more}>And {hidden} more</Text> : null}
           </>
         ) : null}
         {!sections.upNext.length && !restShown.length ? <Text style={styles.empty}>Nothing plays after this.</Text> : null}
       </ScrollView>
+      {isTV ? (
+        <PlayerSheet
+          visible={!!menuRow}
+          title={menuRow?.entry.item.Name ?? 'Queue'}
+          sections={[{ title: 'Queue', rows: menuRows }]}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
     </View>
   );
 }
 
 function Toggle({ icon, label, active, onPress }: { icon: IconName; label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable
+    <Touchable
+      kind="button"
+      radius={radius.pill}
       onPress={() => {
         haptic('selection');
         onPress();
@@ -116,7 +148,7 @@ function Toggle({ icon, label, active, onPress }: { icon: IconName; label: strin
       accessibilityLabel={label}
       style={[styles.toggle, active && styles.toggleOn]}>
       <Icon name={icon} size={18} color={active ? c.onAccent : c.textOnMedia} weight="semibold" />
-    </Pressable>
+    </Touchable>
   );
 }
 
@@ -125,8 +157,24 @@ interface Row {
   index: number;
 }
 
+/** TV: the row whose menu is open, and the section it moves in. */
+interface RowMenu {
+  rows: Row[];
+  position: number;
+}
+
 /** One section of rows that can be reordered among themselves. */
-function ReorderList({ rows, selectedKey, onSelect }: { rows: Row[]; selectedKey?: string | null; onSelect?: (key: string | null) => void }) {
+function ReorderList({
+  rows,
+  selectedKey,
+  onSelect,
+  onMenu,
+}: {
+  rows: Row[];
+  selectedKey?: string | null;
+  onSelect?: (key: string | null) => void;
+  onMenu: (menu: RowMenu) => void;
+}) {
   const active = useSharedValue(-1);
   const dragY = useSharedValue(0);
   const count = useSharedValue(rows.length);
@@ -170,6 +218,7 @@ function ReorderList({ rows, selectedKey, onSelect }: { rows: Row[]; selectedKey
           selected={selectedKey === r.entry.key}
           onSelect={onSelect}
           onCommit={commit}
+          onMenu={onMenu}
         />
       ))}
     </View>
@@ -187,6 +236,7 @@ const DraggableRow = memo(function DraggableRow({
   selected,
   onSelect,
   onCommit,
+  onMenu,
 }: {
   row: Row;
   position: number;
@@ -198,6 +248,7 @@ const DraggableRow = memo(function DraggableRow({
   selected: boolean;
   onSelect?: (key: string | null) => void;
   onCommit: (from: number, to: number) => void;
+  onMenu: (menu: RowMenu) => void;
 }) {
   const reduced = useReducedMotion();
   const swipeX = useSharedValue(0);
@@ -282,11 +333,14 @@ const DraggableRow = memo(function DraggableRow({
   };
 
   return (
-    <Animated.View style={[styles.rowWrap, style]}>
-      <Animated.View style={[styles.removeBehind, removeStyle]} pointerEvents="none">
-        <Icon name="trash" size={18} color={c.textOnMedia} />
-        <Text style={styles.removeText}>Remove</Text>
-      </Animated.View>
+    <Animated.View style={[styles.rowWrap, isTV && styles.rowWrapTV, style]}>
+      {/* TV: no swipe, and no clipping, so the focus ring shows. */}
+      {isTV ? null : (
+        <Animated.View style={[styles.removeBehind, removeStyle]} pointerEvents="none">
+          <Icon name="trash" size={18} color={c.textOnMedia} />
+          <Text style={styles.removeText}>Remove</Text>
+        </Animated.View>
+      )}
       <GestureDetector gesture={rowGesture}>
         <Animated.View style={swipeStyle}>
           <QueueRow
@@ -299,11 +353,23 @@ const DraggableRow = memo(function DraggableRow({
             accessibilityActions={actions}
             onAccessibilityAction={onAction}
             handle={
+              isTV ? (
+                <Touchable
+                  kind="icon"
+                  radius={22}
+                  onPress={() => onMenu({ rows, position })}
+                  style={styles.handle}
+                  accessibilityRole="button"
+                  accessibilityLabel={`More for ${row.entry.item.Name ?? 'this song'}`}>
+                  <Icon name="ellipsis" size={18} color={c.textOnMedia} />
+                </Touchable>
+              ) : (
               <GestureDetector gesture={drag}>
                 <View style={styles.handle} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
                   <Icon name="line.3.horizontal" size={18} color={c.textOnMediaSecondary} />
                 </View>
               </GestureDetector>
+              )
             }
           />
         </Animated.View>
@@ -331,16 +397,8 @@ function QueueRow({
 }) {
   const item = entry.item;
   const artist = artistLine(item);
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={current}
-      accessibilityRole="button"
-      accessibilityLabel={[item.Name, artist, current ? 'now playing' : null].filter(Boolean).join(', ')}
-      accessibilityHint={current ? undefined : 'Plays this now'}
-      accessibilityActions={accessibilityActions}
-      onAccessibilityAction={onAccessibilityAction}
-      style={({ pressed }) => [styles.row, (pressed || selected) && styles.rowPressed]}>
+  const body = (
+    <>
       <ItemImage item={item} variant="square" width={44} aspectRatio={1} rounded={radius.sm} hideArtTitle />
       <View style={styles.rowText}>
         <Text style={[styles.title, current && styles.titleCurrent, scriptStyle(item.Name, styles.title)]} numberOfLines={1}>
@@ -352,8 +410,42 @@ function QueueRow({
           </Text>
         ) : null}
       </View>
-      {current ? <Icon name="waveform" size={18} color={c.accent} weight="semibold" /> : handle}
-    </Pressable>
+    </>
+  );
+  const label = [item.Name, artist, current ? 'now playing' : null].filter(Boolean).join(', ');
+  // The song that plays now has nothing to press.
+  if (current) {
+    return (
+      <View style={styles.row} accessible accessibilityLabel={label}>
+        {body}
+        <Icon name="waveform" size={18} color={c.accent} weight="semibold" />
+      </View>
+    );
+  }
+  // TV: the More button sits next to the row, not inside it, so Right can reach it.
+  const tvSplit = isTV && !!handle;
+  const row = (
+    <Touchable
+      kind="row"
+      radius={radius.md}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint="Plays this now"
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
+      containerStyle={tvSplit ? styles.flex : undefined}
+      style={({ pressed }) => [styles.row, (pressed || selected) && styles.rowPressed]}>
+      {body}
+      {tvSplit ? null : handle}
+    </Touchable>
+  );
+  if (!tvSplit) return row;
+  return (
+    <View style={styles.tvRow}>
+      {row}
+      {handle}
+    </View>
   );
 }
 
@@ -361,6 +453,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   content: { paddingBottom: spacing.xl },
+  // TV: room for the focus ring at the sides.
+  contentTV: { paddingHorizontal: tv.focusRingWidth + tv.focusRingGap },
   controls: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
   toggle: {
     width: 44,
@@ -375,6 +469,7 @@ const styles = StyleSheet.create({
   clearText: { ...font(type.subheadline), fontWeight: '600', color: c.textOnMedia },
   header: { ...font(type.headline), color: c.textOnMedia, marginTop: spacing.lg, marginBottom: spacing.xs },
   rowWrap: { height: QUEUE_ROW_HEIGHT, justifyContent: 'center', overflow: 'hidden', borderRadius: radius.md },
+  rowWrapTV: { overflow: 'visible' },
   removeBehind: {
     position: 'absolute',
     top: 0,
@@ -398,6 +493,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   rowPressed: { backgroundColor: 'rgba(255,255,255,0.10)' },
+  tvRow: { height: QUEUE_ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   rowText: { flex: 1, minWidth: 0 },
   title: { ...font(type.subheadline), fontWeight: '600', color: c.textOnMedia },
   titleCurrent: { color: c.accent },
