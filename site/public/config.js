@@ -11,6 +11,10 @@ window.ZOGGYFIN_CONFIG = {
   androidUrl: '',
   // The Mac disk image (Apple silicon).
   macUrl: 'https://releases.zog-tech.com/zoggyfin/latest/Zoggyfin-arm64.dmg',
+  // The newest Android TV APK (Fire TV, Google TV). scripts/release-android-tv.sh overwrites it.
+  tvApkUrl: 'https://releases.zog-tech.com/zoggyfin/android-tv/zoggyfin-tv-latest.apk',
+  // The Google Play listing of the TV app. Empty: the Play button stays hidden.
+  tvPlayUrl: '',
   // A hosted web app, if one exists. Empty: no browser option.
   webAppUrl: '',
 };

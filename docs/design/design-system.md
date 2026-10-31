@@ -536,9 +536,10 @@ The generated tile is a real tile (same press, hover and badge rules). It is not
 
 Disabled: 40 % opacity, `accessibilityState={{ disabled: true }}`, no press feedback.
 
-### 7.18 Update card (Mac app)
+### 7.18 Update card (Mac app, Android TV)
 
-- Only in the desktop app. Nothing shows in a browser or on iPhone and iPad.
+- Only in the desktop app and the sideloaded Android TV app (EAS profile `tv`). Nothing shows
+  in a browser, on iPhone and iPad, on Android phones or in the Google Play TV build.
 - Place: bottom trailing, over the content, 16 pt from the edge, and above the mini player
   (84 pt from the bottom). Width 340 (less in a narrow window). It does not block the page.
 - Card: solid `surface` with a hairline `separator` border (not glass: the notes must stay
@@ -559,6 +560,13 @@ Disabled: 40 % opacity, `accessibilityState={{ disabled: true }}`, no press feed
   button. Esc in the card is "Later".
 - Motion: in with a 12-pt slide and a fade (`smooth` spring), out with a 160-ms fade.
   Reduced motion: the fade only. VoiceOver reads the title.
+- **TV:** the same content in the centred TV panel of the sheets (`Sheet` on TV), which holds the remote's
+  focus. The main button ("Install", "Try again", "Open Settings") takes the focus, also when the
+  panel opens by itself: on a TV no one types, and a card the remote cannot reach is of no use.
+  Back is "Later". The panel waits while the video or the music player is open. "Install"
+  downloads with the same bar, then shows "The system installer opens. Confirm the update there."
+  When Zoggyfin may not install apps yet, the title is "Allow Zoggyfin to install the update",
+  one `footnote` line says where the switch is, and the buttons are "Later" and "Open Settings".
 
 ---
 

@@ -127,7 +127,8 @@ Phase 2b ("Platform base and restyle"):
   only a wide thumbnail), square album art or a circle for people.
 - The project builds on `react-native-tvos` (aliased as `react-native`) with
   `@react-native-tvos/config-tv`. Phone, tablet and web builds are unchanged. `EXPO_TV=1`
-  makes prebuild generate TV targets with the 10-foot layout (side menu, remote focus).
+  makes prebuild generate TV targets with the 10-foot layout (side menu, remote focus); see
+  [Android TV app](#android-tv-app-google-tv-fire-tv).
 
 Phase 3 ("Music and audio"):
 
@@ -366,6 +367,35 @@ pnpm desktop:dev                    # the desktop app, in another terminal
 `pnpm desktop:build` makes an app for testing. `pnpm desktop:release` builds an LGPL libmpv,
 signs the app and makes a notarized DMG. The release needs signing keys that only the
 maintainer has. See [desktop/README.md](desktop/README.md).
+
+### Android TV app (Google TV, Fire TV)
+
+Two EAS profiles make the TV app. Both set `EXPO_TV=1`.
+
+| Profile | Output | Self-update |
+|---|---|---|
+| `tv` | APK for sideloading (the website) | On: `ZOGGYFIN_TV_SELF_UPDATE=1` adds `REQUEST_INSTALL_PACKAGES` and a FileProvider (`app.config.ts`) |
+| `tv-play` | App bundle for Google Play | Off: no install permission, as Google Play requires |
+
+The `tv` app reads `https://releases.zog-tech.com/zoggyfin/android-tv/latest.json` 10 s after
+start and every 4 hours. When the feed has a higher `versionCode`, the update card offers the
+new version. "Install" downloads the APK to the app cache, checks its SHA-256, and opens the
+system installer. The first time, Android asks to let Zoggyfin install apps: the card opens that
+settings page. The updater runs only when the build's manifest has the install permission, so an
+over-the-air update cannot turn it on in the Play build. A test build can read another feed with
+`EXPO_PUBLIC_TV_UPDATE_URL=<https URL of a latest.json>`.
+
+Release (maintainer): `pnpm tv:release` (`scripts/release-android-tv.sh`). It builds the `tv`
+profile for `armeabi-v7a,arm64-v8a` from a clean checkout of `HEAD`, checks the APK with `aapt2`
+(versionCode, TV launcher, install permission, both ABIs), and uploads three files to the R2
+bucket of the Mac releases, under `zoggyfin/android-tv/`:
+`zoggyfin-tv-<versionName>-<versionCode>.apk`, `zoggyfin-tv-latest.apk` (the website link) and
+`latest.json` (last). EAS sets the `versionCode` (`appVersionSource: remote`). The script reads
+the R2 settings from the same file as `desktop/scripts/publish.sh`; the top of the script lists
+all settings (`EAS_LOCAL_WRAPPER`, `APK`, `TV_PREFIX`, `NOTES_FILE`, `MIN_VERSION_CODE`).
+
+A sideloaded APK and the Play app have different signing keys: a TV cannot update one with the
+other. Uninstall first to switch.
 
 ## Project structure
 

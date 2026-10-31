@@ -1,5 +1,6 @@
 /**
- * "Check for Updates…" in Settings (desktop app only). The value shows the
+ * "Check for Updates…" in Settings (the desktop app and the sideloaded
+ * Android TV app). The value shows the
  * update state; a press checks at once, or opens the card when an update
  * is known.
  */
@@ -14,6 +15,8 @@ function statusOf(state: UpdateState): string | undefined {
       return 'Downloading…';
     case 'installing':
       return 'Installing…';
+    case 'permission':
+      return 'Needs permission';
     case 'error':
       return 'Failed';
     default:

@@ -95,7 +95,7 @@ function Root({ session }: { session: boolean }) {
   useEffect(() => {
     if (downloadsSupported) void downloads.init();
   }, []);
-  // Desktop app only: look for a new version soon after start and every few hours.
+  // The desktop app and the sideloaded Android TV app: look for a new version soon after start and every few hours.
   useEffect(() => startUpdateChecks(), []);
   // A nearby session from before a restart: the session sheet offers to rejoin it.
   useEffect(() => nearby().loadSaved(), []);
