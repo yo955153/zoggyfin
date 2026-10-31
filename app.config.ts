@@ -8,6 +8,11 @@
  * Every other build (phones, the Play build `tv-play`) has neither: Google Play
  * does not allow an app to update itself, and the updater in the app stays off
  * when the permission is not in the manifest.
+ *
+ * ZOGGYFIN_UPDATE_MESSAGE (set it when you publish an over-the-air update):
+ * `extra.updateMessage`. The update manifest carries it, and the "An update is
+ * ready" card shows it (`src/platform/updates/ota-rules.ts`). EAS keeps the
+ * `eas update --message` text on its server only, so the app cannot read that.
  */
 import { type ConfigContext, type ExpoConfig } from 'expo/config';
 import { AndroidConfig, type ConfigPlugin, withAndroidManifest } from 'expo/config-plugins';
@@ -38,7 +43,8 @@ const withTvSelfUpdate: ConfigPlugin = (config) =>
   });
 
 export default ({ config }: ConfigContext): ExpoConfig => {
-  const base = config as ExpoConfig;
+  const message = process.env.ZOGGYFIN_UPDATE_MESSAGE?.trim();
+  const base: ExpoConfig = message ? { ...(config as ExpoConfig), extra: { ...config.extra, updateMessage: message } } : (config as ExpoConfig);
   if (!SELF_UPDATE) return base;
   const withPermission: ExpoConfig = {
     ...base,
