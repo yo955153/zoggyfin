@@ -46,7 +46,7 @@
     },
     "tv-play": {
       "extends": "production",
-      "channel": "tv",
+      "channel": "production",
       "env": {
         "EXPO_TV": "1"
       },
