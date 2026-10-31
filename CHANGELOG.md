@@ -73,6 +73,10 @@ first commit to today. All of it was built in the first weeks of the project.
   provider and load again when a day old. Films and episodes play seekable in the video player, with
   the resume position kept on the device (never sent to Jellyfin) and the next episode through the
   next-up card. MKV plays on Android and the Mac app; iOS tries the panel's HLS form and else says why.
+- **IPTV audio and subtitles.** "Audio and subtitles" lists the tracks inside an IPTV film, episode or
+  channel stream and switches them (channels show it when they have two audio tracks or subtitles).
+  The choice is kept per film, series or channel, and a new title starts in the languages picked
+  last. Browsers other than Safari cannot switch the tracks inside an MP4 or MKV file.
 
 ### Changed
 
