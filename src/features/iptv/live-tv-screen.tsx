@@ -69,10 +69,13 @@ export function LiveTvScreen() {
   const toggle = useCallback(
     (ch: Channel) => {
       if (!providerId) return;
+      // The list stays where it is: the first favourite does not switch the page to Favourites.
+      if (!picked) setPicked(groupKey);
       const on = iptv.toggleFavourite(providerId, ch.id);
       toast(on ? `${ch.name} is in Favourites` : `${ch.name} is no longer in Favourites`, { icon: on ? 'heart.fill' : 'heart' });
     },
-    [providerId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [providerId, picked, groupKey],
   );
   const onPlay = useCallback(
     (ch: Channel) => {

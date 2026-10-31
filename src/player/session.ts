@@ -505,7 +505,8 @@ class VideoSession {
     if (id !== this.loadId) return;
     this.liveAttempt = { id, candidates: stream.candidates, next: 0, userAgent: stream.userAgent, unsupported: stream.unsupported };
     request.source.onStart?.(ch.id);
-    this.loadNextLive();
+    // No stream form for this device (a plain .ts channel on iOS): say so at once.
+    if (!this.loadNextLive()) this.liveFailed(undefined);
   }
 
   /** Loads the next stream form of the live channel, or shows why it does not play. True when one loads. */
