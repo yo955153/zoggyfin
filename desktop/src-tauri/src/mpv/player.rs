@@ -153,6 +153,8 @@ impl Mpv {
                 "lang": f("lang"),
                 "codec": f("codec"),
                 "selected": f("selected").as_deref() == Some("yes"),
+                "isDefault": f("default").as_deref() == Some("yes"),
+                "forced": f("forced").as_deref() == Some("yes"),
             }));
         }
         Value::Array(out)

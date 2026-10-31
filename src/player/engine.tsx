@@ -10,9 +10,22 @@ import { type StyleProp, View, type ViewStyle } from 'react-native';
 import { hasMpv, mpv, showVideoThrough } from '@/platform/desktop';
 
 import { MpvEngine } from './engine-mpv';
+import { type ElementTrackLike, fromHls, fromMediaElement } from './embedded-tracks';
 import type { EngineListener, EngineSource, VideoEngine, VideoFit } from './engine-types';
 
 type MediaSessionAction = 'play' | 'pause' | 'seekbackward' | 'seekforward' | 'seekto' | 'nexttrack' | 'previoustrack';
+
+/** A media element's AudioTrackList or TextTrackList: Safari has both; Chromium has no AudioTrackList. */
+type TrackList = EventTarget & { readonly length: number; [index: number]: ElementTrackLike };
+
+function listOf(list: TrackList | undefined): ElementTrackLike[] {
+  const out: ElementTrackLike[] = [];
+  for (let i = 0; list && i < list.length; i++) out.push(list[i]);
+  return out;
+}
+
+/** Text tracks that are subtitles (hls.js also adds metadata and chapter tracks). */
+const isSubtitle = (t: ElementTrackLike) => t.kind === 'subtitles' || t.kind === 'captions' || t.kind === 'forced';
 
 class WebEngine implements VideoEngine {
   readonly video: HTMLVideoElement | null;
@@ -53,7 +66,65 @@ class WebEngine implements VideoEngine {
       if (!v.getAttribute('src') && !this.hls) return;
       this.emit({ type: 'status', status: 'error', error: v.error?.message || 'The video could not be played.' });
     });
+    // The tracks inside a file or a natively played HLS stream (Safari). hls.js reports its own.
+    for (const list of [this.audioList(), this.textList()]) {
+      for (const type of ['addtrack', 'removetrack', 'change']) list?.addEventListener(type, () => this.emitElementTracks());
+    }
   }
+
+  private audioList(): TrackList | undefined {
+    return (this.video as unknown as { audioTracks?: TrackList } | null)?.audioTracks;
+  }
+
+  private textList(): TrackList | undefined {
+    return (this.video as unknown as { textTracks?: TrackList } | null)?.textTracks;
+  }
+
+  private emitElementTracks(): void {
+    if (this.hls || !this.video?.getAttribute('src')) return;
+    this.emit({ type: 'embedded', tracks: fromMediaElement(listOf(this.audioList()), listOf(this.textList())) });
+  }
+
+  private emitHlsTracks(): void {
+    const h = this.hls;
+    if (!h) return;
+    this.emit({ type: 'embedded', tracks: fromHls(h.audioTracks, h.audioTrack, h.subtitleTracks, h.subtitleDisplay ? h.subtitleTrack : -1) });
+  }
+
+  /**
+   * hls.js switches the renditions of the playlist (`EXT-X-MEDIA`) and the
+   * browser draws the WebVTT cues. Without hls.js: the element's own lists
+   * (Safari: native HLS, MP4). Ids come from `embedded-tracks.ts`.
+   */
+  readonly embedded = {
+    selectAudio: (id: string) => {
+      const i = Number(id);
+      if (this.hls) {
+        this.hls.audioTrack = i;
+        return;
+      }
+      const list = this.audioList();
+      if (!list) return;
+      for (let k = 0; k < list.length; k++) list[k].enabled = k === i;
+      this.emitElementTracks();
+    },
+    selectSubtitle: (id: string | null) => {
+      const i = id === null ? -1 : Number(id);
+      if (this.hls) {
+        this.hls.subtitleDisplay = i >= 0;
+        this.hls.subtitleTrack = i;
+        this.emitHlsTracks();
+        return;
+      }
+      const list = this.textList();
+      if (!list) return;
+      for (let k = 0; k < list.length; k++) {
+        const t = list[k];
+        if (isSubtitle(t)) t.mode = k === i ? 'showing' : 'disabled';
+      }
+      this.emitElementTracks();
+    },
+  };
 
   private emit: EngineListener = (e) => this.listeners.forEach((l) => l(e));
 
@@ -103,6 +174,13 @@ class WebEngine implements VideoEngine {
         hls.on(HlsClass.Events.ERROR, (_e, data) => {
           if (data.fatal) this.emit({ type: 'status', status: 'error', error: `Stream error: ${data.details}` });
         });
+        const tracks = () => {
+          if (this.hls === hls) this.emitHlsTracks();
+        };
+        hls.on(HlsClass.Events.AUDIO_TRACKS_UPDATED, tracks);
+        hls.on(HlsClass.Events.AUDIO_TRACK_SWITCHED, tracks);
+        hls.on(HlsClass.Events.SUBTITLE_TRACKS_UPDATED, tracks);
+        hls.on(HlsClass.Events.SUBTITLE_TRACK_SWITCH, tracks);
         hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
           if (token !== this.loadToken || source.autoplay === false) return;
           v.play().catch(() => this.emit({ type: 'playing', playing: false }));

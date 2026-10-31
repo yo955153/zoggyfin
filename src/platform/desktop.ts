@@ -74,6 +74,9 @@ export interface MpvTrack {
   lang: string | null;
   codec: string | null;
   selected: boolean;
+  /** The default and forced flags. Desktop builds before 0.1.12 leave them out. */
+  isDefault?: boolean;
+  forced?: boolean;
 }
 
 export type MpvEvent =
