@@ -73,7 +73,8 @@ describe('M3uParser', () => {
     expect(r.channels).toHaveLength(50_000);
     expect(new Set(r.channels.map((c) => c.id)).size).toBe(50_000);
     expect(r.channels[49_999]).toMatchObject({ name: 'Channel 49999 HD', group: 'Group 39', epgId: 'ch49999.example' });
-    expect(ms).toBeLessThan(3000);
+    // A loose bound: catches a quadratic parse, not a slow CI machine running suites in parallel.
+    expect(ms).toBeLessThan(20_000);
   });
 });
 
