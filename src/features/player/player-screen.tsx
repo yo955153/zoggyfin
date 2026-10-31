@@ -24,6 +24,7 @@ import { Touchable } from '@/components/touchable';
 import { useHideDevToolsButton } from '@/lib/dev-tools';
 import { episodeLabel } from '@/lib/format';
 import { KeyInput } from '@/native/key-input';
+import { hasTrackChoice } from '@/player/embedded-tracks';
 import { VideoSurface } from '@/player/engine';
 import type { VideoFit } from '@/player/engine-types';
 import type { KeyPress } from '@/native/key-input-types';
@@ -67,6 +68,7 @@ import { syncPlaySupported } from '@/together/syncplay';
 import { AirPlayButton } from './airplay-button';
 import { Glass } from './glass';
 import { NextUpCard } from './next-up-card';
+import { embeddedTrackSections } from './embedded-track-sections';
 import { PlayerSheet, type SheetInfo, type SheetSection } from './player-sheet';
 import { RoundButton } from './round-button';
 import { Scrubber } from './scrubber';
@@ -632,7 +634,12 @@ export function PlayerScreen() {
   const loading = status === 'loading' || status === 'buffering' || (status === 'idle' && !error);
   const sideInset = Math.max(gutter, insets.left + spacing.sm, insets.right + spacing.sm);
 
-  const trackSections: SheetSection[] = now
+  // IPTV: the tracks inside the stream (no server lists them). Live channels show the button only with a choice.
+  const embedded = usePlayerStore((x) => x.embedded);
+  const showTracks = live ? hasTrackChoice(embedded) : true;
+  const trackSections: SheetSection[] = live || vod
+    ? embeddedTrackSections(embedded, { audio: (id) => s.selectEmbeddedAudio(id), subtitle: (id) => s.selectEmbeddedSubtitle(id) })
+    : now
     ? [
         {
           title: 'Audio',
@@ -840,7 +847,7 @@ export function PlayerScreen() {
               {togetherAvailable && !live && !vod ? (
                 <PillButton onFocusChange={trackTop} icon="person.2" label="Watch together" onPress={() => openTogetherSheet('player', null)} />
               ) : null}
-              {live || vod ? null : <PillButton onFocusChange={trackTop} icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} />}
+              {showTracks ? <PillButton onFocusChange={trackTop} icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} /> : null}
               {now?.kind === 'audio' ? null : (
                 <PillButton onFocusChange={trackTop} icon="aspectratio" label="Screen size" onPress={() => setSheet('screen')} />
               )}
