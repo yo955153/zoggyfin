@@ -1,4 +1,4 @@
-import { gridLayout, layoutFor, tv, tvPageEndPadding, tvSafeInset } from '../layout';
+import { gridLayout, layoutFor, tv, tvPageEndPadding, tvRowInset, tvSafeInset } from '../layout';
 import { fallbackArt, textDirection } from '../theme';
 
 describe('grid layout (design system §2.3)', () => {
@@ -25,6 +25,14 @@ describe('grid layout (design system §2.3)', () => {
 });
 
 describe('TV safe area (overscan)', () => {
+  it('keeps a full-width row inside the page margin, with its content on the page edge', () => {
+    const g = layoutFor(960, { tv: true }).gutter;
+    const r = tvRowInset(g);
+    expect(r.marginRight).toBe(g);
+    expect(r.marginLeft + r.padX).toBe(g);
+    expect(r.marginLeft).toBeGreaterThanOrEqual(0);
+    expect(tvRowInset(4)).toEqual({ marginLeft: 0, marginRight: 4, padX: 4 });
+  });
   it('is 5 % of each edge: 48 x 27 dp on a 960 dp (1080p) Android TV', () => {
     expect(tvSafeInset(960)).toEqual({ x: 48, y: 27 });
     expect(tvSafeInset(1920)).toEqual({ x: 96, y: 54 });

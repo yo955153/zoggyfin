@@ -88,6 +88,8 @@ first commit to today. All of it was built in the first weeks of the project.
 
 ### Fixed
 
+- TV: the Films and Series pages use the single focus mark and stay inside the overscan-safe area.
+  A focused track or episode row no longer runs to the edge of the screen.
 - TV: Down on the last Home row no longer scrolls the rows out of view.
 - TV: Settings, and other pages with no preferred focus, take the focus when they open. Before, the
   focus stayed on the page they covered and the remote could not reach them.

@@ -19,6 +19,7 @@ import { createStyles,
   scriptStyle,
   sizes,
   spacing,
+  tvRowInset,
   type,
   useLayout,
   useStyles,
@@ -61,17 +62,19 @@ export const TrackRow = memo(function TrackRow({
   const time = formatClock(item.RunTimeTicks);
   // TV: the More button is a sibling of the row, so the focus can move to it.
   const tvMore = isTV && !!onLongPress;
+  const inset = isTV ? tvRowInset(l.gutter) : null;
   const row = (
     <Touchable
       kind="row"
-      containerStyle={tvMore ? s.flex : undefined}
+      radius={inset ? radius.md : 0}
+      containerStyle={[tvMore ? s.flex : null, inset && { marginLeft: inset.marginLeft, marginRight: tvMore ? 0 : inset.marginRight }]}
       onPress={() => onPress(item)}
       onLongPress={onLongPress ? () => onLongPress(item) : undefined}
       accessibilityRole="button"
       accessibilityLabel={[item.Name, artist, time, playing ? 'playing' : null].filter(Boolean).join(', ')}
       accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'More actions' }] : undefined}
       onAccessibilityAction={onLongPress ? () => onLongPress(item) : undefined}
-      style={({ pressed, hovered, focused }) => [s.track, { paddingLeft: l.gutter }, (pressed || hovered || (focused && !isTV)) && s.active]}>
+      style={({ pressed, hovered, focused }) => [s.track, { paddingLeft: inset ? inset.padX : l.gutter }, (pressed || hovered || (focused && !isTV)) && s.active]}>
       {showArt ? (
         <ItemImage item={item} variant="square" width={scaled(sizes.trackArt)} aspectRatio={1} rounded={6} hideArtTitle />
       ) : playing ? (
@@ -81,7 +84,7 @@ export const TrackRow = memo(function TrackRow({
       ) : (
         <Text style={s.trackNo}>{item.IndexNumber ?? index + 1}</Text>
       )}
-      <View style={[s.trackBody, { paddingRight: tvMore ? spacing.md : l.gutter }, !last && s.line]}>
+      <View style={[s.trackBody, { paddingRight: tvMore ? spacing.md : inset ? inset.padX : l.gutter }, !last && s.line]}>
         <View style={s.flex}>
           <Text style={[s.trackTitle, playing && { color: c.accent }, scriptStyle(item.Name, s.trackTitle)]} numberOfLines={1}>
             {item.Name}
@@ -122,15 +125,18 @@ export const ArtistRow = memo(function ArtistRow({ item, onPress, last }: { item
   const albums = item.AlbumCount ? `${item.AlbumCount} ${item.AlbumCount === 1 ? 'album' : 'albums'}` : null;
   const songs = item.SongCount ? `${item.SongCount} ${item.SongCount === 1 ? 'song' : 'songs'}` : null;
   const meta = [albums, songs].filter(Boolean).join(' · ');
+  const inset = isTV ? tvRowInset(l.gutter) : null;
   return (
     <Touchable
       kind="row"
+      radius={inset ? radius.md : 0}
+      containerStyle={inset ? { marginLeft: inset.marginLeft, marginRight: inset.marginRight } : undefined}
       onPress={() => onPress(item)}
       accessibilityRole="button"
       accessibilityLabel={[item.Name, meta].filter(Boolean).join(', ')}
-      style={({ pressed, hovered, focused }) => [s.track, { paddingLeft: l.gutter }, (pressed || hovered || (focused && !isTV)) && s.active]}>
+      style={({ pressed, hovered, focused }) => [s.track, { paddingLeft: inset ? inset.padX : l.gutter }, (pressed || hovered || (focused && !isTV)) && s.active]}>
       <ItemImage item={item} variant="square" width={scaled(56)} aspectRatio={1} circle />
-      <View style={[s.trackBody, s.artistBody, { paddingRight: l.gutter }, !last && s.line]}>
+      <View style={[s.trackBody, s.artistBody, { paddingRight: inset ? inset.padX : l.gutter }, !last && s.line]}>
         <View style={s.flex}>
           <Text style={[s.trackTitle, scriptStyle(item.Name, s.trackTitle)]} numberOfLines={1}>
             {item.Name}
@@ -149,13 +155,16 @@ export const EpisodeRow = memo(function EpisodeRow({ item, onPress }: { item: Ba
   const l = useLayout();
   const progress = playedFraction(item);
   const label = [episodeLabel(item), formatDuration(item.RunTimeTicks)].filter(Boolean).join(' · ');
+  const inset = isTV ? tvRowInset(l.gutter) : null;
   return (
     <Touchable
       kind="row"
+      radius={inset ? radius.md : 0}
+      containerStyle={inset ? { marginLeft: inset.marginLeft, marginRight: inset.marginRight } : undefined}
       onPress={() => onPress(item)}
       accessibilityRole="button"
       accessibilityLabel={[item.Name, label, item.UserData?.Played ? 'played' : null].filter(Boolean).join(', ')}
-      style={({ pressed, hovered, focused }) => [s.episode, { paddingHorizontal: l.gutter }, (pressed || hovered || (focused && !isTV)) && s.active]}>
+      style={({ pressed, hovered, focused }) => [s.episode, { paddingHorizontal: inset ? inset.padX : l.gutter }, (pressed || hovered || (focused && !isTV)) && s.active]}>
       <View>
         <ItemImage item={item} variant="landscape" width={scaled(sizes.episodeThumb)} aspectRatio={16 / 9} rounded={radius.sm} hideArtTitle />
         {progress !== null ? (

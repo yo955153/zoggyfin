@@ -25,7 +25,7 @@ import {
 } from './theme';
 
 export * from './theme';
-export { gridLayout, layoutFor, type LayoutInfo, type SafeInset, tv, tvFocusBleed, tvPageEndPadding, tvSafeInset, tvScale } from './layout';
+export { gridLayout, layoutFor, type LayoutInfo, type SafeInset, tv, tvFocusBleed, tvPageEndPadding, tvRowInset, tvSafeInset, tvScale } from './layout';
 
 // ---------------------------------------------------------------------------
 // Active scheme

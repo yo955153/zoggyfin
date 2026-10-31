@@ -2,7 +2,7 @@
  * Layout from the window or content width (design system §2). Pure: no React,
  * so it is unit-tested. TV gets its own 10-foot sizes (§ TV in the spec).
  */
-import { type Breakpoint, breakpointFor, gridFor, type GridResult, layout, type TileKind } from './theme';
+import { type Breakpoint, breakpointFor, gridFor, type GridResult, layout, spacing, type TileKind } from './theme';
 
 /**
  * TV sizes, designed on a 1920-point-wide screen (Apple TV). Android TV
@@ -62,6 +62,17 @@ export function tvSafeInset(width: number): SafeInset {
  */
 export function tvFocusBleed(size: number): number {
   return Math.ceil((size * (tv.focusScale - 1)) / 2 + tv.focusRingWidth + tv.focusRingGap + 2);
+}
+
+/**
+ * TV: a full-width list row (a track, an episode) whose focus fill must stay
+ * inside the safe area. The row stops one gutter before the right edge, and
+ * its fill reaches `spacing.md` into the left gutter; with `padX` as the
+ * row's own side padding, the content keeps the page's left edge.
+ */
+export function tvRowInset(gutter: number): { marginLeft: number; marginRight: number; padX: number } {
+  const padX = Math.min(spacing.md, gutter);
+  return { marginLeft: gutter - padX, marginRight: gutter, padX };
 }
 
 /**

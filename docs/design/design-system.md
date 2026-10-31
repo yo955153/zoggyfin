@@ -603,6 +603,9 @@ insets. Every control, text and focus mark stays inside 5 % of each edge: 96 x 5
   margin (`tv.gutter`) is the same 5 %, so the trailing edge of a page is inside too.
 - Horizontal rows may run off the trailing edge (a part of the next tile shows that the row
   scrolls). Their focused tile never does.
+- Full-width list rows (tracks, episodes, IPTV episodes) stop one gutter before the trailing edge
+  on TV, so their focus fill stays inside. `tvRowInset(gutter)` gives the margins and the padding
+  that keep the row's content on the page edge.
 
 ### 7.21 Live TV
 
@@ -612,7 +615,7 @@ TV first (TiviMate style), then the same parts in other windows.
   than one; Search, reload and Providers buttons), then three columns: the browse column (200 pt),
   the channel list, and the details panel (290 pt, `surface`, radius `lg`) for the focused channel.
 - **Browse column** (`iptv/browse.ts`): Search; Favourites when it has channels; Recently watched
-  when it has channels; All channels; Favourites when it is empty; other sections (films and series,
+  when it has channels; All channels; Favourites when it is empty; Films and Series when the provider has them (
   `features/iptv/sections.ts`); a GROUPS heading and the provider's groups; Providers last. The
   selected entry has the `accentSoft` fill and an accent icon. It takes the first focus on TV.
 - **Channel row** (64 pt on TV, 72 pt elsewhere): number (tabular, right-aligned), logo plate, name
