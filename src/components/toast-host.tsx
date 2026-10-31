@@ -1,12 +1,15 @@
-import { useEffect } from 'react';
-import { AccessibilityInfo, Platform, Text, View } from 'react-native';
+import { type ComponentRef, useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Platform, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeOut, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { Glass } from '@/features/player/glass';
-import { toastDuration, useToastStore } from '@/lib/toast';
+import { focusActivePage, focusView } from '@/features/tv/focus';
+import { useTvBack } from '@/features/tv/use-tv-back';
+import { isNativeTV, isTV } from '@/platform/tv';
+import { toastDuration, toastTakesFocus, useToastStore } from '@/lib/toast';
 import { createStyles, type AppTheme, font, iconSize, motion, radius, scaled, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
 
 import { Icon } from './icon';
@@ -22,6 +25,11 @@ import { Touchable } from './touchable';
  * the root view, so it mounts its own host with `overlay`; while an overlay
  * host is mounted, the root host shows nothing. `offset` moves the toast
  * down, under the player's top controls.
+ *
+ * TV (root host): an action toast takes the focus when it shows (not from a
+ * text field), stays while its action has the focus, and Back closes it.
+ * The focus then goes back to the page. Overlay hosts (the players) only
+ * keep it up longer: their remote keys must stay with the player.
  */
 export function ToastHost({ overlay = false, offset = 0 }: { overlay?: boolean; offset?: number }) {
   const overlays = useToastStore((st) => st.overlays);
@@ -34,6 +42,11 @@ export function ToastHost({ overlay = false, offset = 0 }: { overlay?: boolean; 
   const l = useLayout();
   const s = useStyles(makeStyles);
   const { c } = useTheme();
+  const actionRef = useRef<ComponentRef<typeof View> | null>(null);
+  // The toast whose action has the focus (a toast that replaces it starts unfocused).
+  const [focusedId, setFocusedId] = useState<number | null>(null);
+  const tvFocus = isTV && !overlay;
+  const actionFocused = !!current && focusedId === current.id;
   const y = useSharedValue(-12);
   const opacity = useSharedValue(0);
 
@@ -50,10 +63,31 @@ export function ToastHost({ overlay = false, offset = 0 }: { overlay?: boolean; 
     y.set(withSpring(0, motion.spring.smooth));
     opacity.set(withTiming(1, { duration: motion.duration.fast }));
     AccessibilityInfo.announceForAccessibility(current.text);
-    const id = current.id;
-    const t = setTimeout(() => hide(id), toastDuration(current));
+  }, [current, y, opacity]);
+
+  // TV: the action takes the focus when the toast shows.
+  useEffect(() => {
+    if (!current || !tvFocus || !toastTakesFocus(current, isNativeTV, !!TextInput.State.currentlyFocusedInput())) return;
+    const t = setTimeout(() => focusView(actionRef.current), 50);
     return () => clearTimeout(t);
-  }, [current, hide, y, opacity]);
+  }, [current, tvFocus]);
+
+  // The toast closes after its time, but never while its action has the focus.
+  useEffect(() => {
+    if (!current || actionFocused) return;
+    const id = current.id;
+    const t = setTimeout(() => hide(id), toastDuration(current, isTV));
+    return () => clearTimeout(t);
+  }, [current, hide, actionFocused]);
+
+  /** Closes the toast; a focus it had goes back to the page. */
+  const close = (id: number | undefined) => {
+    const hadFocus = actionFocused;
+    setFocusedId(null);
+    hide(id);
+    if (hadFocus && tvFocus) setTimeout(() => focusActivePage(), 50);
+  };
+  useTvBack(tvFocus && actionFocused, () => close(current?.id));
 
   const style = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ translateY: y.get() }] }));
 
@@ -89,9 +123,12 @@ export function ToastHost({ overlay = false, offset = 0 }: { overlay?: boolean; 
               </Text>
               {current.action ? (
                 <Touchable
+                  ref={actionRef}
+                  onFocus={() => setFocusedId(current.id)}
+                  onBlur={() => setFocusedId(null)}
                   onPress={() => {
                     current.action?.onPress();
-                    hide(current.id);
+                    close(current.id);
                   }}
                   hitSlop={8}
                   radius={8}
