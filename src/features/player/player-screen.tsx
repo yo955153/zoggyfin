@@ -33,6 +33,9 @@ import { videoSession } from '@/player/session';
 import { useShowsPause } from '@/player/control-gate';
 import { playingVideo, videoDetail, videoSummary } from '@/player/stream-info';
 import { type LiveNow, playerState, setPlayerState, usePlayerStore } from '@/player/store';
+import { ZAP_IDLE, zapDeadline, type ZapEvent, zapReducer, type ZapState, zapTakesBack } from '@/player/zap';
+import { channelSearchPending, requestChannelSearch } from '@/features/iptv/search-request';
+import { liveTvHref, liveTvTab } from '@/features/iptv/nav';
 import { chapterAt, formatTime } from '@/player/timeline';
 import { MAX_BITRATE, QUALITY_OPTIONS, qualityLabel, usePlaybackSettings } from '@/settings/playback';
 import { breakpointFor, layout } from '@/theme/theme';
@@ -50,6 +53,7 @@ import {
   NO_RUN,
   nextRun,
   liveKeyAction,
+  type LiveFocus,
   playerFocusOwner,
   playerKeyAction,
   SCRUB_COMMIT_MS,
@@ -66,6 +70,7 @@ import { openTogetherSheet, togetherState } from '@/together/store';
 import { syncPlaySupported } from '@/together/syncplay';
 
 import { AirPlayButton } from './airplay-button';
+import { LiveChannelCard } from './live-channel-card';
 import { Glass } from './glass';
 import { NextUpCard } from './next-up-card';
 import { embeddedTrackSections } from './embedded-track-sections';
@@ -303,14 +308,77 @@ export function PlayerScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [live, liveChannel, liveTick],
   );
-  /** Zaps and shows the channel briefly (TV: the controls stay hidden, so Up and Down keep zapping). */
+  /** Zaps at once: the on-screen channel buttons and the keyboard (TV: the banner shows the new channel). */
   const zap = (delta: number) => {
     s.zap(delta);
-    if (isTV && !visible) {
-      setPeek(true);
-      if (peekTimer.current) clearTimeout(peekTimer.current);
-      peekTimer.current = setTimeout(() => setPeek(false), LIVE_PEEK_MS);
-    } else wake();
+    if (!isTV || visible) wake();
+  };
+  // TV remote zapping (player/zap.ts): the banner steps through the channels and the
+  // player tunes once the presses stop, so quick presses open one stream, not many.
+  const [zapState, setZapState] = useState<ZapState>(ZAP_IDLE);
+  const zapRef = useRef<ZapState>(ZAP_IDLE);
+  const dispatchZap = useCallback((e: ZapEvent) => {
+    const r = zapReducer(zapRef.current, e);
+    if (r.state !== zapRef.current) {
+      zapRef.current = r.state;
+      setZapState(r.state);
+    }
+    if (r.tune !== null) videoSession().playChannelAt(r.tune);
+  }, []);
+  useEffect(() => {
+    const due = zapDeadline(zapState);
+    if (due === null) return;
+    const t = setTimeout(() => dispatchZap({ type: 'tick', current: playerState().now?.live?.index ?? 0, now: Date.now() }), Math.max(0, due - Date.now()));
+    return () => clearTimeout(t);
+  }, [zapState, dispatchZap]);
+  // TV: every new channel (a zap, the channel list, the first tune) shows the banner for a while.
+  const liveId = liveChannel?.id ?? null;
+  useEffect(() => {
+    if (isTV && liveId && zapRef.current.phase !== 'choosing') dispatchZap({ type: 'tuned', current: playerState().now?.live?.index ?? 0, now: Date.now() });
+  }, [liveId, dispatchZap]);
+  /** A zap key on TV: one step in the banner (or on the channel card while the controls show). */
+  const zapKey = (delta: 1 | -1) => {
+    const l = playerState().now?.live;
+    if (!l) return;
+    dispatchZap({ type: 'step', delta, current: l.index, count: l.channels.length, now: Date.now() });
+    if (visible) wake();
+  };
+  /** Select while choosing tunes at once; else it opens the channel list. */
+  const selectLive = () => {
+    const l = playerState().now?.live;
+    if (!l) return;
+    if (zapRef.current.phase === 'choosing') {
+      dispatchZap({ type: 'select', current: l.index, now: Date.now() });
+      return;
+    }
+    if (l.channels.length > 1) setSheet('channels');
+  };
+  // The channel on the card and in the banner: the choice while choosing, else the one that plays.
+  const zapChannel = live && zapState.phase !== 'idle' ? (live.channels[zapState.index] ?? liveChannel) : liveChannel;
+  const zapTag = live && zapState.phase === 'choosing' ? (zapState.index === live.index ? 'Playing' : 'OK to watch now') : null;
+  // TV: the channel card in the controls (the LIVE row). Up and Down zap on it; Left and Right go to Play.
+  const [cardView, setCardView] = useState<FocusTarget | null>(null);
+  const [playView, setPlayView] = useState<FocusTarget | null>(null);
+  const [cardFocused, setCardFocused] = useState(false);
+  // The card takes the first focus when the controls show; once the user leaves it, it stops
+  // pulling the focus back on each render (until the controls hide).
+  const [leftCard, setLeftCard] = useState(false);
+  const cardFocus = useRef({ on: false, at: 0 });
+  const trackCard = (on: boolean) => {
+    cardFocus.current = { on, at: on ? Date.now() : 0 };
+    setCardFocused(on);
+  };
+  // The channel list: the focused row's channel shows in the preview.
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const preview = live ? (live.channels.find((x) => x.id === previewId) ?? liveChannel) : null;
+  /** "Search channels" in the channel list: stop the stream, leave, and open the Live TV search. */
+  const searchChannels = () => {
+    requestChannelSearch();
+    closePlayer();
+    // The Live TV page under the player takes the request when it gets the focus; else open it.
+    setTimeout(() => {
+      if (channelSearchPending()) router.navigate(liveTvHref(isTV || liveTvTab ? '(live)' : '(library)'));
+    }, 400);
   };
   const hasNext = !!now?.next;
   const prompt = now ? skipPromptAt(now.segments, position, duration, hasNext) : null;
@@ -385,6 +453,7 @@ export function PlayerScreen() {
   useEffect(() => {
     if (!visible) {
       controlFocus.current = promptFocusRef.current ? 1 : 0;
+      cardFocus.current = { on: false, at: 0 };
       focusRow.current = { now: null, before: null };
     }
   }, [visible]);
@@ -392,7 +461,11 @@ export function PlayerScreen() {
   const [barVisible, setBarVisible] = useState(visible);
   if (barVisible !== visible) {
     setBarVisible(visible);
-    if (!visible) setBarFocused(false);
+    if (!visible) {
+      setBarFocused(false);
+      setCardFocused(false);
+      setLeftCard(false);
+    }
   }
   const scrubRun = useRef<ScrubRun>(NO_RUN);
   const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -463,10 +536,32 @@ export function PlayerScreen() {
 
   const onTvKey = (key: TvKey) => {
     if (live) {
-      const a = liveKeyAction(key, isTV && !visible);
+      if (key === 'back' && zapTakesBack(zapRef.current)) {
+        dispatchZap({ type: 'back' });
+        return;
+      }
+      // Android sends the key after the focus moved: a card that took the focus just now
+      // took it from this very key (Down from the buttons), so the key does not zap.
+      const card = cardFocus.current.on && Date.now() - cardFocus.current.at > 250;
+      const focus: LiveFocus = !visible ? 'hidden' : card ? 'card' : cardFocus.current.on || controlFocus.current > 0 ? 'buttons' : 'video';
+      // Down from the centre row goes to the card (the native next-focus does not reach into its guide).
+      if (key === 'down' && focus === 'buttons' && !cardFocus.current.on && focusRow.current.now === 'center') {
+        tapGate.cancel();
+        focusView(cardView);
+        wake();
+        return;
+      }
+      const a = liveKeyAction(key, focus);
       if (a?.type === 'zap') {
         tapGate.cancel();
-        zap(a.delta);
+        zapKey(a.delta);
+        return;
+      }
+      if (a?.type === 'toButtons') {
+        tapGate.cancel();
+        setLeftCard(true);
+        focusView(playView);
+        wake();
         return;
       }
       if (a?.type === 'wake') {
@@ -753,9 +848,10 @@ export function PlayerScreen() {
               if (v && Platform.OS === 'web') (v as unknown as HTMLElement).focus?.();
             }}
             onPress={() => {
-              // Live TV: Select opens the channel list (like a TV's OK button).
-              if (live && live.channels.length > 1) {
-                setSheet('channels');
+              // Live TV: Select tunes a channel chosen in the zap banner at once, or opens the
+              // channel list (like a TV's OK button).
+              if (live && (zapRef.current.phase === 'choosing' || live.channels.length > 1)) {
+                selectLive();
                 return;
               }
               s.togglePlay();
@@ -780,20 +876,14 @@ export function PlayerScreen() {
         ) : null}
 
         {/* TV, controls hidden: after a double press, a thin progress line with the times only. */}
-        {isTV && !visible && peek && live ? (
+        {/* TV, controls hidden: the zap banner. It shows the guide only and never opens a second stream. */}
+        {isTV && !visible && live && zapChannel && zapState.phase !== 'idle' ? (
           <Animated.View
             entering={FadeIn.duration(motion.duration.fast)}
             exiting={FadeOut.duration(motion.duration.slow)}
             pointerEvents="none"
-            style={[styles.bottom, { paddingBottom: bottomPad, paddingLeft: sideInset, paddingRight: sideInset }]}>
-            <Text style={[styles.title, styles.peekShadow]} numberOfLines={1}>
-              {[liveChannel?.number != null ? String(liveChannel.number) : null, liveChannel?.name].filter(Boolean).join('  ')}
-            </Text>
-            {liveNow ? (
-              <Text style={[styles.subtitle, styles.peekShadow]} numberOfLines={1}>
-                {liveNow}
-              </Text>
-            ) : null}
+            style={[styles.zapBanner, { bottom: bottomPad, left: sideInset, right: sideInset }]}>
+            <LiveChannelCard channel={zapChannel} source={live.source} live={zapChannel.id === liveChannel?.id} tag={zapTag} />
           </Animated.View>
         ) : null}
         {isTV && !visible && peek && !live ? (
@@ -864,6 +954,7 @@ export function PlayerScreen() {
               {live ? (
                 <RoundButton
                   onFocusChange={trackCenter}
+                  nextFocusDown={cardView}
                   icon="backward.end.fill"
                   label="Previous channel"
                   size={player.skipSize}
@@ -887,12 +978,13 @@ export function PlayerScreen() {
               )}
               <RoundButton
                 onFocusChange={trackCenter}
-                nextFocusDown={barView}
+                nextFocusDown={live ? cardView : barView}
+                tvRef={setPlayView}
                 icon={loading ? undefined : showsPause ? 'pause.fill' : 'play.fill'}
                 label={showsPause ? 'Pause' : 'Play'}
                 size={player.playSize}
                 glyph={iconSize.xxl}
-                preferredFocus={isTV && visible && !focusBar && focusOwner === 'controls'}
+                preferredFocus={isTV && visible && !focusBar && !live && focusOwner === 'controls'}
                 haptic
                 onPress={() => {
                   wake();
@@ -903,6 +995,7 @@ export function PlayerScreen() {
               {live ? (
                 <RoundButton
                   onFocusChange={trackCenter}
+                  nextFocusDown={cardView}
                   icon="forward.end.fill"
                   label="Next channel"
                   size={player.skipSize}
@@ -967,18 +1060,26 @@ export function PlayerScreen() {
                 }}
               />
             ) : null}
-            {live ? (
-              // Live: no length and nothing to seek; the scrubber hides.
-              <View style={styles.liveLine} accessible accessibilityLabel={liveNow ? `Live. Now: ${liveNow}` : 'Live'}>
-                <View style={styles.liveBadge}>
-                  <Text style={styles.liveText}>LIVE</Text>
-                </View>
-                {liveNow ? (
-                  <Text style={styles.subtitle} numberOfLines={1}>
-                    {liveNow}
-                  </Text>
-                ) : null}
-              </View>
+            {live && zapChannel ? (
+              // Live: no length and nothing to seek; the "now playing" channel card takes the scrubber's place.
+              isTV ? (
+                // Up and Down stay on the card (they zap); Left and Right go to the buttons.
+                <TvFocusGuide trapVertical>
+                  <Pressable
+                    ref={setCardView}
+                    focusable
+                    hasTVPreferredFocus={visible && !leftCard && focusOwner === 'controls'}
+                    onFocus={() => trackCard(true)}
+                    onBlur={() => trackCard(false)}
+                    onPress={selectLive}
+                    accessibilityRole="button"
+                    accessibilityHint="Up and Down change the channel. Select opens the channel list.">
+                    <LiveChannelCard channel={zapChannel} source={live.source} live={zapChannel.id === liveChannel?.id} tag={zapTag} focused={cardFocused} />
+                  </Pressable>
+                </TvFocusGuide>
+              ) : (
+                <LiveChannelCard channel={zapChannel} source={live.source} live style={styles.liveCard} />
+              )
             ) : (
             <View style={styles.times}>
               <Text style={styles.time}>{formatTime(position)}</Text>
@@ -1038,7 +1139,20 @@ export function PlayerScreen() {
       </TvFocusGuide>
 
       <PlayerSheet visible={sheet === 'tracks'} title="Audio & Subtitles" sections={trackSections} onClose={() => setSheet(null)} />
-      {live ? <PlayerSheet visible={sheet === 'channels'} title="Channels" sections={channelSections(live, (i) => s.playChannelAt(i))} onClose={() => setSheet(null)} /> : null}
+      {live ? (
+        <PlayerSheet
+          visible={sheet === 'channels'}
+          title="Channels"
+          sections={channelSections(live, (i) => s.playChannelAt(i), searchChannels)}
+          // The focused channel's now and next, from the guide: no second stream for a preview.
+          aside={isTV && preview ? <LiveChannelCard channel={preview} source={live.source} live={preview.id === liveChannel?.id} tag={preview.id === liveChannel?.id ? 'Playing' : 'Select to watch'} /> : null}
+          onFocusKey={setPreviewId}
+          onClose={() => {
+            setSheet(null);
+            setPreviewId(null);
+          }}
+        />
+      ) : null}
       <PlayerSheet visible={sheet === 'settings'} title="Playback" sections={settingsSections} info={streamInfo} onClose={() => setSheet(null)} />
       <PlayerSheet
         visible={sheet === 'screen'}
@@ -1094,11 +1208,8 @@ function PillButton({
 /** TV: how long the progress line stays after the last double press (ms). */
 const PEEK_MS = 1500;
 
-/** TV: how long the channel name shows after a zap with the controls hidden (ms). */
-const LIVE_PEEK_MS = 2500;
-
-/** The channel list in the player: the channels around the one that plays, in the list it was played from. */
-function channelSections(live: LiveNow, play: (index: number) => void): SheetSection[] {
+/** The channel list in the player: Search, then the channels around the one that plays, in the list it was played from. */
+function channelSections(live: LiveNow, play: (index: number) => void, search: () => void): SheetSection[] {
   const from = Math.max(0, live.index - CHANNEL_SHEET_SPAN);
   const to = Math.min(live.channels.length, live.index + CHANNEL_SHEET_SPAN + 1);
   const rows = live.channels.slice(from, to).map((ch, i) => ({
@@ -1108,7 +1219,10 @@ function channelSections(live: LiveNow, play: (index: number) => void): SheetSec
     selected: from + i === live.index,
     onPress: () => play(from + i),
   }));
-  return [{ title: live.channels[live.index]?.group || 'Channels', rows }];
+  return [
+    { title: 'Search', rows: [{ key: 'search', label: 'Search channels', detail: 'By name or number, in Live TV', selected: false, onPress: search }] },
+    { title: live.channels[live.index]?.group || 'Channels', rows },
+  ];
 }
 
 const styles = StyleSheet.create({
@@ -1140,9 +1254,9 @@ const styles = StyleSheet.create({
   peekTimes: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
   peekShadow: { textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } },
   time: { ...textStyle(type.mono), color: c.textOnMedia, fontVariant: ['tabular-nums'] },
-  liveLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  liveBadge: { backgroundColor: c.accent, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: spacing.xxs },
-  liveText: { ...textStyle(type.caption1), fontWeight: '700', color: c.onAccent, letterSpacing: 0.6 },
+  // TV: the zap banner sits at the bottom, inside the safe area (left, right and bottom come from the insets).
+  zapBanner: { position: 'absolute' },
+  liveCard: { marginBottom: spacing.sm, maxWidth: 560 },
   prompts: { position: 'absolute', alignItems: 'flex-end', left: spacing.lg },
   ripple: { position: 'absolute', top: '45%' },
   rippleInner: { borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, overflow: 'hidden' },

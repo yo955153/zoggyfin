@@ -14,6 +14,7 @@ import { Icon } from '@/components/icon';
 import { OptionSheet } from '@/components/option-sheet';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { Touchable } from '@/components/touchable';
+import { isTV } from '@/platform/tv';
 import { ActionRow, Group, LeadingIcon, makeSettingsStyles, SettingsRow, webSwitchColors } from '@/features/settings/rows';
 import { confirmDestructive } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
@@ -103,7 +104,7 @@ function UserRow({ user: u, target, selected, last, onPress }: { user: UserDto; 
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={`${u.Name}${marks ? `, ${marks}` : ''}. Last active ${active ?? 'never'}. Last sign-in ${login ?? 'never'}`}
-      style={({ pressed, hovered, focused }) => [rs.rowPad, (pressed || hovered || focused) && rs.rowPressed, selected && { backgroundColor: c.accentSoft }]}>
+      style={({ pressed, hovered, focused }) => [rs.rowPad, (pressed || hovered || (focused && !isTV)) && rs.rowPressed, selected && { backgroundColor: c.accentSoft }]}>
       <View style={p?.IsDisabled ? s.dim : null}>
         <Avatar session={{ serverId: target.serverId, serverUrl: target.serverUrl, userId: u.Id ?? '', userName: u.Name ?? '?', userImageTag: target.fixture ? null : (u.PrimaryImageTag ?? null), token: null }} size={scaled(36)} />
       </View>

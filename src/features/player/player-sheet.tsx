@@ -1,10 +1,10 @@
-import { type ComponentRef, useCallback, useRef, useState } from 'react';
+import { type ComponentRef, type ReactNode, useCallback, useRef, useState } from 'react';
 import { type LayoutChangeEvent, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/icon';
 import { isTV } from '@/platform/tv';
-import { font, mediaColors, scaled, withAlpha } from '@/theme';
+import { font, mediaColors, scaled } from '@/theme';
 
 import { c, iconSize, radius, spacing, textStyle, type } from './tokens';
 
@@ -40,6 +40,8 @@ export function PlayerSheet({
   title,
   sections,
   info,
+  aside,
+  onFocusKey,
   onClose,
 }: {
   visible: boolean;
@@ -47,6 +49,10 @@ export function PlayerSheet({
   sections: SheetSection[];
   /** Shown above the list and never scrolled away: TV focus cannot reach rows that only show facts. */
   info?: SheetInfo[];
+  /** Shown above the list and never scrolled away (the channel list's preview of the focused channel). */
+  aside?: ReactNode;
+  /** TV: a row took the focus. */
+  onFocusKey?: (key: string) => void;
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -89,6 +95,7 @@ export function PlayerSheet({
             ))}
           </View>
         ) : null}
+        {aside ? <View style={styles.aside}>{aside}</View> : null}
         <ScrollView
           ref={scroll}
           style={styles.list}
@@ -106,7 +113,14 @@ export function PlayerSheet({
                     row={r}
                     last={i === s.rows.length - 1}
                     preferredFocus={isTV && visible && r.key === firstSelected}
-                    onFocusRow={isTV ? reveal : undefined}
+                    onFocusRow={
+                      isTV
+                        ? (v) => {
+                            reveal(v);
+                            onFocusKey?.(r.key);
+                          }
+                        : undefined
+                    }
                     onPick={() => {
                       onClose();
                       if (!r.selected) r.onPress();
@@ -216,7 +230,8 @@ const styles = StyleSheet.create({
   sheetTV: { maxWidth: 760, maxHeight: '85%', bottom: undefined, top: '7.5%', borderRadius: radius.xl },
   titleTV: font(type.title2),
   rowTV: { minHeight: scaled(56) },
-  rowFocusTV: { backgroundColor: withAlpha(mediaColors.white, 0.22), borderLeftWidth: 4, borderLeftColor: mediaColors.white },
+  // TV: the shared row focus (design system §7.19): the fill only.
+  rowFocusTV: { backgroundColor: mediaColors.tvRowFocus },
   labelTV: font(type.body),
   detailTV: font(type.footnote),
   listInner: { gap: spacing.lg },
@@ -227,6 +242,7 @@ const styles = StyleSheet.create({
   sectionTitle: { ...textStyle(type.footnote), color: c.text2, marginLeft: spacing.sm, textTransform: 'uppercase' },
   card: { backgroundColor: c.surface, borderRadius: radius.lg, borderCurve: 'continuous', overflow: 'hidden' },
   infoCard: { marginHorizontal: spacing.lg, marginBottom: spacing.md },
+  aside: { marginHorizontal: spacing.lg, marginBottom: spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.md },
   rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.separator },
   rowActive: { backgroundColor: c.surface3 },

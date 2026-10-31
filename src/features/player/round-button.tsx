@@ -30,6 +30,7 @@ export function RoundButton({
   preferredFocus,
   onFocusChange,
   nextFocusDown,
+  tvRef,
 }: {
   icon?: IconName;
   label: string;
@@ -46,6 +47,8 @@ export function RoundButton({
   onFocusChange?: (focused: boolean) => void;
   /** Android TV: the view that Down sends the focus to. */
   nextFocusDown?: FocusTarget | null;
+  /** TV: the button's view, so the player can move the focus to it. */
+  tvRef?: (view: FocusTarget | null) => void;
 }) {
   const pressed = useSharedValue(0);
   const [focused, setFocused] = useState(false);
@@ -66,6 +69,7 @@ export function RoundButton({
   const round = { width: size, height: size, borderRadius: size / 2 };
   return (
     <Pressable
+      ref={tvRef}
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={size < 44 ? (44 - size) / 2 : 0}

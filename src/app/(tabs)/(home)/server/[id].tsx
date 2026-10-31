@@ -16,6 +16,7 @@ import { Sheet } from '@/components/sheet';
 import { EmptyState } from '@/components/states';
 import { TextField } from '@/components/text-field';
 import { Touchable } from '@/components/touchable';
+import { isTV } from '@/platform/tv';
 import { InviteSection } from '@/features/invite/invite-section';
 import { openAddUser, removeServerFlow, signOutUser, switchAccount } from '@/features/servers/actions';
 import { checkAgain, ConnectionStatus } from '@/features/servers/connection-status';
@@ -204,7 +205,7 @@ function AddressRow({ address, index, server, onPress }: { address: ServerAddres
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${index + 1}. ${address.url}, ${KIND_LABEL[address.kind]}. ${status}${inUse ? '. In use' : ''}. Edit`}
-      style={({ pressed, hovered, focused }) => [rs.rowPad, (pressed || hovered || focused) && rs.rowPressed]}>
+      style={({ pressed, hovered, focused }) => [rs.rowPad, (pressed || hovered || (focused && !isTV)) && rs.rowPressed]}>
       <View style={rs.leading}>
         <Icon name={address.kind === 'internal' ? 'house' : 'globe'} size={scaled(iconSize.sm - 1)} color={mediaColors.white} />
       </View>

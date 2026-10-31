@@ -2,7 +2,7 @@
  * Layout from the window or content width (design system §2). Pure: no React,
  * so it is unit-tested. TV gets its own 10-foot sizes (§ TV in the spec).
  */
-import { type Breakpoint, breakpointFor, gridFor, type GridResult, layout, type TileKind } from './theme';
+import { type Breakpoint, breakpointFor, gridFor, type GridResult, layout, spacing, type TileKind } from './theme';
 
 /**
  * TV sizes, designed on a 1920-point-wide screen (Apple TV). Android TV
@@ -10,11 +10,18 @@ import { type Breakpoint, breakpointFor, gridFor, type GridResult, layout, type 
  */
 export const tv = {
   baseWidth: 1920,
-  /** The collapsed side menu: a slim rail of icons at the leading edge. */
-  railWidth: 112,
+  /**
+   * The overscan-safe area: 5 % of each edge (Android TV and Fire TV ask for
+   * 48 x 27 dp at 1080p). Controls, text and focus marks stay inside it;
+   * backgrounds and artwork may bleed to the edge.
+   */
+  safeX: 96,
+  safeY: 54,
+  /** The collapsed side menu: a slim rail of icons, inside the safe area. */
+  railWidth: 184,
   /** The side menu when it is open (icons and labels). */
-  menuWidth: 440,
-  /** About 5 % of the screen: inside the overscan-safe area. */
+  menuWidth: 520,
+  /** The page margin: the same 5 % as the safe area. */
   gutter: 96,
   tileGap: 40,
   sectionGap: 44,
@@ -37,6 +44,17 @@ export function tvScale(width: number): number {
   return Math.max(0.5, width / tv.baseWidth);
 }
 
+/** The TV safe-area inset (overscan) for a screen width, in points. Zero off TV. */
+export interface SafeInset {
+  x: number;
+  y: number;
+}
+
+export function tvSafeInset(width: number): SafeInset {
+  const s = tvScale(width);
+  return { x: Math.round(tv.safeX * s), y: Math.round(tv.safeY * s) };
+}
+
 /**
  * The space a focused TV tile of this size needs on each side: it grows by
  * `focusScale` around its centre and the ring sits outside it. A row or a
@@ -44,6 +62,17 @@ export function tvScale(width: number): number {
  */
 export function tvFocusBleed(size: number): number {
   return Math.ceil((size * (tv.focusScale - 1)) / 2 + tv.focusRingWidth + tv.focusRingGap + 2);
+}
+
+/**
+ * TV: a full-width list row (a track, an episode) whose focus fill must stay
+ * inside the safe area. The row stops one gutter before the right edge, and
+ * its fill reaches `spacing.md` into the left gutter; with `padX` as the
+ * row's own side padding, the content keeps the page's left edge.
+ */
+export function tvRowInset(gutter: number): { marginLeft: number; marginRight: number; padX: number } {
+  const padX = Math.min(spacing.md, gutter);
+  return { marginLeft: gutter - padX, marginRight: gutter, padX };
 }
 
 /**
@@ -67,6 +96,8 @@ export interface LayoutInfo {
   sectionGap: number;
   /** Tile width in a horizontal row. */
   rowTile: Record<TileKind, number>;
+  /** TV: the overscan-safe inset from each screen edge (see `tv.safeX`). Zero elsewhere. */
+  safe: SafeInset;
 }
 
 /**
@@ -86,6 +117,7 @@ export function layoutFor(width: number, opts: { tv?: boolean; sidebar?: number 
       gap: Math.round(tv.tileGap * s),
       sectionGap: Math.round(tv.sectionGap * s),
       rowTile: { poster: r('poster'), thumb: r('thumb'), square: r('square'), circle: r('circle') },
+      safe: tvSafeInset(width),
     };
   }
   const contentWidth = Math.max(0, width - (opts.sidebar ?? 0));
@@ -103,6 +135,7 @@ export function layoutFor(width: number, opts: { tv?: boolean; sidebar?: number 
       square: layout.rowTileWidth.square[bp],
       circle: layout.rowTileWidth.circle[bp],
     },
+    safe: { x: 0, y: 0 },
   };
 }
 

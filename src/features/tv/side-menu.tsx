@@ -15,7 +15,7 @@ import Animated, { Easing, useAnimatedStyle, useReducedMotion, withTiming } from
 import { Icon, type IconName } from '@/components/icon';
 import { tvKeyFromEvent } from '@/player/tv-keys';
 import { isNativeTV, isTVPreview } from '@/platform/tv';
-import { type AppTheme, createStyles, font, mediaColors, motion, radius, spacing, tv, tvScale, type, useLayout, useStyles, useTheme, webPressable, withAlpha } from '@/theme';
+import { type AppTheme, createStyles, font, mediaColors, motion, radius, spacing, tv, tvSafeInset, tvScale, type, useLayout, useStyles, useTheme, webPressable, withAlpha } from '@/theme';
 
 import { focusActivePage, type FocusTarget, focusView, isMenuFocused, noteRemoteKey, restoreContentFocus, setContentGuide, setMenuFocused, TvFocusGuide, tvPages } from './focus';
 import { useTvBack } from './use-tv-back';
@@ -45,11 +45,18 @@ const STANDARD = Easing.bezier(...motion.easing.standard);
 /** The TV window never changes size, so the menu sizes are fixed. */
 const K = tvScale(Dimensions.get('window').width);
 const ICON = Math.round(tv.railIcon * K);
+/** The overscan-safe inset: the items and their focus fill start inside it. */
+const SAFE = tvSafeInset(Dimensions.get('window').width);
+/** The gap between an item's focus fill and the rail's trailing edge. */
+const ITEM_END = spacing.sm;
+/** The icon's inset in its item, so the icon sits centred in the closed item. */
+const iconInset = (railWidth: number) => Math.round((railWidth - SAFE.x - ITEM_END - ICON) / 2);
 
 /** The (tabs) layout on TV: the tab content after the rail, and the side menu over it. */
 export function TvTabsLayout() {
   const l = useLayout();
   const rail = Math.round(tv.railWidth * tvScale(l.width));
+  const home = usePathname() === '/';
   const content = useRef<ComponentRef<typeof View> | null>(null);
   // The visible page of the tab stacks (Android TV). A focus that comes into the
   // content goes there, never to a page under it that is still in the window.
@@ -73,7 +80,12 @@ export function TvTabsLayout() {
   return (
     <Tabs style={styles.flex}>
       {/* First in the tree, so the content (not the menu) takes the first focus. */}
-      <TvFocusGuide ref={content} autoFocus destinations={[page]} style={[styles.flex, { paddingLeft: rail }]}>
+      {/*
+        The pages start inside the overscan-safe area at the top and the bottom (theme/layout
+        `tv.safeY`). Home is the exception at the top: its billboard art runs to the top edge, and
+        its text and rows start well below the safe line.
+      */}
+      <TvFocusGuide ref={content} autoFocus destinations={[page]} style={[styles.flex, { paddingLeft: rail, paddingTop: home ? 0 : l.safe.y, paddingBottom: l.safe.y }]}>
         <TabSlot />
       </TvFocusGuide>
       <SideMenu content={content} />
@@ -167,8 +179,8 @@ function SideMenu({ content }: { content: RefObject<FocusTarget | null> }) {
       {/* The open menu dims the content under it. */}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrim]}>
         <LinearGradient
-          colors={[withAlpha(mediaColors.black, 0.94), withAlpha(mediaColors.black, 0.7), withAlpha(mediaColors.black, 0)]}
-          locations={[0, 0.3, 0.65]}
+          colors={[withAlpha(mediaColors.black, 0.96), withAlpha(mediaColors.black, 0.9), withAlpha(mediaColors.black, 0)]}
+          locations={[0, 0.32, 0.7]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={StyleSheet.absoluteFill}
@@ -188,8 +200,9 @@ function SideMenu({ content }: { content: RefObject<FocusTarget | null> }) {
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
-        <Animated.View style={[s.panel, panel]}>
-          <View style={[s.menuGlyph, { paddingLeft: (railW - ICON) / 2 }]} accessible={false}>
+        {/* Open, the panel is solid: the labels never sit on the content's text. */}
+        <Animated.View style={[s.panel, open && s.panelOpen, panel]}>
+          <View style={[s.menuGlyph, { paddingLeft: SAFE.x + iconInset(railW) }]} accessible={false}>
             <Icon name="line.horizontal.3" size={ICON} color={open ? c.text : c.text2} />
           </View>
           <View style={s.items}>
@@ -273,7 +286,7 @@ function MenuItem({
       accessibilityLabel={destination.label}
       accessibilityState={{ selected }}
       style={[s.item, webPressable]}>
-      <View style={[s.itemInner, { paddingLeft: (railWidth - ICON) / 2 - spacing.sm }, focused && s.itemFocused]}>
+      <View style={[s.itemInner, { paddingLeft: iconInset(railWidth) }, focused && s.itemFocused]}>
         {selected && !focused ? <View style={s.selectedBar} /> : null}
         <Icon name={destination.icon} size={ICON} color={fg} weight={selected ? 'semibold' : 'regular'} />
         {open ? (
@@ -294,9 +307,10 @@ const styles = StyleSheet.create({
 const makeStyles = createStyles(({ c }: AppTheme) => ({
     rail: { position: 'absolute' as const, left: 0, top: 0, bottom: 0, overflow: 'visible' as const },
     panel: { position: 'absolute' as const, left: 0, top: 0, bottom: 0, overflow: 'hidden' as const },
-    menuGlyph: { paddingTop: spacing.xxl, paddingBottom: spacing.xl },
+    panelOpen: { backgroundColor: withAlpha(c.bg, 0.97) },
+    menuGlyph: { paddingTop: SAFE.y + spacing.sm, paddingBottom: spacing.xl },
     items: { flex: 1, justifyContent: 'center' as const, gap: spacing.xs, paddingBottom: spacing.huge },
-    item: { paddingHorizontal: spacing.sm },
+    item: { paddingLeft: SAFE.x, paddingRight: ITEM_END },
     itemInner: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,

@@ -198,15 +198,11 @@ export function VodHomeScreen({ kind, providerId: wanted }: { kind: VodKind; pro
             accessibilityRole="button"
             accessibilityLabel={item.name}
             containerStyle={columns > 1 ? s.flex : { marginHorizontal: l.gutter }}
-            style={({ pressed, hovered, focused }) => [s.category, (pressed || hovered) && s.categoryPressed, focused && isTV && s.categoryFocused]}>
-            {({ focused }) => (
-              <>
-                <Text style={[s.categoryLabel, focused && isTV && s.categoryLabelFocused]} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Icon name="chevron.right" size={scaled(iconSize.sm)} color={focused && isTV ? c.bg : c.text3} />
-              </>
-            )}
+            style={({ pressed, hovered }) => [s.category, (pressed || hovered) && s.categoryPressed]}>
+            <Text style={s.categoryLabel} numberOfLines={1}>
+              {item.name}
+            </Text>
+            <Icon name="chevron.right" size={scaled(iconSize.sm)} color={c.text3} />
           </Touchable>
         )}
       />
@@ -262,7 +258,5 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
     borderCurve: 'continuous' as const,
   },
   categoryPressed: { backgroundColor: c.surface2 },
-  categoryFocused: { backgroundColor: c.text },
   categoryLabel: { ...font(type.body), color: c.text, flex: 1 },
-  categoryLabelFocused: { color: c.bg },
 }));
