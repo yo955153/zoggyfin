@@ -218,24 +218,29 @@ export function useChannelView(providerId: string | null, group: string, query: 
 
 /** The time now, to the minute (now and next move on by themselves). */
 export function useMinute(): number {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => minuteOf(Date.now()));
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000);
+    // Checked every 15 s, but the value (and every list row that reads it) changes once a minute.
+    const t = setInterval(() => setNow(minuteOf(Date.now())), 15_000);
     return () => clearInterval(t);
   }, []);
   return now;
 }
 
-/** Now and next of a channel (re-renders when the guide changes). */
+function minuteOf(ms: number): number {
+  return ms - (ms % 60_000);
+}
+
+const NO_NOW_NEXT: NowNext = { now: null, next: null };
+
+/**
+ * Now and next of a channel. It re-renders only when this channel's own now or next programme
+ * changes, not on every guide load: a list keeps many rows mounted, and a slow TV stick cannot
+ * render them all again for each guide answer.
+ */
 export function useNowNext(providerId: string | null, channel: Channel | null, at: number): NowNext {
-  const guide = useIptvStore((s) => (providerId ? s.guides[providerId] : undefined));
-  const names = useIptvStore((s) => (providerId ? s.guideNames[providerId] : undefined));
-  return useMemo(
-    () => (providerId && channel && guide ? nowNextOf(providerId, channel, at) : { now: null, next: null }),
-    // The guide and names objects change when the guide loads.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [providerId, channel, at, guide, names],
-  );
+  const nn = useIptvStore(useShallow((s) => (providerId && channel && s.guides[providerId] ? nowNextOf(providerId, channel, at) : NO_NOW_NEXT)));
+  return nn.now || nn.next ? nn : NO_NOW_NEXT;
 }
 
 /** Plays a channel; channel up and down move through `list`. */

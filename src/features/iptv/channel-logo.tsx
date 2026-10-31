@@ -7,6 +7,8 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 
+import { isTV } from '@/platform/tv';
+
 import { createStyles, type AppTheme, font, radius, type, useStyles } from '@/theme';
 
 /** The first letters of a channel name, for a logo that is missing. */
@@ -29,7 +31,8 @@ export function ChannelLogo({ uri, name, size }: { uri: string | null | undefine
           contentFit="contain"
           recyclingKey={uri}
           cachePolicy="disk"
-          transition={120}
+          // TV: no fade; a slow TV stick has no frames to spare while the list scrolls.
+          transition={isTV ? 0 : 120}
           onError={() => setFailed(uri)}
         />
       ) : (

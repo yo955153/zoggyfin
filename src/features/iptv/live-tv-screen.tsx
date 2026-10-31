@@ -72,6 +72,7 @@ import { createStyles, type AppTheme, font, iconSize, radius, scaled, sizes, spa
 
 import { BrowseColumn } from './browse-column';
 import { ChannelDetails } from './channel-details';
+import { focusChannel, useFocusedChannel } from './focused-channel';
 import { CHANNEL_ROW_HEIGHT, ChannelRow, HEART_TV } from './channel-row';
 import { providerFormHref, providersHref, useLiveGroup } from './nav';
 import { takeChannelSearch } from './search-request';
@@ -140,7 +141,9 @@ export function LiveTvScreen() {
     if (searching) return mergedSearch.results;
     return groupKey === RECENTS_GROUP ? merged.recents : merged.favourites;
   }, [all, searching, query, view.channels, mergedSearch.results, groupKey, merged.recents, merged.favourites]);
-  const rowOf = useCallback((r: Channel | ProviderChannel): ProviderChannel => ('channel' in r ? r : asProviderChannel(providerId ?? '', r)), [providerId]);
+  // The same ProviderChannel object for a channel on every render, so a row's props stay the same
+  // and its memo holds (a new object per render re-rendered every row on each page render).
+  const rowOf = useCallback((r: Channel | ProviderChannel): ProviderChannel => ('channel' in r ? r : wrappedRow(providerId ?? '', r)), [providerId]);
 
   const now = useMinute();
   const play = usePlayChannel();
@@ -182,15 +185,14 @@ export function LiveTvScreen() {
 
   // TV: the focused row (the menu key favourites it; the details panel shows it).
   const focused = useRef<ProviderChannel | null>(null);
-  const [focusedRow, setFocusedRow] = useState<{ view: string | null; row: ProviderChannel } | null>(null);
-  const shown = focusedRow && focusedRow.view === liveView ? focusedRow.row : null;
   const onFocusRow = useCallback(
     (row: ProviderChannel | null) => {
       if (!row) return;
       focused.current = row;
-      setFocusedRow({ view: liveView, row });
+      // Not page state: only the details panel reads it (focused-channel.ts).
+      if (details) focusChannel(liveView, row);
     },
-    [liveView],
+    [liveView, details],
   );
   useTvRemote(isNativeTV, (e) => {
     if (e.eventType === 'menu' && Number(e.eventKeyAction ?? -1) !== 0 && focused.current) toggle(focused.current);
@@ -265,6 +267,27 @@ export function LiveTvScreen() {
   // The Live TV tab's root page has no header (`useRootScreenOptions`); opened from Home or
   // Library it is a pushed page with a plain header and a back button.
   const title = <Stack.Screen options={group === '(live)' ? { ...root, title: 'Live TV' } : { title: 'Live TV', headerLargeTitleEnabled: false }} />;
+
+  const renderItem = useCallback(
+    ({ item }: { item: Channel | ProviderChannel }) => {
+      const row = rowOf(item);
+      return (
+        <ChannelRow
+          row={row}
+          favourite={favourites.has(row.key)}
+          playing={row.key === playingKey}
+          now={now}
+          showNext={!details}
+          numbered={numbered}
+          providerLabel={all ? names.get(row.providerId) : undefined}
+          onPlay={onPlay}
+          onToggleFavourite={toggle}
+          onFocusRow={onFocusRow}
+        />
+      );
+    },
+    [rowOf, favourites, playingKey, now, details, numbered, all, names, onPlay, toggle, onFocusRow],
+  );
 
   if (!providers.length || !liveView) {
     return (
@@ -480,8 +503,10 @@ export function LiveTvScreen() {
       contentContainerStyle={{ paddingLeft: wide ? 0 : l.gutter, paddingRight: isTV ? tvFocusBleed(HEART_TV) : wide ? 0 : l.gutter, paddingBottom: bottomPad, paddingTop: spacing.xs, flexGrow: 1 }}
       getItemLayout={(_d, index) => ({ length: CHANNEL_ROW_HEIGHT, offset: CHANNEL_ROW_HEIGHT * index, index })}
       initialNumToRender={14}
-      maxToRenderPerBatch={16}
-      windowSize={9}
+      // TV: fewer rows mounted and rendered per batch, so a slow TV stick keeps up with the D-pad.
+      maxToRenderPerBatch={isTV ? 8 : 16}
+      updateCellsBatchingPeriod={isTV ? 50 : undefined}
+      windowSize={isTV ? 5 : 9}
       removeClippedSubviews={!isTV}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
@@ -507,23 +532,7 @@ export function LiveTvScreen() {
           <Text style={s.listEmptyText}>{empty.text}</Text>
         </View>
       }
-      renderItem={({ item }) => {
-        const row = rowOf(item);
-        return (
-          <ChannelRow
-            row={row}
-            favourite={favourites.has(row.key)}
-            playing={row.key === playingKey}
-            now={now}
-            showNext={!details}
-            numbered={numbered}
-            providerLabel={all ? names.get(row.providerId) : undefined}
-            onPlay={onPlay}
-            onToggleFavourite={toggle}
-            onFocusRow={onFocusRow}
-          />
-        );
-      }}
+      renderItem={renderItem}
     />
   );
 
@@ -553,14 +562,7 @@ export function LiveTvScreen() {
             />
             {channelsList}
             {details && !loading && !failed ? (
-              <ChannelDetails
-                providerId={shown?.providerId ?? providerId ?? ''}
-                channel={shown?.channel ?? null}
-                providerLabel={all && shown ? names.get(shown.providerId) : undefined}
-                now={now}
-                favourite={!!shown && favourites.has(shown.key)}
-                width={DETAILS_WIDTH}
-              />
+              <FocusedDetails view={liveView} providerId={providerId} all={all} names={names} now={now} favourites={favourites} />
             ) : null}
           </View>
         ) : (
@@ -572,6 +574,47 @@ export function LiveTvScreen() {
 }
 
 const EMPTY: Channel[] = [];
+
+const wrappedRows = new WeakMap<Channel, ProviderChannel>();
+
+/** One ProviderChannel per channel object (a channel object belongs to one provider's list). */
+function wrappedRow(providerId: string, channel: Channel): ProviderChannel {
+  let w = wrappedRows.get(channel);
+  if (!w || w.providerId !== providerId) {
+    w = asProviderChannel(providerId, channel);
+    wrappedRows.set(channel, w);
+  }
+  return w;
+}
+
+/** TV: the details panel of the focused row. It alone follows the focus (focused-channel.ts). */
+function FocusedDetails({
+  view,
+  providerId,
+  all,
+  names,
+  now,
+  favourites,
+}: {
+  view: string | null;
+  providerId: string | null;
+  all: boolean;
+  names: ReadonlyMap<string, string>;
+  now: number;
+  favourites: ReadonlySet<string>;
+}) {
+  const shown = useFocusedChannel(view);
+  return (
+    <ChannelDetails
+      providerId={shown?.providerId ?? providerId ?? ''}
+      channel={shown?.channel ?? null}
+      providerLabel={all && shown ? names.get(shown.providerId) : undefined}
+      now={now}
+      favourite={!!shown && favourites.has(shown.key)}
+      width={DETAILS_WIDTH}
+    />
+  );
+}
 
 const makeStyles = createStyles(({ c }: AppTheme) => ({
   flex: { flex: 1 },

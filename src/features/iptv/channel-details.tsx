@@ -33,9 +33,12 @@ export function ChannelDetails({
   const s = useStyles(makeStyles);
   const { c } = useTheme();
   const nn = useNowNext(providerId, channel, now);
-  // Xtream: the guide of the focused channel loads on demand.
+  // Xtream: the guide of the focused channel loads on demand, once the focus rests on it (the
+  // panel itself follows after focused-channel.ts SETTLE_MS), so scrolling sends no request per row.
   useEffect(() => {
-    if (channel) iptv.requestNowNext(providerId, [channel]);
+    if (!channel) return;
+    const t = setTimeout(() => iptv.requestNowNext(providerId, [channel]), 200);
+    return () => clearTimeout(t);
   }, [providerId, channel]);
 
   if (!channel) {
