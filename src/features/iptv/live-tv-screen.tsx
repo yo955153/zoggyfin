@@ -39,6 +39,7 @@ import { createStyles, type AppTheme, font, iconSize, radius, scaled, sizes, spa
 
 import { CHANNEL_ROW_HEIGHT, ChannelRow } from './channel-row';
 import { providerFormHref, providersHref, useLiveGroup } from './nav';
+import { VodEntries } from './vod/vod-entries';
 
 export function LiveTvScreen() {
   const s = useStyles(makeStyles);
@@ -264,6 +265,7 @@ export function LiveTvScreen() {
       {title}
       <View style={s.page}>
         {toolbar}
+        <VodEntries providerId={providerId} />
         {providerChips}
         {groupChips}
         {banner}

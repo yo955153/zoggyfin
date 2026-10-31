@@ -7,6 +7,7 @@ import { useEffect, useMemo } from 'react';
 import { usePlayer } from '@/player';
 
 import { bindSession } from './manager';
+import { useIptvStore } from './store';
 import { EMPTY_VOD_LISTS, playOrder } from './vod-lists';
 import {
   ALL_CATEGORY,
@@ -135,6 +136,17 @@ export function useVodLists(providerId: string | null): VodLists {
     if (providerId && !lists) vodListsOf(providerId);
   }, [providerId, lists]);
   return lists ?? EMPTY_VOD_LISTS;
+}
+
+/**
+ * Which libraries a provider has: Xtream always offers both (a panel with
+ * none shows empty pages); an M3U list only when it holds film or episode entries.
+ */
+export function useVodKinds(providerId: string | null): { film: boolean; series: boolean } {
+  const kind = useIptvStore((s) => (providerId ? s.providers.providers[providerId]?.kind : undefined));
+  const m3u = useVodStore((s) => (providerId ? s.m3u[providerId] : undefined));
+  if (kind === 'xtream') return { film: true, series: true };
+  return { film: !!m3u?.films.length, series: !!m3u?.series.length };
 }
 
 /** Plays films and episodes in the player (seekable, positions kept on this device). */
