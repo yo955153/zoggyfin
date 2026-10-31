@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { Icon } from '@/components/icon';
+import { ChannelLogo } from '@/features/iptv/channel-logo';
 import { TogetherChip } from '@/features/together/together-pill';
 import { ItemImage } from '@/components/item-image';
 import { episodeLabel } from '@/lib/format';
@@ -69,7 +70,10 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
 
   if (!now) return null;
   const item = now.item;
-  const sub = isAudio
+  const liveChannel = now.live ? now.live.channels[now.live.index] : null;
+  const sub = liveChannel
+    ? (liveChannel.group || 'Live TV')
+    : isAudio
     ? (artistLine(item) ?? item.Album ?? sourceName ?? 'Audio')
     : item.Type === 'Episode'
       ? [item.SeriesName, episodeLabel(item)].filter(Boolean).join(' · ')
@@ -80,7 +84,9 @@ export function MiniPlayer({ inline = false, floating = false }: { inline?: bool
     if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     activePlayback.togglePlay();
   };
-  const art = isAudio ? (
+  const art = liveChannel ? (
+    <ChannelLogo uri={liveChannel.logo} name={liveChannel.name} size={30} />
+  ) : isAudio ? (
     <ItemImage item={item} variant="square" width={38} aspectRatio={1} rounded={radius.sm} hideArtTitle />
   ) : (
     <ItemImage item={item} variant="landscape" width={38 * (16 / 9)} aspectRatio={16 / 9} rounded={radius.sm} hideArtTitle />

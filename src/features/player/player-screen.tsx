@@ -30,7 +30,7 @@ import { nextUpPhase, nextUpStartsAt, skipPromptAt } from '@/player/segments';
 import { videoSession } from '@/player/session';
 import { useShowsPause } from '@/player/control-gate';
 import { playingVideo, videoDetail, videoSummary } from '@/player/stream-info';
-import { playerState, setPlayerState, usePlayerStore } from '@/player/store';
+import { type LiveNow, playerState, setPlayerState, usePlayerStore } from '@/player/store';
 import { chapterAt, formatTime } from '@/player/timeline';
 import { MAX_BITRATE, QUALITY_OPTIONS, qualityLabel, usePlaybackSettings } from '@/settings/playback';
 import { breakpointFor, layout } from '@/theme/theme';
@@ -47,6 +47,7 @@ import {
   DOUBLE_PRESS_SEEK,
   NO_RUN,
   nextRun,
+  liveKeyAction,
   playerKeyAction,
   SCRUB_COMMIT_MS,
   type ScrubRun,
@@ -105,7 +106,10 @@ function minimizePlayer() {
   leave();
 }
 
-type SheetKind = 'tracks' | 'settings' | 'screen' | null;
+type SheetKind = 'tracks' | 'settings' | 'screen' | 'channels' | null;
+
+/** The channel list in the player shows at most this many channels on each side of the one that plays. */
+const CHANNEL_SHEET_SPAN = 60;
 
 const FITS: { fit: VideoFit; label: string; detail: string }[] = [
   { fit: 'contain', label: 'Fit', detail: 'Shows the whole picture' },
@@ -230,7 +234,7 @@ export function PlayerScreen() {
   const onDoubleTap = useCallback(
     (x: number) => {
       const third = width / 3;
-      if (x > third && x < third * 2) {
+      if (playerState().now?.live || (x > third && x < third * 2)) {
         toggleControls();
         return;
       }
@@ -277,6 +281,31 @@ export function PlayerScreen() {
   }, [toggleControls, onDoubleTap, dragY, height, signedIn]);
 
   const s = videoSession();
+  // Live TV (IPTV): no seeking, channel up and down, and a channel list.
+  const live = now?.live ?? null;
+  const liveChannel = live ? (live.channels[live.index] ?? null) : null;
+  // What runs now on the channel; the guide can arrive after the channel starts.
+  const [liveTick, setLiveTick] = useState(0);
+  useEffect(() => {
+    if (!live) return;
+    const t = setInterval(() => setLiveTick((n) => n + 1), 15_000);
+    return () => clearInterval(t);
+  }, [live]);
+  const liveNow = useMemo(
+    () => (live && liveChannel ? (live.source.nowLine?.(liveChannel.id) ?? null) : null),
+    // liveTick: read the guide again from time to time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [live, liveChannel, liveTick],
+  );
+  /** Zaps and shows the channel briefly (TV: the controls stay hidden, so Up and Down keep zapping). */
+  const zap = (delta: number) => {
+    s.zap(delta);
+    if (isTV && !visible) {
+      setPeek(true);
+      if (peekTimer.current) clearTimeout(peekTimer.current);
+      peekTimer.current = setTimeout(() => setPeek(false), LIVE_PEEK_MS);
+    } else wake();
+  };
   const hasNext = !!now?.next;
   const prompt = now ? skipPromptAt(now.segments, position, duration, hasNext) : null;
   const startsAt = now ? nextUpStartsAt(now.segments, duration) : null;
@@ -405,6 +434,19 @@ export function PlayerScreen() {
   };
 
   const onTvKey = (key: TvKey) => {
+    if (live) {
+      const a = liveKeyAction(key, isTV && !visible);
+      if (a?.type === 'zap') {
+        tapGate.cancel();
+        zap(a.delta);
+        return;
+      }
+      if (a?.type === 'wake') {
+        tapGate.cancel();
+        wake();
+        return;
+      }
+    }
     const side = key === 'left' || key === 'right';
     // Every Left and Right counts toward a double press. With the controls hidden,
     // a single press waits out the window before it shows them, so a double press
@@ -517,6 +559,14 @@ export function PlayerScreen() {
       case 'k':
         s.togglePlay();
         break;
+      case 'ArrowUp':
+      case 'PageUp':
+        if (live) zap(1);
+        break;
+      case 'ArrowDown':
+      case 'PageDown':
+        if (live) zap(-1);
+        break;
       case 'ArrowLeft':
       case 'j':
         s.skip(-(k.shift ? 30 : settings.skipBackSeconds));
@@ -547,8 +597,9 @@ export function PlayerScreen() {
 
   const title = now?.item.Name ?? '';
   const chapter = now ? chapterAt(now.chapters, position)?.name : null;
-  const sub =
-    now?.item.Type === 'Episode'
+  const sub = live
+    ? [liveChannel?.number != null ? String(liveChannel.number) : null, liveNow ?? liveChannel?.group ?? null].filter(Boolean).join(' · ') || null
+    : now?.item.Type === 'Episode'
       ? [now.item.SeriesName, episodeLabel(now.item)].filter(Boolean).join(' · ')
       : (chapter ?? (now?.item.ProductionYear ? String(now.item.ProductionYear) : null));
 
@@ -669,6 +720,11 @@ export function PlayerScreen() {
               if (v && Platform.OS === 'web') (v as unknown as HTMLElement).focus?.();
             }}
             onPress={() => {
+              // Live TV: Select opens the channel list (like a TV's OK button).
+              if (live && live.channels.length > 1) {
+                setSheet('channels');
+                return;
+              }
               s.togglePlay();
               wake();
             }}
@@ -691,7 +747,23 @@ export function PlayerScreen() {
         ) : null}
 
         {/* TV, controls hidden: after a double press, a thin progress line with the times only. */}
-        {isTV && !visible && peek ? (
+        {isTV && !visible && peek && live ? (
+          <Animated.View
+            entering={FadeIn.duration(motion.duration.fast)}
+            exiting={FadeOut.duration(motion.duration.slow)}
+            pointerEvents="none"
+            style={[styles.bottom, { paddingBottom: bottomPad, paddingLeft: sideInset, paddingRight: sideInset }]}>
+            <Text style={[styles.title, styles.peekShadow]} numberOfLines={1}>
+              {[liveChannel?.number != null ? String(liveChannel.number) : null, liveChannel?.name].filter(Boolean).join('  ')}
+            </Text>
+            {liveNow ? (
+              <Text style={[styles.subtitle, styles.peekShadow]} numberOfLines={1}>
+                {liveNow}
+              </Text>
+            ) : null}
+          </Animated.View>
+        ) : null}
+        {isTV && !visible && peek && !live ? (
           <Animated.View
             entering={FadeIn.duration(motion.duration.fast)}
             exiting={FadeOut.duration(motion.duration.slow)}
@@ -736,14 +808,17 @@ export function PlayerScreen() {
               <AirPlayButton onOpen={wake} />
               {/* TV: the system can say it has Picture in Picture and still refuse it (Google TV). */}
               {s.pipSupported && !isTV ? <PillButton onFocusChange={trackTop} icon="pip.enter" label="Picture in Picture" onPress={() => s.startPip()} /> : null}
-              {togetherAvailable ? (
+              {live && live.channels.length > 1 ? (
+                <PillButton onFocusChange={trackTop} icon="list.bullet" label="Channels" onPress={() => setSheet('channels')} />
+              ) : null}
+              {togetherAvailable && !live ? (
                 <PillButton onFocusChange={trackTop} icon="person.2" label="Watch together" onPress={() => openTogetherSheet('player', null)} />
               ) : null}
-              <PillButton onFocusChange={trackTop} icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} />
+              {live ? null : <PillButton onFocusChange={trackTop} icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} />}
               {now?.kind === 'audio' ? null : (
                 <PillButton onFocusChange={trackTop} icon="aspectratio" label="Screen size" onPress={() => setSheet('screen')} />
               )}
-              <PillButton onFocusChange={trackTop} icon="gearshape" label="Quality and speed" onPress={() => setSheet('settings')} />
+              {live ? null : <PillButton onFocusChange={trackTop} icon="gearshape" label="Quality and speed" onPress={() => setSheet('settings')} />}
               {Platform.OS === 'web' ? (
                 <PillButton onFocusChange={trackTop} icon="arrow.up.left.and.arrow.down.right" label="Full screen" onPress={() => s.toggleFullscreen(null)} />
               ) : null}
@@ -753,6 +828,16 @@ export function PlayerScreen() {
 
           {!scrubbing && status !== 'error' ? (
             <View style={styles.center} pointerEvents="box-none">
+              {live ? (
+                <RoundButton
+                  onFocusChange={trackCenter}
+                  icon="backward.end.fill"
+                  label="Previous channel"
+                  size={player.skipSize}
+                  glyph={iconSize.xl}
+                  onPress={() => zap(-1)}
+                />
+              ) : (
               <RoundButton
                 onFocusChange={trackCenter}
                 nextFocusDown={barView}
@@ -766,6 +851,7 @@ export function PlayerScreen() {
                 }}>
                 <SkipNumber seconds={settings.skipBackSeconds} />
               </RoundButton>
+              )}
               <RoundButton
                 onFocusChange={trackCenter}
                 nextFocusDown={barView}
@@ -781,6 +867,16 @@ export function PlayerScreen() {
                 }}>
                 {loading ? <ActivityIndicator color={c.textOnMedia} size="large" /> : null}
               </RoundButton>
+              {live ? (
+                <RoundButton
+                  onFocusChange={trackCenter}
+                  icon="forward.end.fill"
+                  label="Next channel"
+                  size={player.skipSize}
+                  glyph={iconSize.xl}
+                  onPress={() => zap(1)}
+                />
+              ) : (
               <RoundButton
                 onFocusChange={trackCenter}
                 nextFocusDown={barView}
@@ -794,11 +890,12 @@ export function PlayerScreen() {
                 }}>
                 <SkipNumber seconds={settings.skipForwardSeconds} />
               </RoundButton>
+              )}
             </View>
           ) : null}
 
           <View style={[styles.bottom, { paddingBottom: bottomPad, paddingLeft: sideInset, paddingRight: sideInset }]} pointerEvents="box-none">
-            {now ? (
+            {now && !live ? (
               <Scrubber
                 position={position}
                 duration={duration}
@@ -837,10 +934,24 @@ export function PlayerScreen() {
                 }}
               />
             ) : null}
+            {live ? (
+              // Live: no length and nothing to seek; the scrubber hides.
+              <View style={styles.liveLine} accessible accessibilityLabel={liveNow ? `Live. Now: ${liveNow}` : 'Live'}>
+                <View style={styles.liveBadge}>
+                  <Text style={styles.liveText}>LIVE</Text>
+                </View>
+                {liveNow ? (
+                  <Text style={styles.subtitle} numberOfLines={1}>
+                    {liveNow}
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
             <View style={styles.times}>
               <Text style={styles.time}>{formatTime(position)}</Text>
               <Text style={styles.time}>{formatTime(-(Math.max(0, duration - position)))}</Text>
             </View>
+            )}
           </View>
           </>
           ) : null}
@@ -884,6 +995,7 @@ export function PlayerScreen() {
       </TvFocusGuide>
 
       <PlayerSheet visible={sheet === 'tracks'} title="Audio & Subtitles" sections={trackSections} onClose={() => setSheet(null)} />
+      {live ? <PlayerSheet visible={sheet === 'channels'} title="Channels" sections={channelSections(live, (i) => s.playChannelAt(i))} onClose={() => setSheet(null)} /> : null}
       <PlayerSheet visible={sheet === 'settings'} title="Playback" sections={settingsSections} info={streamInfo} onClose={() => setSheet(null)} />
       <PlayerSheet
         visible={sheet === 'screen'}
@@ -939,6 +1051,23 @@ function PillButton({
 /** TV: how long the progress line stays after the last double press (ms). */
 const PEEK_MS = 1500;
 
+/** TV: how long the channel name shows after a zap with the controls hidden (ms). */
+const LIVE_PEEK_MS = 2500;
+
+/** The channel list in the player: the channels around the one that plays, in the list it was played from. */
+function channelSections(live: LiveNow, play: (index: number) => void): SheetSection[] {
+  const from = Math.max(0, live.index - CHANNEL_SHEET_SPAN);
+  const to = Math.min(live.channels.length, live.index + CHANNEL_SHEET_SPAN + 1);
+  const rows = live.channels.slice(from, to).map((ch, i) => ({
+    key: ch.id,
+    label: ch.number != null ? `${ch.number}  ${ch.name}` : ch.name,
+    detail: ch.group || null,
+    selected: from + i === live.index,
+    onPress: () => play(from + i),
+  }));
+  return [{ title: live.channels[live.index]?.group || 'Channels', rows }];
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000000' },
   topScrim: { position: 'absolute', top: 0, left: 0, right: 0 },
@@ -968,6 +1097,9 @@ const styles = StyleSheet.create({
   peekTimes: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
   peekShadow: { textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } },
   time: { ...textStyle(type.mono), color: c.textOnMedia, fontVariant: ['tabular-nums'] },
+  liveLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  liveBadge: { backgroundColor: c.accent, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: spacing.xxs },
+  liveText: { ...textStyle(type.caption1), fontWeight: '700', color: c.onAccent, letterSpacing: 0.6 },
   prompts: { position: 'absolute', alignItems: 'flex-end', left: spacing.lg },
   ripple: { position: 'absolute', top: '45%' },
   rippleInner: { borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, overflow: 'hidden' },
