@@ -13,12 +13,14 @@ import { type Option, OptionSheet } from '@/components/option-sheet';
 import { DOWNLOAD_QUALITY_OPTIONS, downloadsSupported, useDownloadLists } from '@/downloads';
 import { AdminFixturesGroup, AdminSettingsGroup, AdminShieldButton } from '@/features/admin/entry';
 import { openAddServer, signOutUser } from '@/features/servers/actions';
+import { providersHref } from '@/features/iptv/nav';
 import { ConnectionStatus } from '@/features/servers/connection-status';
 import { ActionRow, Group, InfoRow, makeSettingsStyles, SettingsRow, webSwitchColors } from '@/features/settings/rows';
 import { UpdateSettingsRow } from '@/features/updates/update-row';
 import { confirmDestructive as confirm } from '@/lib/confirm';
 import { devOffline, setDevOffline } from '@/lib/dev-offline';
 import { useExtensions } from '@/extensions/store';
+import { useProviders } from '@/iptv';
 import { checkServer } from '@/lib/online';
 import { formatBytes } from '@/lib/format';
 import { otaLabel, runningOta } from '@/lib/ota';
@@ -94,6 +96,8 @@ export default function SettingsScreen() {
           {downloadsSupported ? <DownloadsSection /> : null}
 
           <ExtensionsSection />
+
+          <LiveTvSection />
 
           <Group title="This device" footer="Zoggyfin is open source under the MPL-2.0. It is not affiliated with the Jellyfin project.">
             <InfoRow icon="tv" label="Device" value={id.device} />
@@ -282,6 +286,22 @@ function ExtensionsSection() {
         last={!takesLinks}
       />
       {takesLinks ? <SettingsRow icon="globe" label="Send link to…" onPress={() => router.push('/share')} last /> : null}
+    </Group>
+  );
+}
+
+/** Live TV: the IPTV providers of this account. */
+function LiveTvSection() {
+  const providers = useProviders();
+  return (
+    <Group title="Live TV" footer="Watch live channels from your own IPTV provider: an Xtream login or an M3U playlist.">
+      <SettingsRow
+        icon="tv"
+        label="IPTV providers"
+        value={providers.length ? String(providers.length) : undefined}
+        onPress={() => router.push(providersHref('(home)'))}
+        last
+      />
     </Group>
   );
 }

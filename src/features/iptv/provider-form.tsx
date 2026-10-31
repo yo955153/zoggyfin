@@ -1,0 +1,189 @@
+/**
+ * Add or edit an IPTV provider. Xtream: server address, user name and
+ * password. M3U: the playlist address and an optional XMLTV guide. Both: a
+ * name and an optional user agent. Save loads the channel list first, so a
+ * wrong address or login says so here and nothing is saved. The edit form
+ * never shows the saved password: an empty field keeps it.
+ */
+import { router, Stack } from 'expo-router';
+import { useMemo, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+
+import { Button } from '@/components/button';
+import { TextField, type TextFieldRef } from '@/components/text-field';
+import { iptv, iptvErrorText, type ProviderInput, type ProviderKind, sendsUserAgent } from '@/iptv';
+import { confirmDestructive } from '@/lib/confirm';
+import { toast } from '@/lib/toast';
+import { isTV } from '@/platform/tv';
+import { createStyles, type AppTheme, font, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
+
+import { liveTvHref, useLiveGroup } from './nav';
+
+export function ProviderForm({ id, kind: kindParam }: { id?: string; kind?: ProviderKind }) {
+  const s = useStyles(makeStyles);
+  const { c } = useTheme();
+  const group = useLiveGroup();
+  const saved = useMemo(() => (id ? iptv.formValues(id) : null), [id]);
+  const kind: ProviderKind = saved?.kind ?? kindParam ?? 'xtream';
+  const [name, setName] = useState(saved?.name ?? '');
+  const [server, setServer] = useState(saved?.kind === 'xtream' ? saved.server : '');
+  const [username, setUsername] = useState(saved?.kind === 'xtream' ? saved.username : '');
+  const [password, setPassword] = useState('');
+  const [playlistUrl, setPlaylistUrl] = useState(saved?.kind === 'm3u' ? saved.playlistUrl : '');
+  const [guideUrl, setGuideUrl] = useState(saved?.kind === 'm3u' ? (saved.guideUrl ?? '') : '');
+  const [userAgent, setUserAgent] = useState(saved?.userAgent ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const userRef = useRef<TextFieldRef>(null);
+  const passRef = useRef<TextFieldRef>(null);
+  const guideRef = useRef<TextFieldRef>(null);
+
+  const title = id ? 'Edit Provider' : kind === 'xtream' ? 'Xtream Login' : 'M3U Playlist';
+  const ready = kind === 'xtream' ? !!server.trim() && !!username.trim() && (!!password || !!id) : !!playlistUrl.trim();
+
+  const save = async () => {
+    if (!ready || busy) return;
+    setBusy(true);
+    setError(null);
+    const input: ProviderInput =
+      kind === 'xtream'
+        ? { kind, name, server, username, password, userAgent: userAgent || null }
+        : { kind, name, playlistUrl, guideUrl: guideUrl || null, userAgent: userAgent || null };
+    try {
+      await iptv.save(input, id);
+      toast(id ? 'Provider saved' : 'Provider added', { icon: 'checkmark' });
+      if (id) router.back();
+      else router.dismissTo(liveTvHref(group));
+    } catch (e) {
+      setError(iptvErrorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!id) return;
+    if (!(await confirmDestructive('Remove provider?', 'Its channel list, favourites and saved login are removed from this device.', 'Remove'))) return;
+    await iptv.remove(id);
+    toast('Provider removed', { icon: 'trash' });
+    router.dismissTo(liveTvHref(group));
+  };
+
+  return (
+    <>
+      <Stack.Screen options={{ title, headerStyle: { backgroundColor: c.bgGrouped }, contentStyle: { backgroundColor: c.bgGrouped } }} />
+      <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" style={s.page} contentContainerStyle={s.content}>
+          <View style={s.inner}>
+            {isTV ? <Text style={s.tvTitle}>{title}</Text> : null}
+            <TextField
+              label="Name"
+              value={name}
+              onChangeText={setName}
+              placeholder={kind === 'xtream' ? 'Xtream' : 'Playlist'}
+              autoCapitalize="words"
+              returnKeyType="next"
+              maxLength={60}
+            />
+            {kind === 'xtream' ? (
+              <>
+                <TextField
+                  label="Server address"
+                  value={server}
+                  onChangeText={setServer}
+                  placeholder="http://provider.example.com:8080"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  textContentType="URL"
+                  returnKeyType="next"
+                  onSubmitEditing={() => userRef.current?.focus()}
+                />
+                <TextField
+                  ref={userRef}
+                  label="User name"
+                  value={username}
+                  onChangeText={setUsername}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType="username"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passRef.current?.focus()}
+                />
+                <TextField
+                  ref={passRef}
+                  label="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder={id ? 'Unchanged' : undefined}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType="password"
+                  returnKeyType="go"
+                  onSubmitEditing={() => void save()}
+                />
+              </>
+            ) : (
+              <>
+                <TextField
+                  label="Playlist address"
+                  value={playlistUrl}
+                  onChangeText={setPlaylistUrl}
+                  placeholder="https://provider.example.com/playlist.m3u"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  textContentType="URL"
+                  returnKeyType="next"
+                  onSubmitEditing={() => guideRef.current?.focus()}
+                />
+                <TextField
+                  ref={guideRef}
+                  label="Guide address (XMLTV, optional)"
+                  value={guideUrl}
+                  onChangeText={setGuideUrl}
+                  placeholder="From the playlist when empty"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  textContentType="URL"
+                  returnKeyType="go"
+                  onSubmitEditing={() => void save()}
+                />
+              </>
+            )}
+            <TextField
+              label="User agent (optional)"
+              value={userAgent}
+              onChangeText={setUserAgent}
+              placeholder="Only when the provider asks for one"
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={256}
+            />
+            {!sendsUserAgent && userAgent ? <Text style={s.note}>A browser cannot send its own user agent. The apps for phones, TVs and the Mac send it.</Text> : null}
+            {error ? (
+              <Text style={s.error} accessibilityRole="alert">
+                {error}
+              </Text>
+            ) : null}
+            <Button title={busy ? 'Loading the channels' : id ? 'Save' : 'Add provider'} loading={busy} disabled={!ready} onPress={() => void save()} />
+            {busy ? <Text style={s.note}>A large list can take a minute.</Text> : null}
+            {id ? <Button title="Remove provider" variant="text" onPress={() => void remove()} disabled={busy} /> : null}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </>
+  );
+}
+
+const makeStyles = createStyles(({ c }: AppTheme) => ({
+  flex: { flex: 1 },
+  page: { backgroundColor: c.bgGrouped },
+  content: { padding: spacing.lg, paddingBottom: spacing.huge * 2 },
+  inner: { width: '100%' as const, maxWidth: scaled(sizes.formMaxWidth), alignSelf: 'center' as const, gap: spacing.lg },
+  tvTitle: { ...font(type.largeTitle), color: c.text, paddingTop: spacing.xxl },
+  note: { ...font(type.footnote), color: c.text2 },
+  error: { ...font(type.callout), color: c.danger },
+}));

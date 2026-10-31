@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { useViews } from '@/api/queries';
 import { ItemGrid } from '@/components/item-grid';
 import { EmptyState, ErrorState, GridSkeleton } from '@/components/states';
+import { LiveTvEntry } from '@/features/iptv/live-entry';
 import { isSupportedView } from '@/features/library/library-kind';
 import { useRootScreenOptions } from '@/lib/stack-options';
 
@@ -22,6 +23,7 @@ export default function LibraryScreen() {
           items={items}
           shape="thumb"
           onRefresh={views.refetch}
+          ListHeaderComponent={<LiveTvEntry />}
           ListEmptyComponent={<EmptyState icon="square.stack" title="No libraries" message="This account has no libraries yet." />}
         />
       )}
