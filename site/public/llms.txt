@@ -1,0 +1,23 @@
+# Zoggyfin
+
+> Zoggyfin is a free client app for Jellyfin media servers. It runs on iPhone, iPad, Mac (Apple silicon) and Fire TV, Google TV and Android TV. It plays movies, shows, music and audiobooks from your own Jellyfin server (version 10.11 or later), with downloads for offline play and watch and listen together. It has no account of its own and collects no data. Zoggyfin is made by Zog Tech, Inc. and is not affiliated with the Jellyfin project. The sections below link to Markdown pages. Read llms-full.txt to guide a user through install, setup and use in one file.
+
+## Docs
+
+- [Overview](https://zoggyfin.zog-tech.com/index.md): what Zoggyfin is, its features and the common questions
+- [Full guide for assistants](https://zoggyfin.zog-tech.com/llms-full.txt): install, sign-in, setup, features, troubleshooting and privacy in one file
+- [Support](https://zoggyfin.zog-tech.com/support.md): sign-in, addresses, playback, downloads and watch together
+
+## Download
+
+- [Download](https://zoggyfin.zog-tech.com/download.md): Mac disk image, iPhone and iPad (TestFlight beta), Fire TV, Google TV and Android TV
+
+## Support
+
+- [Support](https://zoggyfin.zog-tech.com/support.md): how to fix common problems
+- Email: admin@zog-tech.com
+
+## Optional
+
+- [Privacy policy](https://zoggyfin.zog-tech.com/privacy.md): what the app stores and sends
+- [Source code and issues](https://github.com/zog-tech/zoggyfin): the public repository (MPL-2.0)

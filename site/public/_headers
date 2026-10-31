@@ -34,3 +34,14 @@
 /.well-known/assetlinks.json
   Content-Type: application/json
   Cache-Control: max-age=300
+
+# Markdown for AI assistants (llms.txt). Served as files, no redirect.
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: no-cache
+/llms-full.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: no-cache
+/*.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: no-cache

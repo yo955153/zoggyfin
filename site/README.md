@@ -43,6 +43,26 @@ the pages work without the file. `public/join/qrcode.js`
 is qrcode-generator (MIT). `public/_headers` (and `nginx.conf`) serve the two
 `.well-known` files as `application/json` with no redirect.
 
+## Markdown for AI assistants (llms.txt)
+
+The site follows the llmstxt.org convention so an assistant can guide a user through install,
+setup and use.
+
+| Path | File |
+|---|---|
+| `/llms.txt` | `public/llms.txt` (index with links to the Markdown pages) |
+| `/llms-full.txt` | `public/llms-full.txt` (the whole guide in one file) |
+| `/index.md`, `/download.md`, `/support.md`, `/privacy.md` | `public/*.md`, one for each main page |
+
+`public/_headers` sets the content types (`text/plain` for `.txt`, `text/markdown` for `.md`).
+These files are plain files, so they need no line in `_redirects`.
+
+The Markdown is written by hand. Keep it in sync with the HTML: when you change the text of
+a page, download links, system requirements, the install steps, the privacy policy or the
+contact, change the matching `.md` file and `llms-full.txt` in the same commit. Check the
+version numbers (Jellyfin 10.11, macOS 13, iOS 16.4, Android TV 7) in all places. Each HTML page
+has `<link rel="alternate" type="text/markdown" href="/llms.txt">` in its head; add the line to a new page.
+
 Rules: no personal names or personal domains. The owner is Zog Tech, Inc. The contact is
 admin@zog-tech.com.
 

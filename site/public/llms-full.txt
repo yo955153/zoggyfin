@@ -1,0 +1,156 @@
+# Zoggyfin: full guide
+
+> Zoggyfin is a free client app for Jellyfin media servers, made by Zog Tech, Inc. This file has everything an assistant needs to help a user install, set up and use it. Site: https://zoggyfin.zog-tech.com . Contact: admin@zog-tech.com
+
+Zoggyfin is not affiliated with the Jellyfin project. Jellyfin is the free server software that Zoggyfin connects to. Zoggyfin does not host or provide media.
+
+## Quick path for a new user
+
+1. Check that a Jellyfin server (version 10.11 or later) and a user account on it exist. If not, use the public demo server: https://demo.jellyfin.org/stable , user name `demo`, no password.
+2. Install the app for the device (see "Install" below).
+3. Open the app, enter the server address, then sign in with user name and password, or with Quick Connect.
+4. Browse Home, search, play, download or start a Together session.
+
+## Platforms
+
+| Platform | State |
+|---|---|
+| iPhone and iPad (iOS and iPadOS 16.4 or later) | Beta on TestFlight |
+| Mac (Apple silicon, macOS 13 or later) | Signed and notarized DMG, updates itself |
+| Fire TV, Google TV, Android TV (Android TV 7 or later, Fire OS 6 or later) | APK to sideload with Downloader |
+| Android phones and tablets | Coming soon |
+| Web | The source repository can build a web app that you host yourself. There is no hosted web app. |
+
+## Install
+
+### Mac
+
+1. Download https://releases.zog-tech.com/zoggyfin/latest/Zoggyfin-arm64.dmg
+2. Open Zoggyfin-arm64.dmg and drag Zoggyfin to the Applications folder.
+3. Open Zoggyfin from Applications or Launchpad.
+
+The app looks for updates by itself and asks before it installs one. To check now, select Check for Updates in the Zoggyfin menu. Intel Macs are not supported.
+
+### iPhone and iPad
+
+1. Install TestFlight from the App Store.
+2. Open https://testflight.apple.com/join/qRFABNBJ on the device and install Zoggyfin.
+
+### Fire TV, Google TV and Android TV
+
+On the TV, type the short address `zoggyfin.zog-tech.com/tv.apk` into the Downloader app. It points to the newest APK at https://releases.zog-tech.com/zoggyfin/android-tv/zoggyfin-tv-latest.apk .
+
+Fire TV:
+1. Install Downloader from the Amazon Appstore.
+2. If Developer options is missing, go to Settings, My Fire TV, About. Select the device name 7 times.
+3. Go to Settings, My Fire TV, Developer options, Install unknown apps. Turn on Downloader.
+4. Open Downloader, type zoggyfin.zog-tech.com/tv.apk and select Install.
+
+Google TV and Android TV:
+1. Install Downloader from Google Play on the TV.
+2. Go to Settings, Apps, Security and restrictions, Unknown sources. Turn on Downloader.
+3. Open Downloader, type zoggyfin.zog-tech.com/tv.apk and select Install.
+
+With a computer on the same network, you can also run `adb install zoggyfin-tv-latest.apk`. The TV app looks for updates by itself. The first update asks you to let Zoggyfin install apps. The TV app uses a 10-foot layout with a side menu and remote control focus. Watch together is not on TV.
+
+## Set up: connect to a Jellyfin server
+
+1. Open Zoggyfin. On the first screen, enter the server address with http:// or https:// and the port, for example `http://10.0.0.20:8096`. Jellyfin uses port 8096 for http by default. The first screen also lists Jellyfin servers that it finds on the local network.
+2. Sign in with a user name and password.
+3. Or use Quick Connect: choose Quick Connect in Zoggyfin, then approve the code in the Jellyfin web app, signed in as the same user.
+4. If the server is not reachable, check that the device is on the same network, or that the internet address of the server is correct.
+
+You can add more than one server, and more than one user for each server. The avatar button on Home opens the account switcher.
+
+### Home and internet addresses
+
+A server can have a home (internal) address and an internet (external) address. A Tailscale or other VPN address works like any other address. Open Settings, then the server, to add and order addresses. The app uses the first address in your order that answers. It checks again at start, when the app returns to the foreground, on a network change and after a failed request. The modes are Automatic, Always internal and Always external. With the optional Wi-Fi rule, the app uses the home address on named Wi-Fi networks. The Wi-Fi rule needs location access on iOS, because iOS gives the Wi-Fi name only with it. The app does not use your location.
+
+### Jellyfin behind a reverse proxy or tunnel
+
+Zoggyfin works with Jellyfin behind a proxy or tunnel such as Cloudflare Tunnel, Traefik, Caddy or nginx. Put the public address in the server external address and keep the home address as the internal address. No Jellyfin change is required. To make Jellyfin see the real client addresses, open Dashboard, Networking in Jellyfin. Set Known proxies to the address that the proxy uses to reach Jellyfin. Turn on Allow remote connections to this server. Restart Jellyfin. Cloudflare terms limit heavy video traffic; for heavy streaming, Tailscale or WireGuard is a better choice.
+
+## Use the app
+
+### Library and search
+- Home has rows for Continue watching, Next up and Recently added. Items with no server artwork get generated artwork.
+- Music is split into albums, artists, playlists, songs and genres.
+- Search groups results into movies, shows, episodes, music and people.
+- Playlists: tap Playlist on any movie, episode or song, then pick a playlist or make a new one.
+
+### Video
+- The server plays files directly when the device can open them. Other files are converted by the server, which needs enough power for that.
+- The player has audio and subtitle tracks, chapters, Skip Intro, quality control, Picture in Picture, AirPlay and background audio.
+- On Mac, the libmpv engine plays MKV, HEVC, AV1, DTS and TrueHD with no conversion.
+- Keyboard shortcuts in the player on iPad and Mac: Space (play or pause), Left and Right arrow (seek), Shift with arrows (30 seconds), C (subtitles), F (full screen), M (mute), Esc (close).
+- Progress is stored on your server, so you can pause on one device and resume on another.
+
+### Music and audiobooks
+- The music player has synced lyrics (when the server has them), a queue you can reorder, background audio and lock-screen controls.
+- The long-form player for audiobooks, lectures and podcasts has speed control, 15 and 30 second skips and a sleep timer. Each item resumes where you stopped.
+
+### Downloads
+- Tap the download button on a movie, an episode, a season, an album or a playlist. The Downloads tab shows the queue, progress, speed and space used. Downloads continue in the background.
+- Downloaded items play with no connection. The app sends your progress to the server later.
+- Downloads are not on the web build.
+- Remove downloads in the Downloads tab, by signing out of a server and its downloads, or by deleting the app.
+
+### Watch and listen together
+
+Not available on TV. Tap Together on Home. Join a session from the list, or tap Start a session, pick what to play and choose who can join.
+
+- People near you: no internet and no Jellyfin server needed. Works between iPhone, iPad and Mac, and Android as it ships. The host shares a downloaded video, album, playlist or audiobook. Others join over the same Wi-Fi or Bluetooth. A join code (QR code or short text) works on Wi-Fi that hides devices from each other, such as hotel or plane Wi-Fi. The other device must allow local network access.
+- As the host, you accept each person. You can remove or block a device, stop new people, hide the session so that only people with your code can join, or turn on "Only the host controls".
+- Anyone on your server: starts a Jellyfin SyncPlay group on your server. People join from anywhere, and people on other Jellyfin apps can join too.
+- In the video player, use the Watch together button. For music, use Listen together in the player menu, or on album and playlist pages.
+
+### Invites
+
+An administrator adds a person: Settings, Servers, the server, Invite someone. Type a name and tap Send. The app makes the Jellyfin user with a one-time password and opens the share sheet with a link. A QR code shows the same link. The link looks like `https://zoggyfin.zog-tech.com/join#...`. The invite is in the part after the `#`, which the browser does not send to any server. The link holds all useful addresses of the server, so it also works for a server that is reachable only over Tailscale or a VPN.
+
+The person who gets the link:
+1. Opens the link on the device where they want to watch.
+2. If Zoggyfin is installed, taps Open in Zoggyfin. The app signs them in, and they set their own password.
+3. If Zoggyfin is not installed, taps Get Zoggyfin on the page. This copies the invite. They install the app, tap Paste invite, then tap Join.
+
+### Admin panel (server administrators only)
+
+Settings, Admin, or the shield on the server row. It shows the dashboard (server name, version, storage), now playing (with message, pause, stop), users and their permissions, libraries (scan, refresh), scheduled tasks, the activity log, devices and server log files. It can restart or shut down the server after you type the server name. Plugins and transcoding settings stay in the Jellyfin web dashboard.
+
+### Extensions
+
+An extension adds buttons on items, rows on Home, share targets or a page for your own setup. The app reads a JSON manifest from your server. No extension code runs in the app. A confirm screen shows each permission before you add the extension. You can turn it off or remove it at any time.
+
+### Settings worth knowing
+- Settings, Playback: playback quality.
+- Settings, Appearance: System, Dark or Light.
+- Settings, Clear cache: removes the cached pages and images.
+- Settings, App version: shows the version to quote in a support request.
+
+## Troubleshooting
+
+- The server is not found or sign-in fails: enter the address with http:// or https:// and the port. Check that the device and the server are on the same network, or use the internet address. Check the Jellyfin version is 10.11 or later and the user name and password are right. Try Quick Connect.
+- A video does not start: set a lower quality in the player or in Settings, Playback. A file that the device cannot open is converted by the server, so a weak server can be slow.
+- Away from home the app stays on the home address: add an internet, Tailscale or VPN address to the server, and set the address mode to Automatic.
+- An invite link says it is not complete: copy the full link from the message and open it again, or ask the admin for a new invite.
+- Nearby Together does not find a device: both devices need local network access allowed in the system settings, and the same Wi-Fi or Bluetooth. Use the join code on Wi-Fi that hides devices.
+- A TV install fails: turn on Downloader under Install unknown apps (Fire TV) or Unknown sources (Google TV). A sideloaded APK and a Google Play build use different signing keys, so uninstall one before you install the other.
+- Mac: Zoggyfin needs Apple silicon and macOS 13 or later.
+- A problem with the Jellyfin server itself: Zoggyfin is a client and cannot fix it. See https://jellyfin.org/docs/ .
+
+For anything else, write to admin@zog-tech.com. Include the device, the system version, the Zoggyfin version and the Jellyfin version. We answer in English. Do not send passwords, access tokens or invite links.
+
+## Privacy summary
+
+Zoggyfin does not collect any data. Zog Tech, Inc. does not receive your media, account details, usage or location. The app talks only to the Jellyfin servers you add. It has no analytics, no ads, no tracking and no account of its own. The sign-in token is kept in the device keychain. Settings, server addresses, caches and downloads stay on the device; downloads are not in iCloud backups. The app reports to your Jellyfin server what you play and how far you got. The app checks the Expo update service for small app updates; that request has the app version and platform, and the service sees the IP address. Location access is used only to read the Wi-Fi name for the Wi-Fi rule; the location is not read, used or kept. Full policy (effective 19 October 2026): https://zoggyfin.zog-tech.com/privacy.md
+
+## Cost and license
+
+Free. No ads, subscriptions or in-app purchases. The source is at https://github.com/zog-tech/zoggyfin under the MPL-2.0.
+
+## Pages
+
+- https://zoggyfin.zog-tech.com/index.md
+- https://zoggyfin.zog-tech.com/download.md
+- https://zoggyfin.zog-tech.com/support.md
+- https://zoggyfin.zog-tech.com/privacy.md
