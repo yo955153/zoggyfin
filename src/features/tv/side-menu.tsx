@@ -17,7 +17,7 @@ import { tvKeyFromEvent } from '@/player/tv-keys';
 import { isNativeTV, isTVPreview } from '@/platform/tv';
 import { type AppTheme, createStyles, font, mediaColors, motion, radius, spacing, tv, tvScale, type, useLayout, useStyles, useTheme, webPressable, withAlpha } from '@/theme';
 
-import { type FocusTarget, focusView, restoreContentFocus, setContentGuide, setMenuFocused, TvFocusGuide } from './focus';
+import { focusActivePage, type FocusTarget, focusView, isMenuFocused, noteRemoteKey, restoreContentFocus, setContentGuide, setMenuFocused, TvFocusGuide, tvPages } from './focus';
 import { useTvBack } from './use-tv-back';
 import { useTvRemote } from './use-tv-remote';
 import { installWebSpatialNav } from './web-spatial-nav';
@@ -36,6 +36,7 @@ const DESTINATIONS: Destination[] = [
   { name: 'search', href: '/search', label: 'Search', icon: 'magnifyingglass' },
   { name: 'library', href: '/libraries', label: 'Library', icon: 'square.stack' },
   { name: 'music', href: '/music', label: 'Music', icon: 'music.note' },
+  { name: 'live', href: '/(tabs)/(live)/live-tv', label: 'Live TV', icon: 'tv' },
   { name: null, href: '/settings', label: 'Settings', icon: 'gearshape' },
 ];
 
@@ -50,15 +51,29 @@ export function TvTabsLayout() {
   const l = useLayout();
   const rail = Math.round(tv.railWidth * tvScale(l.width));
   const content = useRef<ComponentRef<typeof View> | null>(null);
-  // Page transitions in the tab stacks give the focus back through this guide (tvStackListeners).
+  // The visible page of the tab stacks (Android TV). A focus that comes into the
+  // content goes there, never to a page under it that is still in the window.
+  const [page, setPage] = useState<FocusTarget | null>(null);
   useEffect(() => {
     setContentGuide(content.current);
-    return () => setContentGuide(null);
+    const sync = () => setPage(tvPages.active()?.guide.current ?? null);
+    const off = tvPages.subscribe(sync);
+    // The first page registers before this effect runs.
+    sync();
+    return () => {
+      off();
+      setContentGuide(null);
+    };
   }, []);
+  // Every remote key, so a page can tell a move into the side menu from a focus Android put there.
+  useTvRemote(isNativeTV, (e) => {
+    const k = tvKeyFromEvent(e);
+    if (k) noteRemoteKey(k.key);
+  });
   return (
     <Tabs style={styles.flex}>
       {/* First in the tree, so the content (not the menu) takes the first focus. */}
-      <TvFocusGuide ref={content} autoFocus style={[styles.flex, { paddingLeft: rail }]}>
+      <TvFocusGuide ref={content} autoFocus destinations={[page]} style={[styles.flex, { paddingLeft: rail }]}>
         <TabSlot />
       </TvFocusGuide>
       <SideMenu content={content} />
@@ -71,10 +86,10 @@ export function TvTabsLayout() {
   );
 }
 
-/** Sends the focus back to the content: its last focused control (a TV focus guide remembers it). */
+/** Sends the focus back to the content: the visible page (its last focused control), or the content guide. */
 function focusContent(content: RefObject<FocusTarget | null>): void {
-  if (isNativeTV) focusView(content.current);
-  else restoreContentFocus();
+  if (!isNativeTV) restoreContentFocus();
+  else if (!focusActivePage()) focusView(content.current);
 }
 
 function SideMenu({ content }: { content: RefObject<FocusTarget | null> }) {
@@ -117,8 +132,9 @@ function SideMenu({ content }: { content: RefObject<FocusTarget | null> }) {
   useTvBack(open, close);
   // Native TV: so does Right. Android's focus search does not find the content
   // from the open menu, which lies over the content's first column.
-  useTvRemote(isNativeTV && open, (e) => {
-    if (tvKeyFromEvent(e)?.key === 'right') close();
+  // The menu can hold the focus closed too (Android put it there): Right leaves it the same way.
+  useTvRemote(isNativeTV, (e) => {
+    if ((open || isMenuFocused()) && tvKeyFromEvent(e)?.key === 'right') close();
   });
 
   // Web preview: the arrow keys move the focus; Right out of the menu goes back to the content.

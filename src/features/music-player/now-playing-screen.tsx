@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { type Href, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,10 +15,12 @@ import { useApi } from '@/api/use-api';
 import { Icon, type IconName } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
 import { ToastHost } from '@/components/toast-host';
+import { Touchable } from '@/components/touchable';
 import { useSessionStore } from '@/auth/session-store';
 import { canDownload, downloads, findDownload } from '@/downloads';
 import { TogetherPill } from '@/features/together/together-pill';
 import { TogetherSheetHost } from '@/features/together/together-sheet';
+import { useTvRemote } from '@/features/tv/use-tv-remote';
 import { openAddToPlaylist } from '@/features/playlists/add-to-playlist';
 import { useHideDevToolsButton } from '@/lib/dev-tools';
 import { itemHref } from '@/lib/navigation';
@@ -34,6 +36,7 @@ import { useShowsPause } from '@/player/control-gate';
 import { playerState, setPlayerState, usePlayerStore } from '@/player/store';
 import { chapterAt, formatTime } from '@/player/timeline';
 import { features } from '@/platform/tv';
+import { tvKeyFromEvent } from '@/player/tv-keys';
 import { font, scriptStyle, type } from '@/theme';
 import { nearbySupported } from '@/together/nearby';
 import { openTogetherSheet } from '@/together/store';
@@ -44,6 +47,7 @@ import { Glass } from '../player/glass';
 import { PlayerSheet, type SheetSection } from '../player/player-sheet';
 import { RoundButton } from '../player/round-button';
 import { Scrubber } from '../player/scrubber';
+import { useTvScrub } from '../player/use-tv-scrub';
 import { c, ease, iconSize, motion, radius, spacing } from '../player/tokens';
 import { ArtBackground } from './art-background';
 import { LyricsPanel } from './lyrics-panel';
@@ -183,6 +187,20 @@ export function NowPlayingScreen() {
     [dragY, height],
   );
 
+  // TV: Left and Right on the focused seek bar seek (a held key repeats); Select seeks at once.
+  const [barFocused, setBarFocused] = useState(false);
+  const scrub = useTvScrub(
+    () => ({ position: playerState().position, duration: playerState().duration }),
+    (t) => audioSession().seekTo(t),
+  );
+  useTvRemote(!sheet, (e) => {
+    const ev = tvKeyFromEvent(e);
+    if (!ev || !barFocused || (ev.key !== 'left' && ev.key !== 'right')) return;
+    const dir = ev.key === 'left' ? -1 : 1;
+    if (ev.phase === 'press') scrub.press(dir);
+    else scrub.hold(dir, ev.phase === 'holdStart');
+  });
+
   const item = now?.item;
   const isFav = item ? (favourite && favourite.id === item.Id ? favourite.on : !!item.UserData?.IsFavorite) : false;
   // The React Compiler memoizes this; no useCallback.
@@ -293,7 +311,8 @@ export function NowPlayingScreen() {
           {item.Name}
         </Text>
         {artist ? (
-          <Pressable
+          <Touchable
+            radius={radius.sm}
             disabled={!item.ArtistItems?.[0]?.Id && !item.AlbumArtists?.[0]?.Id}
             onPress={() => {
               const a = item.ArtistItems?.[0] ?? item.AlbumArtists?.[0];
@@ -304,7 +323,7 @@ export function NowPlayingScreen() {
             <Text style={[styles.artist, scriptStyle(artist, styles.artist, true)]} numberOfLines={1}>
               {artist}
             </Text>
-          </Pressable>
+          </Touchable>
         ) : from ? (
           <Text style={[styles.artist, scriptStyle(from, styles.artist, true)]} numberOfLines={1}>
             {from}
@@ -348,6 +367,9 @@ export function NowPlayingScreen() {
         gutter={spacing.xl}
         onSeek={(t) => s.seekTo(t)}
         onScrubbing={() => undefined}
+        tvTarget={scrub.target}
+        onTvFocus={setBarFocused}
+        onTvSelect={scrub.commit}
       />
       <View style={styles.times}>
         <Text style={styles.time}>{formatTime(position)}</Text>
@@ -454,9 +476,17 @@ export function NowPlayingScreen() {
   const header = (
     <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
       <View style={styles.grabber} />
-      <Pressable onPress={minimize} style={styles.closeButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close the player. Music keeps playing">
+      <Touchable
+        kind="icon"
+        radius={22}
+        onPress={minimize}
+        containerStyle={styles.closeButton}
+        style={styles.closeInner}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Close the player. Music keeps playing">
         <Icon name="chevron.down" size={iconSize.md} color={c.textOnMediaSecondary} weight="semibold" />
-      </Pressable>
+      </Touchable>
       <TogetherPill top={insets.top + spacing.xs} right={spacing.lg} onPress={() => openTogetherSheet('music', null)} />
     </View>
   );
@@ -633,15 +663,24 @@ function Pill({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => [{ flex }, pressed && styles.pressed]}>
+    <Touchable
+      kind="button"
+      radius={22}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      containerStyle={{ flex }}
+      style={({ pressed }) => pressed && styles.pressed}>
       <Glass style={[styles.pill, active && styles.pillActive]}>{children}</Glass>
-    </Pressable>
+    </Touchable>
   );
 }
 
 function BottomButton({ icon, label, active, disabled, onPress }: { icon: IconName; label: string; active?: boolean; disabled?: boolean; onPress: () => void }) {
   return (
-    <Pressable
+    <Touchable
+      kind="icon"
+      radius={22}
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
@@ -650,15 +689,21 @@ function BottomButton({ icon, label, active, disabled, onPress }: { icon: IconNa
       hitSlop={6}
       style={({ pressed }) => [styles.bottomButton, active && styles.bottomButtonOn, pressed && styles.pressed, disabled && styles.disabled]}>
       <Icon name={icon} size={iconSize.md} color={active ? c.onAccent : c.textOnMedia} />
-    </Pressable>
+    </Touchable>
   );
 }
 
 function PanelTab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }} style={[styles.panelTab, active && styles.panelTabOn]}>
+    <Touchable
+      kind="button"
+      radius={16}
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      style={[styles.panelTab, active && styles.panelTabOn]}>
       <Text style={[styles.panelTabText, active && styles.panelTabTextOn]}>{label}</Text>
-    </Pressable>
+    </Touchable>
   );
 }
 
@@ -668,7 +713,8 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', width: '100%' },
   header: { width: '100%', alignItems: 'center', paddingBottom: spacing.sm },
   grabber: { width: 40, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)' },
-  closeButton: { position: 'absolute', left: spacing.lg, bottom: -6, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  closeButton: { position: 'absolute', left: spacing.lg, bottom: -6 },
+  closeInner: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   artArea: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 140, paddingVertical: spacing.md },
   artAreaFixed: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },
   art: {

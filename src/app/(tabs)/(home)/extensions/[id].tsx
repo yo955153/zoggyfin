@@ -15,6 +15,7 @@ import { getExtension, removeExtension, setEnabled, setGrant, setValue, upsertEx
 import { ActionRow, Group, InfoRow, makeSettingsStyles, SettingsRow, webSwitchColors } from '@/features/settings/rows';
 import { confirmDestructive } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
+import { features } from '@/platform/tv';
 import { mediaColors, spacing, useStyles, useTheme } from '@/theme';
 import { useSidebarInset } from '@/theme/sidebar-inset';
 import { useTabBottomPadding } from '@/lib/tab-bar-inset';
@@ -143,7 +144,7 @@ export default function ExtensionScreen() {
             </Group>
           ) : null}
 
-          {m.contributes.panels?.length ? (
+          {features.extensionPanels && m.contributes.panels?.length ? (
             <Group title="Pages">
               {m.contributes.panels.map((p, i, all) => (
                 <SettingsRow key={p.id} icon="square.grid.2x2" label={p.title} onPress={() => router.push({ pathname: '/extension-panel', params: { ext: m.id, panel: p.id } })} last={i === all.length - 1} />

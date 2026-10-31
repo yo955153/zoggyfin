@@ -34,12 +34,24 @@
     },
     "tv": {
       "extends": "production",
+      "channel": "tv",
       "distribution": "internal",
+      "env": {
+        "EXPO_TV": "1",
+        "ZOGGYFIN_TV_SELF_UPDATE": "1"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "tv-play": {
+      "extends": "production",
+      "channel": "production",
       "env": {
         "EXPO_TV": "1"
       },
       "android": {
-        "buildType": "apk"
+        "buildType": "app-bundle"
       }
     }
   },

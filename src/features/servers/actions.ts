@@ -95,7 +95,7 @@ function askDownloads(name: string, count: number): Promise<Choice> {
       { text: 'Cancel', style: 'cancel', onPress: () => resolve('cancel') },
       { text: 'Keep downloads', onPress: () => resolve('keep') },
       { text: 'Delete downloads', style: 'destructive', onPress: () => resolve('delete') },
-    ]),
+    ], { cancelable: true, onDismiss: () => resolve('cancel') }),
   );
 }
 

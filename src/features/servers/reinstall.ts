@@ -18,7 +18,7 @@ function ask(title: string, message: string): Promise<boolean> {
     Alert.alert(title, message, [
       { text: 'No', style: 'cancel', onPress: () => resolve(false) },
       { text: 'Yes', onPress: () => resolve(true) },
-    ]),
+    ], { cancelable: true, onDismiss: () => resolve(false) }),
   );
 }
 

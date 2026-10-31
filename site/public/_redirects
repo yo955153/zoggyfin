@@ -3,3 +3,5 @@
 /join /join/ 200
 /privacy /privacy/ 200
 /support /support/ 200
+# The short address to type on a TV (Downloader): the newest sideload APK.
+/tv.apk https://releases.zog-tech.com/zoggyfin/android-tv/zoggyfin-tv-latest.apk 302

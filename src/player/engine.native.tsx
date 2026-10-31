@@ -163,6 +163,7 @@ class NativeEngine implements VideoEngine {
       uri: source.uri,
       contentType: source.isHls ? 'hls' : 'progressive',
       metadata: { title: source.title, artist: source.subtitle ?? '', artwork: source.artworkUri ?? (Platform.OS === 'ios' ? NO_ARTWORK : undefined) },
+      ...(source.userAgent ? { headers: { 'User-Agent': source.userAgent } } : null),
     }, true);
   }
 

@@ -58,7 +58,7 @@ You need a Jellyfin server to try the app. The public demo server is
 | `pnpm desktop:dev` | Runs the Mac app in development (needs Metro web on port 8082) |
 | `pnpm desktop:build` | Builds the Mac app for testing, not signed |
 
-`desktop:release`, `desktop:publish`, `desktop:version` and `site:deploy` are for the maintainer.
+`desktop:release`, `desktop:publish`, `desktop:version`, `tv:release` and `site:deploy` are for the maintainer.
 They need signing keys and deploy tokens.
 
 ## Code style

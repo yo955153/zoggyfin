@@ -24,10 +24,51 @@ export interface PlayRequest {
   autoplay?: boolean;
 }
 
+/** A channel the live player can switch to. */
+export interface LiveChannelRef {
+  id: string;
+  name: string;
+  logo: string | null;
+  number: number | null;
+  group: string;
+}
+
+/** A stream to try for a live channel. */
+export interface LiveStreamChoice {
+  url: string;
+  isHls: boolean;
+  /** iOS: play the progressive MPEG-TS `url` through the TS bridge (`@/native/ts-bridge`). */
+  bridge?: boolean;
+}
+
+/**
+ * Where live channels come from (an IPTV provider). The player knows no
+ * provider: it asks the source for the streams of a channel.
+ */
+export interface LiveSource {
+  providerId: string;
+  /** The streams to try, in order. Never throws: on failure, no candidates and a message. */
+  resolve(channelId: string): Promise<{ candidates: LiveStreamChoice[]; userAgent: string | null; unsupported: string | null }>;
+  /** The programme that runs now on the channel, or null. */
+  nowLine?(channelId: string): string | null;
+  /** A channel started to play (Recently watched). */
+  onStart?(channelId: string): void;
+}
+
+/** What a screen asks the player for to play a live stream: no Jellyfin item, no progress reports. */
+export interface LivePlayRequest {
+  /** The channels that channel up and down move through (the list the user played from). */
+  channels: LiveChannelRef[];
+  index: number;
+  source: LiveSource;
+}
+
 export interface PlayerController {
   /** False when no engine can play the item kind yet. */
   readonly available: boolean;
   play(request: PlayRequest): void;
+  /** Plays a live channel. Not in a watch-together session (it says so). */
+  playLive(request: LivePlayRequest): void;
   /** Audio: put the item (or a container's tracks) after the current track. */
   playNext(item: BaseItemDto): void;
   /** Audio: add the item (or a container's tracks) at the end of Up next. */

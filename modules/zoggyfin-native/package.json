@@ -1,7 +1,7 @@
 {
   "name": "zoggyfin-native",
   "version": "0.1.0",
-  "description": "Small native helpers for Zoggyfin: decoder capabilities, hardware keyboard input and nearby watch together.",
+  "description": "Small native helpers for Zoggyfin: decoder capabilities, hardware keyboard input, nearby watch together and the Android TV self-update.",
   "license": "MPL-2.0",
   "private": true
 }

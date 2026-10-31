@@ -55,6 +55,7 @@
     "expo-system-ui": "~58.0.7",
     "expo-updates": "~58.0.19",
     "expo-video": "~58.0.13",
+    "fflate": "0.8.3",
     "hls.js": "1.7.3",
     "lucide-react": "0.544.0",
     "qrcode-generator": "2.0.4",
@@ -95,7 +96,9 @@
     "desktop:publish": "bash desktop/scripts/publish.sh",
     "desktop:version": "bash desktop/scripts/version.sh",
     "site:deploy": "bash site/scripts/deploy.sh",
+    "tv:release": "bash scripts/release-android-tv.sh",
     "test:crypto-swift": "bash scripts/rendezvous-vectors/run.sh",
+    "test:ts-bridge-swift": "bash scripts/ts-bridge/run.sh",
     "bench:together": "bash scripts/together-bench/run.sh",
     "stress:controls": "pnpm dlx tsx@4.20.5 --tsconfig scripts/together-bench/tsconfig.json scripts/together-bench/controls-stress.ts"
   },

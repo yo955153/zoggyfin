@@ -60,6 +60,15 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-when="android-soon"]'), function (el) { el.hidden = true; });
     Array.prototype.forEach.call(document.querySelectorAll('[data-when="android-ready"]'), function (el) { el.hidden = false; });
   }
+  if (config.tvApkUrl) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-store="tv-apk"]'), function (a) { a.href = config.tvApkUrl; });
+  }
+  if (config.tvPlayUrl) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-store="tv-play"]'), function (a) {
+      a.href = config.tvPlayUrl;
+      a.hidden = false;
+    });
+  }
   if (config.macUrl) {
     Array.prototype.forEach.call(document.querySelectorAll('[data-store="mac-dmg"]'), function (a) { a.href = config.macUrl; });
   }

@@ -2,9 +2,11 @@ import {
   createDoublePress,
   createTapGate,
   DOUBLE_PRESS_MS,
+  liveKeyAction,
   NO_PRESS,
   NO_RUN,
   nextRun,
+  playerFocusOwner,
   playerKeyAction,
   registerPress,
   SCRUB_MIN_GAP_MS,
@@ -232,5 +234,65 @@ describe('tap gate (controls hidden)', () => {
     g.cancel();
     expect(g.due(9999)).toBe(false);
     expect(g.press('left', 100, true).double).toBe(false);
+  });
+});
+
+describe('live TV keys', () => {
+  it('zaps with the channel keys at any time', () => {
+    expect(liveKeyAction('channelUp', false)).toEqual({ type: 'zap', delta: 1 });
+    expect(liveKeyAction('channelDown', true)).toEqual({ type: 'zap', delta: -1 });
+    expect(tvKeyFromEvent({ eventType: 'channelUp', eventKeyAction: 1 })).toEqual({ key: 'channelUp', phase: 'press' });
+    expect(tvKeyFromEvent({ eventType: 'next', eventKeyAction: 1 })).toEqual({ key: 'channelUp', phase: 'press' });
+    expect(tvKeyFromWeb('PageDown')).toBe('channelDown');
+  });
+
+  it('zaps with Up and Down only while the controls are hidden', () => {
+    expect(liveKeyAction('up', true)).toEqual({ type: 'zap', delta: 1 });
+    expect(liveKeyAction('down', true)).toEqual({ type: 'zap', delta: -1 });
+    expect(liveKeyAction('up', false)).toBeNull();
+    expect(liveKeyAction('down', false)).toBeNull();
+  });
+
+  it('never seeks: Left, Right, rewind and fast forward only show the controls', () => {
+    for (const k of ['left', 'right', 'rewind', 'fastForward'] as const) expect(liveKeyAction(k, true)).toEqual({ type: 'wake' });
+    expect(liveKeyAction('back', true)).toBeNull();
+    expect(liveKeyAction('playPause', true)).toBeNull();
+  });
+
+  it('leaves video keys as they were', () => {
+    expect(playerKeyAction('channelUp', false)).toEqual({ type: 'none' });
+    expect(playerKeyAction('down', false)).toEqual({ type: 'wake' });
+  });
+});
+
+describe('player focus owner (TV)', () => {
+  const base = { controlsVisible: false, promptShown: false, promptFocused: false, error: false };
+
+  it('gives the hidden-controls focus to the full-screen layer with no prompt', () => {
+    expect(playerFocusOwner(base)).toBe('layer');
+  });
+
+  it('gives it to Skip Intro or Up Next while one shows', () => {
+    expect(playerFocusOwner({ ...base, promptShown: true })).toBe('prompt');
+  });
+
+  it('gives the controls the focus when they show, unless the prompt has it', () => {
+    expect(playerFocusOwner({ ...base, controlsVisible: true, promptShown: true })).toBe('controls');
+    expect(playerFocusOwner({ ...base, controlsVisible: true, promptShown: true, promptFocused: true })).toBe('prompt');
+  });
+
+  it('forgets a prompt focus once the prompt is gone', () => {
+    expect(playerFocusOwner({ ...base, controlsVisible: true, promptFocused: true })).toBe('controls');
+    expect(playerFocusOwner({ ...base, promptFocused: true })).toBe('layer');
+  });
+
+  it('leaves the error card alone', () => {
+    expect(playerFocusOwner({ ...base, promptShown: true, error: true })).toBe('controls');
+  });
+
+  it('keeps the hidden-controls keys: a double Right seeks and Up zaps in live TV', () => {
+    // The keys do not depend on the focus owner: they come from the remote handler.
+    expect(playerKeyAction('right', true)).toEqual({ type: 'seek', seconds: 10 });
+    expect(liveKeyAction('up', true)).toEqual({ type: 'zap', delta: 1 });
   });
 });

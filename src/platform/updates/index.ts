@@ -1,20 +1,30 @@
 /**
- * Desktop updates: the controller between the update card and Rust
- * (`desktop/src-tauri/src/update.rs`). The state rules are in `./machine.ts`.
+ * App updates: the controller between the update card and the platform.
+ * The state rules are in `./machine.ts`. Two platforms update themselves:
  *
- * - Release builds check 10 s after start and every 4 hours. "Check for
- *   Updates…" (the app menu and Settings) checks at once.
- * - "Install and restart" downloads the signed update with progress, checks
+ * - The desktop app (macOS): Rust, `desktop/src-tauri/src/update.rs`.
+ *   "Install and restart" downloads the signed update with progress, checks
  *   the signature, puts it in place of the installed app, quits, and starts
  *   the same app again.
- * - In a browser and on iPhone and iPad nothing here runs (`updatesSupported`).
+ * - The sideloaded Android TV app (`./tv.ts`): the feed
+ *   `android-tv/latest.json`, the APK checked by SHA-256, and the system
+ *   package installer. Only builds with REQUEST_INSTALL_PACKAGES (the EAS
+ *   profile `tv`) have it; the Play build and phones do not.
+ *
+ * Both check 10 s after start and every 4 hours. "Check for Updates…" (the
+ * app menu and Settings) checks at once. In a browser, on iPhone and iPad and
+ * on Android phones nothing here runs (`updatesSupported`).
  */
+import { Platform } from 'react-native';
 import { create } from 'zustand';
+
+import { storage } from '@/storage/kv';
 
 import { appVersion, autoUpdate, invoke, isDesktop, onMenuCommand, onUpdateEvent } from '../desktop';
 
 import { initialUpdateState, retryAction, type UpdateEvent, updateReducer, type UpdateState } from './machine';
 import { parseReleaseNotes } from './notes';
+import { tvUpdates } from './tv';
 
 export { compareVersions, isNewer } from './version';
 export type { UpdateOffer, UpdatePhase, UpdateState } from './machine';
@@ -22,14 +32,23 @@ export type { UpdateOffer, UpdatePhase, UpdateState } from './machine';
 export const FIRST_CHECK_MS = 10_000;
 export const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 
-/** True in the desktop app on macOS, where updates work. */
-export const updatesSupported: boolean = isDesktop && appVersion !== null;
+const desktopSupported = isDesktop && appVersion !== null;
+
+/** True in the desktop app on macOS and in the sideloaded Android TV app, where updates work. */
+export const updatesSupported: boolean = desktopSupported || tvUpdates !== null;
+
+/** True in the Android TV app: the card is a TV panel and the words fit a TV. */
+export const updatesOnTV: boolean = !desktopSupported && tvUpdates !== null;
 
 const LATER_KEY = 'zf:update-later';
 
+// Web (the desktop app): localStorage, as before. Native (TV): MMKV.
+const local = () => (Platform.OS === 'web' ? globalThis.localStorage : null);
+
 function readLater(): string | null {
   try {
-    return globalThis.localStorage?.getItem(LATER_KEY) ?? null;
+    const web = local();
+    return (web ? web.getItem(LATER_KEY) : storage.getString(LATER_KEY)) ?? null;
   } catch {
     return null;
   }
@@ -37,7 +56,10 @@ function readLater(): string | null {
 
 function writeLater(version: string | null): void {
   try {
-    if (version) globalThis.localStorage?.setItem(LATER_KEY, version);
+    if (!version) return;
+    const web = local();
+    if (web) web.setItem(LATER_KEY, version);
+    else storage.set(LATER_KEY, version);
   } catch {
     // Blocked storage: "Later" lasts for this run only.
   }
@@ -48,8 +70,13 @@ interface Store {
   send: (event: UpdateEvent) => void;
 }
 
+function initialState(): UpdateState {
+  if (tvUpdates) return initialUpdateState(tvUpdates.versionName, readLater(), tvUpdates.versionCode);
+  return initialUpdateState(appVersion ?? '0.0.0', readLater());
+}
+
 export const useUpdateStore = create<Store>((set, get) => ({
-  state: initialUpdateState(appVersion ?? '0.0.0', readLater()),
+  state: initialState(),
   send: (event) => {
     const before = get().state;
     const after = updateReducer(before, event);
@@ -77,6 +104,11 @@ export function checkForUpdates(manual = false): Promise<void> {
   send({ type: 'check', manual });
   checking ??= (async () => {
     try {
+      if (tvUpdates) {
+        const offer = await tvUpdates.check();
+        send(offer ? { type: 'found', offer, at: Date.now() } : { type: 'none', at: Date.now() });
+        return;
+      }
       const found = await invoke<CheckResult | null>('update_check');
       const at = Date.now();
       if (found && typeof found.version === 'string') {
@@ -97,12 +129,17 @@ export function checkForUpdates(manual = false): Promise<void> {
   return checking;
 }
 
-/** "Install and restart": download with progress, install, quit and start again. */
+/** "Install and restart" (desktop) or "Install" (TV): download with progress, then install. */
 export async function installUpdate(): Promise<void> {
   const before = useUpdateStore.getState().state;
   send({ type: 'install' });
   if (useUpdateStore.getState().state === before) return;
   try {
+    if (tvUpdates) {
+      const result = await tvUpdates.install((done, total) => send({ type: 'progress', done, total }), () => send({ type: 'downloaded' }));
+      if (result === 'permission') send({ type: 'needs-permission' });
+      return;
+    }
     await invoke('update_download');
     send({ type: 'downloaded' });
     // On success the app quits in this call.
@@ -123,19 +160,37 @@ export const laterUpdate = () => send({ type: 'later' });
 export const closeUpdateCard = () => send({ type: 'close' });
 export const reopenUpdateCard = () => send({ type: 'reopen' });
 
+/** TV: open the "install unknown apps" page again (the card's button while it waits). */
+export function openInstallSettings(): void {
+  tvUpdates?.openSettings();
+}
+
 let started = false;
 
-/** Starts the checks (once). The root layout calls it; it does nothing outside the desktop app. */
+/** Starts the checks (once). The root layout calls it; it does nothing where updates are not supported. */
 export function startUpdateChecks(): void {
   if (!updatesSupported || started) return;
   started = true;
-  onUpdateEvent((e) => {
-    if (e.type === 'progress') send({ type: 'progress', done: e.done, total: e.total });
-  });
-  onMenuCommand((command) => {
-    if (command === 'check-updates') void checkForUpdates(true);
-  });
-  if (!autoUpdate) return;
+  if (tvUpdates) {
+    tvUpdates.watch({
+      // Back from the settings page with the switch on: install at once.
+      onResume: () => {
+        const { phase } = useUpdateStore.getState().state;
+        if (phase.kind === 'permission' && tvUpdates?.canInstall()) void installUpdate();
+      },
+      // The system installer closed and this app still runs: nothing was installed.
+      onInstallerClosed: () => send({ type: 'installer-closed' }),
+      installing: () => useUpdateStore.getState().state.phase.kind === 'installing',
+    });
+  } else {
+    onUpdateEvent((e) => {
+      if (e.type === 'progress') send({ type: 'progress', done: e.done, total: e.total });
+    });
+    onMenuCommand((command) => {
+      if (command === 'check-updates') void checkForUpdates(true);
+    });
+    if (!autoUpdate) return;
+  }
   setTimeout(() => void checkForUpdates(false), FIRST_CHECK_MS);
   setInterval(() => void checkForUpdates(false), CHECK_EVERY_MS);
 }

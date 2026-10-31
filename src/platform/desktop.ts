@@ -190,6 +190,17 @@ export const mpv = {
   },
 };
 
+/**
+ * Fetches an IPTV list, guide or API answer in Rust (`iptv_fetch`): no CORS,
+ * with the provider's user agent, http and https only, at most `maxBytes`.
+ * The bytes come back as they are (gzip is inflated by the caller). An error
+ * is a short text with no URL (`HTTP 404`, `too large`, `bad address`).
+ */
+export async function iptvFetch(url: string, userAgent: string | null, maxBytes: number): Promise<Uint8Array> {
+  const out = await invoke<ArrayBuffer | number[]>('iptv_fetch', { url, userAgent, maxBytes });
+  return out instanceof ArrayBuffer ? new Uint8Array(out) : Uint8Array.from(out);
+}
+
 /** Window features of the desktop app. */
 export const desktopWindow = {
   toggleFullscreen: (): Promise<boolean> => invoke<boolean>('desktop_toggle_fullscreen'),

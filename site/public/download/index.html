@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Download Zoggyfin</title>
-<meta name="description" content="Download Zoggyfin for Mac, or get the iPhone and iPad app on TestFlight.">
+<meta name="description" content="Download Zoggyfin for Mac, Fire TV and Google TV, or get the iPhone and iPad app on TestFlight.">
 <link rel="canonical" href="https://zoggyfin.zog-tech.com/download">
 <meta name="theme-color" content="#0B0B0E" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
@@ -12,7 +12,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Zoggyfin">
 <meta property="og:title" content="Download Zoggyfin">
-<meta property="og:description" content="Download Zoggyfin for Mac, or get the iPhone and iPad app on TestFlight.">
+<meta property="og:description" content="Download Zoggyfin for Mac, Fire TV and Google TV, or get the iPhone and iPad app on TestFlight.">
 <meta property="og:url" content="https://zoggyfin.zog-tech.com/download">
 <meta property="og:image" content="https://zoggyfin.zog-tech.com/img/og.jpg">
 <meta property="og:image:width" content="1200">
@@ -20,7 +20,7 @@
 <meta property="og:image:alt" content="Zoggyfin on iPhone: a movie page, the music player and search.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Download Zoggyfin">
-<meta name="twitter:description" content="Download Zoggyfin for Mac, or get the iPhone and iPad app on TestFlight.">
+<meta name="twitter:description" content="Download Zoggyfin for Mac, Fire TV and Google TV, or get the iPhone and iPad app on TestFlight.">
 <meta name="twitter:image" content="https://zoggyfin.zog-tech.com/img/og.jpg">
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -46,7 +46,7 @@
 <section class="page-head">
 <div class="wrap">
 <h1>Download Zoggyfin</h1>
-<p class="lede">Free on iPhone, iPad and Mac. You need your own Jellyfin server, version 10.11 or later.</p>
+<p class="lede">Free on iPhone, iPad, Mac and TV. You need your own Jellyfin server, version 10.11 or later.</p>
 </div>
 </section>
 <div class="wrap prose">
@@ -69,6 +69,37 @@
 <div class="notes" id="mac-notes" hidden>
 <h3>What is new</h3>
 <ul id="mac-notes-list"></ul>
+</div>
+</section>
+
+<section class="dl-hero-card" id="tv" aria-labelledby="tv-title">
+<div>
+<p class="kicker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Fire TV and Google TV</p>
+<h2 id="tv-title">Zoggyfin for TV</h2>
+<p class="version" id="tv-version" aria-live="polite">The newest version, as an APK for Fire TV, Google TV and Android TV.</p>
+<div class="actions"><a class="btn" href="https://releases.zog-tech.com/zoggyfin/android-tv/zoggyfin-tv-latest.apk" data-store="tv-apk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>Download the APK</a><a class="btn secondary" data-store="tv-play" href="/download#tv" hidden>Get it on Google Play</a></div>
+<p class="req">On the TV, type this short address: <code>zoggyfin.zog-tech.com/tv.apk</code>. Needs Android TV 7 or later, or Fire OS 6 or later.</p>
+<p class="req">Zoggyfin looks for updates by itself. The first update asks you to let Zoggyfin install apps.</p>
+</div>
+<div>
+<h3 class="steps-title">Fire TV</h3>
+<ol class="steps">
+<li><span>Install <strong>Downloader</strong> from the Amazon Appstore.</span></li>
+<li><span>If you do not see <strong>Developer options</strong>, go to <strong>Settings › My Fire TV › About</strong> and select the device name 7 times.</span></li>
+<li><span>In <strong>Settings › My Fire TV › Developer options › Install unknown apps</strong>, turn on Downloader.</span></li>
+<li><span>Open Downloader, type <code>zoggyfin.zog-tech.com/tv.apk</code> and select <strong>Install</strong>.</span></li>
+</ol>
+<h3 class="steps-title">Google TV and Android TV</h3>
+<ol class="steps">
+<li><span>Install <strong>Downloader</strong> from Google Play on the TV.</span></li>
+<li><span>In <strong>Settings › Apps › Security &amp; restrictions › Unknown sources</strong>, turn on Downloader.</span></li>
+<li><span>Open Downloader, type <code>zoggyfin.zog-tech.com/tv.apk</code> and select <strong>Install</strong>.</span></li>
+</ol>
+<p class="req">With a computer on the same network, you can also use ADB: <code>adb install zoggyfin-tv-latest.apk</code>.</p>
+</div>
+<div class="notes" id="tv-notes" hidden>
+<h3>What is new</h3>
+<ul id="tv-notes-list"></ul>
 </div>
 </section>
 

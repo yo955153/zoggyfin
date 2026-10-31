@@ -53,8 +53,20 @@ first commit to today. All of it was built in the first weeks of the project.
 - **Motion.** Favourite and Played turn on at once on the item page, with a small pop and a light
   haptic. Download rings move smoothly between steps. A finished download's icon arrives with a small
   bounce. Item, library and genre pages fade their content in after a loading skeleton.
+- **Live TV (IPTV).** Xtream and M3U providers per account (passwords in the secure store), channel
+  lists cached in files, groups with Favourites and Recently watched, fast search, now and next from
+  Xtream or an XMLTV guide, and playback in the video player with channel up and down and a channel
+  list. A tab on the web and the Mac app, a Library row and a Settings entry on phones and tablets,
+  and a side menu entry on TV.
 - **Home discovery.** "Because you watched" rows from the server's movie recommendations, a "Short on
   time" row of unwatched movies of 100 minutes or less, and a genre of the day that changes at midnight.
+- **Android TV updates.** The sideloaded Android TV app (Google TV, Fire TV) finds a new APK, downloads
+  it, checks its SHA-256 and opens the system installer. The Play build (`tv-play`) has no self-update.
+  The website has a download for TV. TV releases keep the version 0.1.0; the build number
+  (versionCode) tells them apart.
+- **TS bridge (iOS).** A native bridge that plays a progressive MPEG-TS stream (the `.ts` URLs of many
+  IPTV lists, which AVPlayer cannot open) as a live HLS playlist from a local server, with Picture in
+  Picture, AirPlay and the lock screen. Live TV uses it on iPhone and iPad. Needs a new native iOS build.
 
 ### Changed
 
@@ -75,6 +87,23 @@ first commit to today. All of it was built in the first weeks of the project.
 - TV: In library grids the row with the focus scrolls to the middle. Before, it sat on the bottom
   edge with its title cut off, and Down on the last row scrolled into empty space.
 - TV: No Picture in Picture button. Google TV refused it, so the button did nothing.
+- TV: The focus stays on the page you see. Each page in a tab stack keeps its own focus. Settings
+  and every other page take the focus when they open or come back. Back from a page no longer opens
+  the side menu, and content that loads late takes a lost focus. Before, the focus could stay on the
+  page under the open one, and the remote seemed to do nothing.
+- Android and TV: Back closes a confirm dialog (for example "Clear cache?"). Before, only its buttons closed it.
+- TV: Extension pages are not offered on TV. The remote cannot use them.
+- TV: Skip Intro and Up Next take the focus while the player controls are hidden. Double Left/Right
+  still seeks, and Up/Down still changes the Live TV channel. The error card buttons show a focus ring.
+- TV: Left and Right on the Now Playing seek bar seek, also when held. Every Now Playing button, the
+  mini player and every text field show a focus ring.
+- TV: The queue and playlists have a Move button with a menu of moves. The queue menu also removes.
+- TV: Track rows have a More button, so the track menu needs no long press.
+- TV: An action toast (for example Undo) takes the focus and stays while it has it. Back closes it.
+  It never takes the focus from a text field.
+- TV: The music library picker shows above the Music tabs. The first focus goes to the first
+  visible tile on Music and on library grids, not to a tile below the screen edge or the Sort chip.
+- TV: The Live TV channel list uses its full width.
 
 ## Mac app releases
 

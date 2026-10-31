@@ -25,7 +25,10 @@ export type TvKey =
   | 'pause'
   | 'rewind'
   | 'fastForward'
-  | 'back';
+  | 'back'
+  /** The remote's channel keys (Android TV remotes that have them). */
+  | 'channelUp'
+  | 'channelDown';
 
 const TV_EVENT_KEYS: Record<string, TvKey> = {
   left: 'left',
@@ -38,6 +41,11 @@ const TV_EVENT_KEYS: Record<string, TvKey> = {
   pause: 'pause',
   rewind: 'rewind',
   fastForward: 'fastForward',
+  channelUp: 'channelUp',
+  channelDown: 'channelDown',
+  // The media Next and Previous keys zap in Live TV; video has no job for them here.
+  next: 'channelUp',
+  previous: 'channelDown',
 };
 
 const TV_LONG_KEYS: Record<string, TvKey> = {
@@ -84,6 +92,8 @@ const WEB_KEYS: Record<string, TvKey> = {
   ' ': 'playPause',
   k: 'playPause',
   Escape: 'back',
+  PageUp: 'channelUp',
+  PageDown: 'channelDown',
 };
 
 /** The key of a keyboard press in the web TV preview. */
@@ -200,8 +210,51 @@ export function playerKeyAction(key: TvKey, double: boolean): PlayerKeyAction {
     case 'back':
       return { type: 'close' };
     case 'select':
+    case 'channelUp':
+    case 'channelDown':
       return { type: 'none' };
   }
+}
+
+/** What holds the TV focus in the video player. */
+export type PlayerFocusOwner =
+  /** The full-screen layer: Select plays or pauses (controls hidden, no prompt). */
+  | 'layer'
+  /** Skip Intro or Up Next: Select skips or plays the next episode. */
+  | 'prompt'
+  /** The controls (Play, the seek bar, the top row) or the error card. */
+  | 'controls';
+
+/**
+ * Who takes the focus. With the controls hidden, a prompt (Skip Intro, Up
+ * Next) takes it, so one Select uses it; else the full-screen layer does.
+ * The remote keys still reach the player (useTvRemote), so Left and Right
+ * keep seeking and Down still shows the controls. When the controls show,
+ * a prompt that has the focus keeps it: the controls do not pull it to Play.
+ */
+export function playerFocusOwner(s: { controlsVisible: boolean; promptShown: boolean; promptFocused: boolean; error: boolean }): PlayerFocusOwner {
+  if (s.error) return 'controls';
+  if (!s.controlsVisible) return s.promptShown ? 'prompt' : 'layer';
+  return s.promptShown && s.promptFocused ? 'prompt' : 'controls';
+}
+
+export type LiveKeyAction = { type: 'zap'; delta: 1 | -1 } | { type: 'wake' } | null;
+
+/**
+ * Live TV keys, checked before the video keys. The channel keys always zap.
+ * With the controls hidden, Up is channel up (the next channel, like CH+)
+ * and Down is channel down. Left and Right only show the controls: a live
+ * stream has nothing to seek. Null: the key keeps its video job (Back,
+ * play and pause, and Up and Down while the controls show, which move the
+ * focus).
+ */
+export function liveKeyAction(key: TvKey, controlsHidden: boolean): LiveKeyAction {
+  if (key === 'channelUp') return { type: 'zap', delta: 1 };
+  if (key === 'channelDown') return { type: 'zap', delta: -1 };
+  if (controlsHidden && key === 'up') return { type: 'zap', delta: 1 };
+  if (controlsHidden && key === 'down') return { type: 'zap', delta: -1 };
+  if (key === 'left' || key === 'right' || key === 'rewind' || key === 'fastForward') return { type: 'wake' };
+  return null;
 }
 
 /** The seek feedback ("−20 s"): presses on the same side add up while it shows. */

@@ -50,6 +50,7 @@ Use pnpm (version 10), not npm or yarn. Node 22 or later.
 | `pnpm expo start --web --port 8082` then `pnpm desktop:dev` | The Mac app in development (needs `brew install mpv` and Rust) |
 | `pnpm desktop:build` | An unsigned Mac app for testing |
 | `pnpm test:crypto-swift` | Checks the Swift rendezvous crypto against the shared test vectors (macOS) |
+| `pnpm test:ts-bridge-swift` | Tests the Swift MPEG-TS segmenter and playlist builder of the TS bridge (macOS; with ffmpeg it also checks real streams with ffprobe) |
 | `pnpm bench:together`, `pnpm stress:controls` | Watch-together benchmarks (see `docs/perf/together-bench.md`) |
 
 `desktop:release`, `desktop:publish`, `desktop:version` and `site:deploy` are for the maintainer. They need keys that are not in the repository.
@@ -87,6 +88,7 @@ All app code is in `src/`. The path alias `@/` points to `src/` (`tsconfig.json`
 | `src/settings/` | Device settings: appearance, playback (Zustand + storage) |
 | `src/images/` | Image URLs, image choice per tile (`resolve-image.ts`), generated art |
 | `src/invite/` | Invite links: payload, policy, join, cleanup |
+| `src/iptv/` | Live TV (IPTV): providers, M3U, Xtream and XMLTV parsers, channel files, guide, stream choice. `index.ts` is the only import surface |
 | `src/lib/` | Small shared helpers: reachability (`online.ts`), toast, format, navigation, pull to refresh, OTA info |
 | `modules/` | Local Expo native modules (Swift, Kotlin), see section 2.9 |
 | `patches/` | pnpm patches of dependencies, see section 5 |
@@ -188,9 +190,18 @@ Play → session.ts finds the completed record (local.ts) → plays the file →
 - `features/actions/use-item-actions.ts` supplies the `AppActionApi` (play, favourite, download, delete and so on) to the sheet.
 - `extensions/runtime.ts` turns installed manifests (`schema.ts`) into item actions (`ext.<id>.…`), Home rows (order 45+) and share targets. Extensions are data only: no extension code runs in the app. Requests go only to the manifest's origin (`http.ts`, `match.ts`). See `docs/extensions.md`.
 
+### 2.7a Live TV (`src/iptv/`)
+
+- Pure, tested parsers: `m3u.ts` and `xmltv.ts` take text in chunks; `xtream.ts` reads the Xtream JSON. `text-stream.ts` decodes UTF-8 and gzip (`fflate`) in chunks and yields to the event loop, so a list of 100k channels never blocks the UI.
+- `manager.ts` loads, refreshes and saves providers. Provider records are in MMKV per account (`iptv.providers.<serverId>.<userId>`); passwords and tokenised list URLs are only in the secure store (`secrets.ts`).
+- Channel lists and the guide window are files (`files.native.ts`, `files.ts`). Fetches go through `transport.native.ts` (a download to a cache file), the Rust command `iptv_fetch` in the Mac app, or `fetch` on the web (CORS).
+- `stream-url.ts` picks the stream form per platform: HLS on iOS and the web, `.ts` on Android and the Mac app. It tries the Xtream HLS form of an M3U `.ts` URL before it gives up on iOS.
+- Play: `iptv.playRequest()` builds a `LivePlayRequest` for `usePlayer().playLive()`. The session sends no Jellyfin progress and has no duration. `player/index.ts` refuses a live request while a together session runs.
+- Saved shapes are versioned (`migrate.ts`). Error texts never contain a URL (`errors.ts`).
+
 ### 2.8 Features (`src/features/`)
 
-`actions`, `admin` (server admin panel, fixture mode), `detail` (item pages), `home`, `invite`, `library` (filters), `music` (music pager), `music-player`, `offline`, `player`, `playlists`, `profile`, `search`, `servers`, `settings`, `together` (session sheet, room bar), `tv` (focus, side menu, remote, billboard), `updates` (Mac update card).
+`actions`, `admin` (server admin panel, fixture mode), `detail` (item pages), `home`, `invite`, `iptv` (Live TV pages, provider form), `library` (filters), `music` (music pager), `music-player`, `offline`, `player`, `playlists`, `profile`, `search`, `servers`, `settings`, `together` (session sheet, room bar), `tv` (focus, side menu, remote, billboard), `updates` (Mac update card).
 Pure logic sits in its own file with tests (for example `admin/logic.ts`, `playlists/logic.ts`, `detail/hero-layout.ts`, `profile/menu-model.ts`).
 
 ### 2.9 Native code (`modules/`, `patches/`, `desktop/`)
@@ -200,6 +211,7 @@ Pure logic sits in its own file with tests (for example `admin/logic.ts`, `playl
 | `zoggyfin-native` (`ZoggyfinNative`, `ZoggyfinVolume`, `ZoggyfinTogether`, `ZoggyfinAndroid`) | iOS, Android | `src/native/zoggyfin-native.native.ts`, `src/together/nearby-native.native.ts`, `src/features/music-player/volume-slider.native.tsx` | Hardware decoders, key input, volume slider, seekable MP4, nearby transport, CryptoKit, D-pad repeat throttle |
 | `zoggyfin-discovery` | iOS, Android | `src/servers/discovery/backend.native.ts` | UDP server discovery, local network access check |
 | `zoggyfin-share` | Android | `src/extensions/share-intake.native.ts` | Links shared from other apps |
+| `zoggyfin-native` (`ZoggyfinTsBridge`) | iOS | `src/native/ts-bridge.native.ts` (contract in `ts-bridge-types.ts`) | TS bridge: plays a progressive MPEG-TS stream (IPTV `.ts` URL) as a live HLS playlist on 127.0.0.1, for AVPlayer. Pure parsing in `TsSegmenter.swift` |
 
 The Mac app links the iOS nearby Swift code through `desktop/src-tauri/swift/`. A change in `modules/zoggyfin-native/ios/Nearby*.swift` also changes the Mac app.
 
@@ -262,6 +274,9 @@ The "Manual check" column lists what unit tests cannot see. The `verify-change` 
 | Pull to refresh (`lib/use-pull-refresh.ts`, `components/refresh-spinner.tsx`) | `use-pull-refresh.test.ts` | Home, grids, detail, music, admin | iOS 26 large-title screens: the spinner stays until the refresh ends |
 | `src/platform/desktop.ts`, `src/platform/updates/` | `src/platform/__tests__/desktop.test.ts`, `src/platform/updates/__tests__/updates.test.ts` | Mac app player, downloads, update card | `pnpm desktop:dev` |
 | `src/native/`, `modules/` | `src/native/__tests__/seekable-mp4.test.ts` | Player capabilities, key input, together, discovery, share | Native build on iOS and Android. An OTA to an older binary must not crash (section 5) |
+| `src/iptv/` | `src/iptv/__tests__/` (m3u, xmltv, xtream, text, lists, manager; parsers have 10k+ entry performance tests) | Live TV pages, player live mode, Mac `iptv_fetch` | Add an M3U and an Xtream provider; groups, search, favourite; play, channel up and down, channel list; a refresh; a provider with no CORS on the plain web shows the message |
+| `src/features/iptv/`, live mode in `src/features/player/` | `src/player/__tests__/tv-keys.test.ts` (live keys) | Live TV routes, mini player | Phone, iPad width, web and TV: the list scrolls fast; TV: D-pad reaches every row, Left reaches the side menu, Up and Down zap with the controls hidden |
+| TS bridge (`modules/zoggyfin-native/ios/TsSegmenter.swift`, `TsBridge.swift`, `ZoggyfinTsBridgeModule.swift`, `src/native/ts-bridge*.ts`) | `pnpm test:ts-bridge-swift`, `src/native/__tests__/ts-bridge.test.ts` | IPTV playback on iOS | Native iOS build. Play a progressive `.ts` stream through `tsBridge.start()` on the simulator (a local source: `ffmpeg -re -stream_loop -1 -i x.ts -c copy -f mpegts` behind a small HTTP server): video and audio play, zapping stops the old session, a dropped source reconnects, Picture in Picture and background audio keep playing |
 | `src/lib/ota.ts` | `ota.test.ts` | Settings row, client version sent to the server | Settings shows the update |
 | `desktop/` | Rust: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` | Mac app only | `pnpm desktop:dev`: video, downloads, media keys, window state |
 | `site/` | `src/invite/__tests__/join-page.test.ts` covers the join page | Invite links | Open the pages locally; check `/join` with a test invite |
@@ -285,13 +300,13 @@ The Mac app and the web are different: the Mac app embeds the web build (`fronte
 
 **Rules:**
 
-- `runtimeVersion` uses the `appVersion` policy. All binaries with the same `version` in `app.json` get the same OTA updates. **Do not change `version` casually.** A new `version` cuts every installed binary off from new updates until people install the new build. Only the maintainer decides on a version change.
+- `runtimeVersion` uses the `appVersion` policy. All binaries with the same `version` in `app.json` get the same OTA updates. **Do not change `version` casually.** A new `version` cuts every installed binary off from new updates until people install the new build. Only the maintainer decides on a version change. TV sideload releases keep the same `version`: the Android TV updater compares `versionCode` only.
 - Because old binaries get new JS, **new JS must not need a native module that older binaries lack.** Load native modules with `requireOptionalNativeModule` (from `expo`) and give a safe fallback when it returns `null`. Examples: `src/native/zoggyfin-native.native.ts`, `src/together/nearby-native.native.ts`, `src/servers/discovery/backend.native.ts`, `src/invite/clipboard.ts`. Never add a top-level `import` of a new native package in code that an OTA update ships.
 - A JS workaround for a native bug stays until every supported binary has the native fix. Example: `engine.native.tsx` always passes `artist` and `artwork` to expo-video (see section 6), and the patch fixes the native side for new builds.
 - Patches apply through `pnpm.patchedDependencies` in `pnpm-workspace.yaml` during `pnpm install`. To change one: `pnpm patch <pkg>@<version>`, edit, then `pnpm patch-commit <dir>`. A patch file name pins the exact version: upgrade the package and the patch together.
 - **A native patch of an Expo module works only if that module builds from source.** On iOS, Expo uses precompiled xcframeworks for most `expo-*` modules (`EXPO_USE_PRECOMPILED_MODULES`). A precompiled module ignores the patched Swift in `node_modules`. Put each patched Expo module in the `expo.autolinking.ios.buildFromSource` list in `package.json` (now: `expo-video`). After `pnpm expo prebuild --clean --platform ios`, the module must not appear in the "Precompiled modules" list of the pod install output.
 - **Verify a native patch in the build log.** Build for iOS and search the log for the patched file, for example `grep NowPlayingManager.swift <build-log>`. No match means the patch is not in the binary.
-- EAS profiles (`eas.json`): `development` (dev client), `preview`, `production`, and `tv` (`EXPO_TV=1`, an Android TV APK on the production channel). An OTA update to `production` also reaches the TV build: check TV too.
+- EAS profiles (`eas.json`): `development` (dev client), `preview`, `production`, `tv` (`EXPO_TV=1`, the sideloaded Android TV APK with the self-updater, on its own `tv` channel) and `tv-play` (the TV app bundle for Google Play, no self-updater, on `production` with the other Google Play builds). An OTA update to `production` does not reach TV builds: publish to `tv` too (`--platform android`), and check TV. TV APKs built before this change are on `production`.
 
 ## 6. Gotchas learned the hard way
 

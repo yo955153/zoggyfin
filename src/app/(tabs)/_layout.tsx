@@ -3,6 +3,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useDownloadsStore } from '@/downloads/store';
+import { liveTvTab } from '@/features/iptv/nav';
 import { GlobalPlayerKeys } from '@/features/player/global-keys';
 import { MiniPlayer, useMiniPlayerVisible } from '@/features/player/mini-player';
 import { RoomLayer } from '@/features/together/room-bar';
@@ -119,6 +120,11 @@ function PhoneTabsLayout() {
       <NativeTabs.Trigger name="(music)" disableAutomaticContentInsets={NO_AUTO_INSETS}>
         <NativeTabs.Trigger.Label>Music</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="music.note" md="music_note" />
+      </NativeTabs.Trigger>
+      {/* Live TV is a tab only where a sixth tab fits (web, the Mac app): see features/iptv/nav.ts. */}
+      <NativeTabs.Trigger name="(live)" disableAutomaticContentInsets={NO_AUTO_INSETS} hidden={!liveTvTab}>
+        <NativeTabs.Trigger.Label>Live TV</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="tv" md="live_tv" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="(saved)" disableAutomaticContentInsets={NO_AUTO_INSETS} hidden={!features.downloads}>
         <NativeTabs.Trigger.Label>Downloads</NativeTabs.Trigger.Label>

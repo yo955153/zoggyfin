@@ -25,6 +25,8 @@ interface ItemGridProps {
   onPress?: (item: BaseItemDto) => void;
   /** Insets for a grid under a transparent or large-title header. Default true. */
   autoInset?: boolean;
+  /** TV: the first tile takes the first focus. Off when the header holds rows of tiles above the grid. Default true. */
+  focusFirstTile?: boolean;
 }
 
 /**
@@ -49,6 +51,7 @@ export function ItemGrid({
   onRefresh,
   onPress,
   autoInset = true,
+  focusFirstTile = true,
 }: ItemGridProps) {
   const l = useLayout();
   const tabBottomPad = useTabBottomPadding(spacing.huge * 2, { autoInset });
@@ -103,7 +106,7 @@ export function ItemGrid({
           width={tileWidth}
           shape={shape}
           onPress={open}
-          preferredFocus={l.tv && index === 0}
+          preferredFocus={l.tv && focusFirstTile && index === 0}
           onFocusItem={
             l.tv
               ? (it) => {
@@ -115,7 +118,7 @@ export function ItemGrid({
         />
       </View>
     ),
-    [columns, gap, tileWidth, shape, open, l.tv, prefetch, centerRow],
+    [columns, gap, tileWidth, shape, open, l.tv, prefetch, centerRow, focusFirstTile],
   );
 
   return (
