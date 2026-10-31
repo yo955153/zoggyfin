@@ -32,6 +32,18 @@ class WebEngine implements VideoEngine {
   private hls: HlsJs | null = null;
   private listeners = new Set<EngineListener>();
   private loadToken = 0;
+  /**
+   * hls.js picks its own renditions when it parses the playlist (DEFAULT,
+   * AUTOSELECT). A choice made before that waits here, then wins.
+   */
+  private hlsParsed = false;
+  private hlsPending: { audio?: number; subtitle?: number } = {};
+  /**
+   * The subtitle asked for. hls.js reads the subtitle back from the text
+   * track modes when it makes its text tracks, and can drop a choice made
+   * just before: it is set again then (a few times at most).
+   */
+  private hlsSubtitle: { index: number; retries: number } | null = null;
 
   constructor() {
     this.video = typeof document !== 'undefined' ? document.createElement('video') : null;
@@ -100,7 +112,8 @@ class WebEngine implements VideoEngine {
     selectAudio: (id: string) => {
       const i = Number(id);
       if (this.hls) {
-        this.hls.audioTrack = i;
+        if (this.hlsParsed) this.hls.audioTrack = i;
+        else this.hlsPending.audio = i;
         return;
       }
       const list = this.audioList();
@@ -111,9 +124,11 @@ class WebEngine implements VideoEngine {
     selectSubtitle: (id: string | null) => {
       const i = id === null ? -1 : Number(id);
       if (this.hls) {
-        this.hls.subtitleDisplay = i >= 0;
-        this.hls.subtitleTrack = i;
-        this.emitHlsTracks();
+        if (!this.hlsParsed) {
+          this.hlsPending.subtitle = i;
+          return;
+        }
+        this.setHlsSubtitle(this.hls, i);
         return;
       }
       const list = this.textList();
@@ -161,7 +176,9 @@ class WebEngine implements VideoEngine {
       }
       v.play().catch(() => this.emit({ type: 'playing', playing: false }));
     };
-    const nativeHls = v.canPlayType('application/vnd.apple.mpegurl') !== '';
+    // Chromium also plays HLS itself now, but lists no audio or subtitle renditions
+    // (no AudioTrackList): it keeps hls.js. Safari has both and plays HLS natively.
+    const nativeHls = v.canPlayType('application/vnd.apple.mpegurl') !== '' && 'audioTracks' in v;
     if (source.isHls && !nativeHls) {
       void import('hls.js').then(({ default: HlsClass }) => {
         if (token !== this.loadToken) return;
@@ -180,8 +197,25 @@ class WebEngine implements VideoEngine {
         hls.on(HlsClass.Events.AUDIO_TRACKS_UPDATED, tracks);
         hls.on(HlsClass.Events.AUDIO_TRACK_SWITCHED, tracks);
         hls.on(HlsClass.Events.SUBTITLE_TRACKS_UPDATED, tracks);
-        hls.on(HlsClass.Events.SUBTITLE_TRACK_SWITCH, tracks);
+        hls.on(HlsClass.Events.SUBTITLE_TRACK_SWITCH, (_e, data) => {
+          const want = this.hlsSubtitle;
+          if (this.hls === hls && want && data.id !== want.index && want.retries > 0) {
+            want.retries--;
+            // After hls.js has finished this switch.
+            setTimeout(() => {
+              if (this.hls === hls && this.hlsSubtitle === want && hls.subtitleTrack !== want.index) this.setHlsSubtitle(hls, want.index);
+            }, 0);
+          }
+          tracks();
+        });
         hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
+          if (this.hls === hls) {
+            this.hlsParsed = true;
+            const pending = this.hlsPending;
+            this.hlsPending = {};
+            if (pending.audio !== undefined) hls.audioTrack = pending.audio;
+            if (pending.subtitle !== undefined) this.setHlsSubtitle(hls, pending.subtitle);
+          }
           if (token !== this.loadToken || source.autoplay === false) return;
           v.play().catch(() => this.emit({ type: 'playing', playing: false }));
         });
@@ -228,7 +262,17 @@ class WebEngine implements VideoEngine {
     }
   }
 
+  private setHlsSubtitle(hls: HlsJs, index: number): void {
+    if (this.hlsSubtitle?.index !== index) this.hlsSubtitle = { index, retries: 5 };
+    hls.subtitleDisplay = index >= 0;
+    hls.subtitleTrack = index;
+    this.emitHlsTracks();
+  }
+
   private teardownHls(): void {
+    this.hlsParsed = false;
+    this.hlsPending = {};
+    this.hlsSubtitle = null;
     this.hls?.destroy();
     this.hls = null;
   }
