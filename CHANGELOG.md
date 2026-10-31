@@ -67,6 +67,8 @@ first commit to today. All of it was built in the first weeks of the project.
 - TV: Home in the side menu leaves Settings. A tab pressed again goes back to its first page.
 - TV: Right in the open side menu gives the focus back to the content.
 - TV: The Home billboard no longer cuts off the top and bottom of the backdrop.
+- TV: In library grids the row with the focus scrolls to the middle. Before, it sat on the bottom
+  edge with its title cut off, and Down on the last row scrolled into empty space.
 - TV: No Picture in Picture button. Google TV refused it, so the button did nothing.
 
 ## Mac app releases
