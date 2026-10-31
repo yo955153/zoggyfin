@@ -14,6 +14,8 @@
  * - TV: the same content in a centred TV panel (`Sheet`), which holds the
  *   remote's focus; the main button takes it. Back is "Later". The panel
  *   waits while a player is open and shows when the player closes.
+ * - Over-the-air updates (phones, tablets, TV): `./ota-card.tsx`. One card
+ *   shows at a time (`chooseUpdateCard`): a new app wins over an OTA update.
  */
 import { usePathname } from 'expo-router';
 import { type ComponentRef, type RefObject, useEffect, useRef, useState } from 'react';
@@ -24,6 +26,7 @@ import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { Sheet } from '@/components/sheet';
 import { Touchable } from '@/components/touchable';
+import { usePlayerStore } from '@/player/store';
 import {
   closeUpdateCard,
   installUpdate,
@@ -36,8 +39,12 @@ import {
   type UpdateState,
 } from '@/platform/updates';
 import { currentLabel, isBusy, offerLabel } from '@/platform/updates/machine';
+import { otaActive, useOtaStore } from '@/platform/updates/ota';
+import { chooseUpdateCard } from '@/platform/updates/ota-rules';
 import { NOTES_INLINE_MAX, progressFraction, progressLabel } from '@/platform/updates/notes';
 import { createStyles, type AppTheme, font, iconSize, motion, radius, scaled, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
+
+import { OtaUpdateCard } from './ota-card';
 
 /** "Newest version" closes by itself after this time. */
 const CURRENT_CLOSE_MS = 4000;
@@ -50,7 +57,13 @@ const PLAYER_PATHS = ['/player', '/now-playing'];
 
 export function UpdateCardHost() {
   const state = useUpdateStore((st) => st.state);
-  if (!updatesSupported || !state.open) return null;
+  const ota = useOtaStore((st) => st.state);
+  const playing = usePlayerStore((st) => st.playing);
+  const pathname = usePathname();
+  const playerOpen = PLAYER_PATHS.some((p) => pathname.startsWith(p));
+  const choice = chooseUpdateCard(updatesSupported ? state : null, otaActive() ? ota : null, { playing, playerOpen });
+  if (choice === 'ota') return <OtaUpdateCard state={ota} />;
+  if (choice !== 'app') return null;
   return updatesOnTV ? <TvUpdatePanel state={state} /> : <UpdateCard state={state} />;
 }
 

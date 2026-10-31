@@ -25,6 +25,7 @@ import { UpdateCardHost } from '@/features/updates/update-card';
 import { startOfflineServices } from '@/features/offline/bootstrap';
 import { toast } from '@/lib/toast';
 import { startUpdateChecks } from '@/platform/updates';
+import { startOtaChecks } from '@/platform/updates/ota';
 import { audioSession } from '@/player/audio/session';
 import '@/invite/wiring';
 import { useInviteLinks } from '@/invite/use-invite-links';
@@ -100,6 +101,8 @@ function Root({ session }: { session: boolean }) {
   }, []);
   // The desktop app and the sideloaded Android TV app: look for a new version soon after start and every few hours.
   useEffect(() => startUpdateChecks(), []);
+  // Over-the-air updates (phones, tablets, TV): check after start and on return to the foreground; the card offers a restart.
+  useEffect(() => startOtaChecks(), []);
   // A nearby session from before a restart: the session sheet offers to rejoin it.
   useEffect(() => nearby().loadSaved(), []);
   // Bring back the last audio queue (paused) after a restart.
