@@ -587,6 +587,23 @@ things in focus). `Touchable` applies the mark from its `kind`, so screens do no
   (`accentSoft` fill or a check mark); the focus fill goes on top of it.
 - Phones, iPad, the Mac app and the web keep the keyboard focus ring of §8 on every control.
 
+### 7.20 TV safe area (overscan)
+
+Many TVs crop the edges of the picture (Fire TV does by default), and a TV reports no safe-area
+insets. Every control, text and focus mark stays inside 5 % of each edge: 96 x 54 points on the
+1920-point TV design width (48 x 27 dp at 1080p). Backgrounds and artwork may bleed to the edges.
+
+- One inset: `tv.safeX` and `tv.safeY` (`theme/layout.ts`), as `useLayout().safe`.
+- `TvSafeArea` (root layout) reports it as the safe-area insets on TV. Everything that keeps clear
+  of the insets (the video player's controls and overlays, toasts, sheets, Now Playing) is inside
+  with no TV code of its own.
+- The tab pages sit inside it at the top and the bottom (the side menu's content guide). Home is
+  the exception at the top: its billboard art runs to the top edge, and its text starts lower.
+- The side menu items, their focus fill and the menu glyph start at `safeX` and `safeY`. The page
+  margin (`tv.gutter`) is the same 5 %, so the trailing edge of a page is inside too.
+- Horizontal rows may run off the trailing edge (a part of the next tile shows that the row
+  scrolls). Their focused tile never does.
+
 ---
 
 ## 8. iPad, Mac, keyboard and pointer

@@ -10,11 +10,18 @@ import { type Breakpoint, breakpointFor, gridFor, type GridResult, layout, type 
  */
 export const tv = {
   baseWidth: 1920,
-  /** The collapsed side menu: a slim rail of icons at the leading edge. */
-  railWidth: 112,
+  /**
+   * The overscan-safe area: 5 % of each edge (Android TV and Fire TV ask for
+   * 48 x 27 dp at 1080p). Controls, text and focus marks stay inside it;
+   * backgrounds and artwork may bleed to the edge.
+   */
+  safeX: 96,
+  safeY: 54,
+  /** The collapsed side menu: a slim rail of icons, inside the safe area. */
+  railWidth: 184,
   /** The side menu when it is open (icons and labels). */
-  menuWidth: 440,
-  /** About 5 % of the screen: inside the overscan-safe area. */
+  menuWidth: 520,
+  /** The page margin: the same 5 % as the safe area. */
   gutter: 96,
   tileGap: 40,
   sectionGap: 44,
@@ -35,6 +42,17 @@ export const tv = {
 
 export function tvScale(width: number): number {
   return Math.max(0.5, width / tv.baseWidth);
+}
+
+/** The TV safe-area inset (overscan) for a screen width, in points. Zero off TV. */
+export interface SafeInset {
+  x: number;
+  y: number;
+}
+
+export function tvSafeInset(width: number): SafeInset {
+  const s = tvScale(width);
+  return { x: Math.round(tv.safeX * s), y: Math.round(tv.safeY * s) };
 }
 
 /**
@@ -67,6 +85,8 @@ export interface LayoutInfo {
   sectionGap: number;
   /** Tile width in a horizontal row. */
   rowTile: Record<TileKind, number>;
+  /** TV: the overscan-safe inset from each screen edge (see `tv.safeX`). Zero elsewhere. */
+  safe: SafeInset;
 }
 
 /**
@@ -86,6 +106,7 @@ export function layoutFor(width: number, opts: { tv?: boolean; sidebar?: number 
       gap: Math.round(tv.tileGap * s),
       sectionGap: Math.round(tv.sectionGap * s),
       rowTile: { poster: r('poster'), thumb: r('thumb'), square: r('square'), circle: r('circle') },
+      safe: tvSafeInset(width),
     };
   }
   const contentWidth = Math.max(0, width - (opts.sidebar ?? 0));
@@ -103,6 +124,7 @@ export function layoutFor(width: number, opts: { tv?: boolean; sidebar?: number 
       square: layout.rowTileWidth.square[bp],
       circle: layout.rowTileWidth.circle[bp],
     },
+    safe: { x: 0, y: 0 },
   };
 }
 

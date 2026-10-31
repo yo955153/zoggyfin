@@ -104,6 +104,8 @@ first commit to today. All of it was built in the first weeks of the project.
 - TV: The Live TV channel list uses its full width.
 - TV: A focused row (Settings, sheets, Live TV, search) shows one fill and no ring. Before, it showed a
   ring and a fill at the same time. Tiles and buttons keep the ring and the focus scale.
+- TV: Nothing is cut off on a TV that crops the edges of the picture (overscan, for example Fire TV).
+  The side menu, the pages, the player controls, toasts and sheets stay inside 5 % of each edge.
 
 ## Mac app releases
 

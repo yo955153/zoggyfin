@@ -32,6 +32,7 @@ import { isTV } from '@/platform/tv';
 import { mediaColors, useTheme } from '@/theme';
 import { nearby } from '@/together/nearby';
 import { AppThemeProvider } from '@/theme/provider';
+import { TvSafeArea } from '@/theme/tv-safe-area';
 
 /**
  * The players open over the page they came from. TV: a full-screen page
@@ -76,7 +77,9 @@ export default function RootLayout() {
           },
         }}>
         <AppThemeProvider>
-          <Root session={!!session} />
+          <TvSafeArea>
+            <Root session={!!session} />
+          </TvSafeArea>
         </AppThemeProvider>
       </PersistQueryClientProvider>
     </GestureHandlerRootView>
