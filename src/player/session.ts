@@ -39,6 +39,7 @@ import { audioOptions, audioSwitchNeedsStream, pickSource, planStream, playbackI
 import { chaptersOf, pickTrickplay } from './timeline';
 import type { LivePlayRequest, LiveStreamChoice, PlayRequest, VodPlayRequest, VodRef } from './types';
 import { parseVtt } from './vtt';
+import { type LiveRestarts, nextLiveRestart } from './live-restart';
 import { tsBridge } from '@/native/ts-bridge';
 
 interface Ctx {
@@ -170,6 +171,8 @@ interface LiveAttempt {
   unsupported: string | null;
   /** The TS bridge session this attempt started (iOS), stopped when the attempt ends. */
   bridgeId?: string;
+  /** The stream played: a later failure restarts the channel by itself (`live-restart.ts`). */
+  played?: boolean;
 }
 
 interface LoadOptions {
@@ -190,6 +193,8 @@ class VideoSession {
   private lastRequest: PlayRequest | null = null;
   /** The live channel that plays (or loads), for Try Again and the next stream form. */
   private liveAttempt: LiveAttempt | null = null;
+  /** The recent automatic restarts of the live channel that plays. */
+  private liveRestarts: LiveRestarts | null = null;
   /** The IPTV film or episode that loads or plays, with its stream forms. */
   private vodAttempt: (LiveAttempt & { start: number }) | null = null;
   /** The film or episode has played: its position may be saved (a failed load must not wipe a saved one). */
@@ -241,6 +246,7 @@ class VideoSession {
       case 'status':
         if (e.status === 'error') {
           if (st.now.live) {
+            if (this.restartLive()) break;
             this.liveFailed(e.error);
             break;
           }
@@ -258,6 +264,7 @@ class VideoSession {
         if (e.playing !== st.playing) {
           setPlayerState({ playing: e.playing });
           this.reporter?.tick(e.playing ? 'Unpause' : 'Pause');
+          if (e.playing && st.now.live && this.liveAttempt) this.liveAttempt.played = true;
           if (st.now.vod) {
             if (e.playing) this.vodPlayed = true;
             else this.saveVod(false);
@@ -679,6 +686,23 @@ class VideoSession {
       autoplay: true,
       userAgent: a.userAgent,
     });
+  }
+
+  /**
+   * A live channel that played failed (broken data from the provider, or the
+   * player stuck with no progress): start it again, a few times at most.
+   */
+  private restartLive(): boolean {
+    const live = playerState().now?.live;
+    const a = this.liveAttempt;
+    if (!live || !a?.played || a.id !== this.loadId) return false;
+    const ch = live.channels[live.index];
+    const next = nextLiveRestart(this.liveRestarts, `${live.source.providerId}:${ch?.id ?? ''}`, Date.now());
+    if (!next) return false;
+    this.liveRestarts = next;
+    if (__DEV__) console.log('[player] the live stream stopped: starting the channel again');
+    this.retryLive();
+    return true;
   }
 
   /** A live stream failed: try its next form, else show the source's message or the player's. */
