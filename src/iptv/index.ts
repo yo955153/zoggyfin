@@ -38,6 +38,8 @@ export type { ProviderData, LoadStatus } from './store';
 export { ALL_GROUP, FAVOURITES_GROUP, RECENTS_GROUP } from './lists';
 export { iptvErrorText } from './errors';
 export { progressOf } from './guide';
+// Films and series (phase 3).
+export * from './vod-hooks';
 
 /** True when this platform sends the provider's user agent (the apps); a browser cannot. */
 export const sendsUserAgent: boolean = transport.sendsUserAgent;

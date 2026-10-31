@@ -59,16 +59,16 @@ export function xtreamLiveUrl(login: XtreamLogin, streamId: number, ext: 'm3u8' 
 
 export type XtreamAuth = { ok: true; expires: number | null; maxConnections: number | null } | { ok: false; reason: 'denied' | 'expired' | 'disabled' | 'answer' };
 
-function obj(v: unknown): Record<string, unknown> | null {
+export function obj(v: unknown): Record<string, unknown> | null {
   return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 }
 
-function num(v: unknown): number | null {
+export function num(v: unknown): number | null {
   const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : Number.NaN;
   return Number.isFinite(n) ? n : null;
 }
 
-function str(v: unknown): string {
+export function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '';
 }
 

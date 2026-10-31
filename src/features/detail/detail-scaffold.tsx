@@ -486,7 +486,7 @@ function Title({ item, centered, big }: { item: BaseItemDto; centered: boolean; 
 /** A toggle that turns on: the icon grows from 0.8 with no overshoot. Feedback, so it is quick and plain. */
 const TOGGLE_POP: PopInOptions = { from: 0.8, spring: { duration: 300, dampingRatio: 1 } };
 
-function RoundAction({
+export function RoundAction({
   icon,
   label,
   active,
@@ -578,7 +578,7 @@ function RoundAction({
 }
 
 /** Overview: 3 lines and a "More" link in `accent` that expands in place. */
-function Overview({ text, centered }: { text: string; centered: boolean }) {
+export function Overview({ text, centered }: { text: string; centered: boolean }) {
   const s = useStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const [long, setLong] = useState(false);
