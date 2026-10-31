@@ -1,4 +1,4 @@
-import { type ClaimState, createPageRegistry, MENU_KEY_MS, NO_KEY, pageMayTakeFocus, pageShouldTakeFocus } from '../page-focus';
+import { claimTarget, type ClaimState, createPageRegistry, MENU_KEY_MS, NO_KEY, pageMayTakeFocus, pageShouldTakeFocus } from '../page-focus';
 
 describe('page registry', () => {
   it('has no visible page at first', () => {
@@ -100,5 +100,57 @@ describe('pageShouldTakeFocus', () => {
     // The search field, the mini player or the page itself (its sheets) keep it.
     expect(pageShouldTakeFocus(mounted)).toBe(false);
     expect(pageShouldTakeFocus({ ...mounted, focusOnPage: true, focusNowhere: true })).toBe(false);
+  });
+});
+
+describe('claimTarget', () => {
+  it('gives an opening page the control that asks for the first focus', () => {
+    expect(claimTarget('open', false, true)).toBe('preferred');
+    expect(claimTarget('controlMounted', false, true)).toBe('preferred');
+  });
+
+  it('uses the guide when no control asks for the first focus', () => {
+    expect(claimTarget('open', false, false)).toBe('guide');
+  });
+
+  it('keeps a focus the person already has on the page', () => {
+    expect(claimTarget('open', true, true)).toBe('guide');
+  });
+
+  it('gives a page that comes back the control it had last', () => {
+    expect(claimTarget('return', false, true)).toBe('guide');
+  });
+
+  it('moves the focus to a first tile that mounts after a chip took it', () => {
+    expect(claimTarget('firstFocusMounted', true, true)).toBe('preferred');
+  });
+});
+
+describe('a first tile that mounts late', () => {
+  const base: ClaimState = {
+    reason: 'firstFocusMounted',
+    focusOnPage: true,
+    focusOnHiddenPage: false,
+    focusNowhere: false,
+    menuFocused: false,
+    last: NO_KEY,
+    now: 10_000,
+  };
+
+  it('takes the focus from a chip the page gave it, before any key', () => {
+    expect(pageShouldTakeFocus({ ...base, keyedSinceOpen: false })).toBe(true);
+  });
+
+  it('leaves a focus the person moved on the page (a tab of the strip)', () => {
+    expect(pageShouldTakeFocus({ ...base, keyedSinceOpen: true })).toBe(false);
+  });
+
+  it('takes a focus that was lost or on a hidden page, keys or not', () => {
+    expect(pageShouldTakeFocus({ ...base, focusOnPage: false, focusNowhere: true, keyedSinceOpen: true })).toBe(true);
+    expect(pageShouldTakeFocus({ ...base, focusOnPage: false, focusOnHiddenPage: true, keyedSinceOpen: true })).toBe(true);
+  });
+
+  it('never takes the focus from the search field', () => {
+    expect(pageShouldTakeFocus({ ...base, focusOnPage: false, textFocused: true, keyedSinceOpen: false })).toBe(false);
   });
 });

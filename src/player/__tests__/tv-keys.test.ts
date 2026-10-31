@@ -6,6 +6,7 @@ import {
   NO_PRESS,
   NO_RUN,
   nextRun,
+  playerFocusOwner,
   playerKeyAction,
   registerPress,
   SCRUB_MIN_GAP_MS,
@@ -261,5 +262,37 @@ describe('live TV keys', () => {
   it('leaves video keys as they were', () => {
     expect(playerKeyAction('channelUp', false)).toEqual({ type: 'none' });
     expect(playerKeyAction('down', false)).toEqual({ type: 'wake' });
+  });
+});
+
+describe('player focus owner (TV)', () => {
+  const base = { controlsVisible: false, promptShown: false, promptFocused: false, error: false };
+
+  it('gives the hidden-controls focus to the full-screen layer with no prompt', () => {
+    expect(playerFocusOwner(base)).toBe('layer');
+  });
+
+  it('gives it to Skip Intro or Up Next while one shows', () => {
+    expect(playerFocusOwner({ ...base, promptShown: true })).toBe('prompt');
+  });
+
+  it('gives the controls the focus when they show, unless the prompt has it', () => {
+    expect(playerFocusOwner({ ...base, controlsVisible: true, promptShown: true })).toBe('controls');
+    expect(playerFocusOwner({ ...base, controlsVisible: true, promptShown: true, promptFocused: true })).toBe('prompt');
+  });
+
+  it('forgets a prompt focus once the prompt is gone', () => {
+    expect(playerFocusOwner({ ...base, controlsVisible: true, promptFocused: true })).toBe('controls');
+    expect(playerFocusOwner({ ...base, promptFocused: true })).toBe('layer');
+  });
+
+  it('leaves the error card alone', () => {
+    expect(playerFocusOwner({ ...base, promptShown: true, error: true })).toBe('controls');
+  });
+
+  it('keeps the hidden-controls keys: a double Right seeks and Up zaps in live TV', () => {
+    // The keys do not depend on the focus owner: they come from the remote handler.
+    expect(playerKeyAction('right', true)).toEqual({ type: 'seek', seconds: 10 });
+    expect(liveKeyAction('up', true)).toEqual({ type: 'zap', delta: 1 });
   });
 });

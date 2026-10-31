@@ -1,19 +1,40 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+
+import { Touchable } from '@/components/touchable';
 
 import { motion, player, radius, spacing, textStyle, type } from './tokens';
 
-/** Skip Intro / Skip Credits (design-system §7.8): shows during the segment, even with the controls hidden. */
-export function SkipPill({ label, onPress }: { label: string; onPress: () => void }) {
+/**
+ * Skip Intro / Skip Credits (design-system §7.8): shows during the segment,
+ * even with the controls hidden. TV: it takes the focus while the controls
+ * are hidden (`preferredFocus`), so Select skips.
+ */
+export function SkipPill({
+  label,
+  onPress,
+  preferredFocus,
+  onFocusChange,
+}: {
+  label: string;
+  onPress: () => void;
+  preferredFocus?: boolean;
+  onFocusChange?: (focused: boolean) => void;
+}) {
   return (
     <Animated.View entering={FadeIn.duration(motion.duration.base)} exiting={FadeOut.duration(motion.duration.fast)}>
-      <Pressable
+      <Touchable
+        kind="button"
+        radius={radius.pill}
         onPress={onPress}
+        hasTVPreferredFocus={preferredFocus}
+        onFocus={() => onFocusChange?.(true)}
+        onBlur={() => onFocusChange?.(false)}
         accessibilityRole="button"
         accessibilityLabel={label}
         style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
         <Text style={styles.text}>{label}</Text>
-      </Pressable>
+      </Touchable>
     </Animated.View>
   );
 }
@@ -26,6 +47,6 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
+  pressed: { opacity: 0.8 },
   text: { ...textStyle(type.headline), fontSize: 15, color: player.skipPillText },
 });

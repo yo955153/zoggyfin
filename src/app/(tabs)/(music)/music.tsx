@@ -1,8 +1,9 @@
 import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { useViews } from '@/api/queries';
+import { Chip, chipRowTV } from '@/components/chip';
 import { Icon } from '@/components/icon';
 import { OptionSheet } from '@/components/option-sheet';
 import { EmptyState, ErrorState, GridSkeleton } from '@/components/states';
@@ -11,13 +12,15 @@ import { audioLibraryKind, isAudioView } from '@/features/library/library-kind';
 import { MusicBrowser } from '@/features/music/music-browser';
 import { storage } from '@/storage/kv';
 import { useRootScreenOptions } from '@/lib/stack-options';
-import { createStyles, type AppTheme, font, iconSize, spacing, type, useStyles, useTheme } from '@/theme';
+import { isTV } from '@/platform/tv';
+import { createStyles, type AppTheme, font, iconSize, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
 
 const KEY = 'music.library';
 
 export default function MusicScreen() {
   const styles = useStyles(makeStyles);
   const { c } = useTheme();
+  const l = useLayout();
   const root = useRootScreenOptions();
   const views = useViews();
   const audio = (views.data ?? []).filter(isAudioView);
@@ -42,6 +45,12 @@ export default function MusicScreen() {
               : undefined,
         }}
       />
+      {/* TV has no header: the library picker sits above the tabs. */}
+      {isTV && audio.length > 1 ? (
+        <View style={[styles.tvBar, { paddingHorizontal: l.gutter }, chipRowTV()]}>
+          <Chip label={library?.Name ?? 'Music'} icon="chevron.down" onPress={() => setPicker(true)} accessibilityLabel={`Music library: ${library?.Name ?? 'Music'}. Choose another`} />
+        </View>
+      ) : null}
       {views.isPending ? (
         <GridSkeleton shape="square" />
       ) : views.error && !views.data ? (
@@ -69,4 +78,5 @@ export default function MusicScreen() {
 const makeStyles = createStyles(({ c }: AppTheme) => ({
   pick: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs, paddingHorizontal: spacing.xs + 2 },
   pickText: { ...font(type.body), color: c.accent },
+  tvBar: { flexDirection: 'row' as const },
 }));

@@ -7,6 +7,7 @@ import { Icon } from '@/components/icon';
 import { ItemImage } from '@/components/item-image';
 import { Touchable } from '@/components/touchable';
 import { episodeLabel, formatClock, formatDuration, playedFraction } from '@/lib/format';
+import { isTV } from '@/platform/tv';
 import { usePlayerStore } from '@/player/store';
 import { createStyles,
   type AppTheme,
@@ -24,7 +25,12 @@ import { createStyles,
   useTheme,
 } from '@/theme';
 
-/** A song row (design system §7.10 rows): number or art, title, artist, length. The playing song is in `accent` with a glyph. */
+/**
+ * A song row (design system §7.10 rows): number or art, title, artist,
+ * length. The playing song is in `accent` with a glyph. Select plays; the
+ * action sheet opens with a long press. TV has no long press: a More button
+ * sits at the end of the row (Right from the row).
+ */
 export const TrackRow = memo(function TrackRow({
   item,
   index,
@@ -53,9 +59,12 @@ export const TrackRow = memo(function TrackRow({
   const playing = usePlayerStore((st) => !!item.Id && st.now?.item.Id === item.Id);
   const artist = [item.Artists?.join(', ') ?? item.AlbumArtist, note].filter(Boolean).join(' · ') || undefined;
   const time = formatClock(item.RunTimeTicks);
-  return (
+  // TV: the More button is a sibling of the row, so the focus can move to it.
+  const tvMore = isTV && !!onLongPress;
+  const row = (
     <Touchable
       kind="row"
+      containerStyle={tvMore ? s.flex : undefined}
       onPress={() => onPress(item)}
       onLongPress={onLongPress ? () => onLongPress(item) : undefined}
       accessibilityRole="button"
@@ -72,7 +81,7 @@ export const TrackRow = memo(function TrackRow({
       ) : (
         <Text style={s.trackNo}>{item.IndexNumber ?? index + 1}</Text>
       )}
-      <View style={[s.trackBody, { paddingRight: l.gutter }, !last && s.line]}>
+      <View style={[s.trackBody, { paddingRight: tvMore ? spacing.md : l.gutter }, !last && s.line]}>
         <View style={s.flex}>
           <Text style={[s.trackTitle, playing && { color: c.accent }, scriptStyle(item.Name, s.trackTitle)]} numberOfLines={1}>
             {item.Name}
@@ -88,6 +97,21 @@ export const TrackRow = memo(function TrackRow({
         {trailing}
       </View>
     </Touchable>
+  );
+  if (!tvMore) return row;
+  return (
+    <View style={[s.tvTrack, { paddingRight: l.gutter }]}>
+      {row}
+      <Touchable
+        kind="icon"
+        radius={radius.pill}
+        onPress={() => onLongPress?.(item)}
+        style={s.more}
+        accessibilityRole="button"
+        accessibilityLabel={`More for ${item.Name ?? 'this song'}`}>
+        <Icon name="ellipsis" size={scaled(iconSize.sm)} color={c.text2} />
+      </Touchable>
+    </View>
   );
 });
 
@@ -178,6 +202,8 @@ export function personToItem(p: BaseItemPerson): BaseItemDto {
 const makeStyles = createStyles(({ c }: AppTheme) => ({
   flex: { flex: 1, minWidth: 0 },
   active: { backgroundColor: c.surface3 },
+  tvTrack: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm },
+  more: { width: scaled(44), height: scaled(44), borderRadius: radius.pill, alignItems: 'center' as const, justifyContent: 'center' as const },
   track: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.md, minHeight: scaled(sizes.rowMedia) - 12 },
   trackBody: {
     flex: 1,

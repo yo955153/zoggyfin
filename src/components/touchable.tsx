@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
-import { forgetContentFocus, noteControlFocus, noteControlMounted, rememberContentFocus, TvPageContext } from '@/features/tv/focus';
+import { forgetContentFocus, noteControlFocus, noteControlMounted, notePreferredControl, rememberContentFocus, TvPageContext, tvPageFocus } from '@/features/tv/focus';
 import { focusFromKeyboard } from '@/lib/input-modality';
 import { isTV } from '@/platform/tv';
 import { mediaColors, motion, tv, useTheme, webPressable } from '@/theme';
@@ -34,6 +34,12 @@ export interface TouchableProps extends Omit<PressableProps, 'style' | 'children
   children?: ReactNode | ((s: TouchState) => ReactNode);
   /** Draw the focus ring on keyboard and TV focus. Default true. */
   ring?: boolean;
+  /**
+   * TV: this control takes the first focus of its page (the first tile of a
+   * grid or row). In an Android TV tab page the page gives it the focus;
+   * elsewhere it is `hasTVPreferredFocus`.
+   */
+  firstFocus?: boolean;
   ref?: Ref<ComponentRef<typeof View>>;
 }
 
@@ -64,6 +70,7 @@ export function Touchable({
   containerStyle,
   children,
   ring = true,
+  firstFocus = false,
   onPressIn,
   onPressOut,
   onHoverIn,
@@ -101,6 +108,14 @@ export function Touchable({
   useEffect(() => {
     if (isTV && !disabled) noteControlMounted(page);
   }, [page, disabled]);
+  // Android TV: in a tab page, the page gives the first focus (features/tv/focus).
+  const pageFirst = tvPageFocus && !!page && firstFocus && !disabled;
+  useEffect(() => {
+    if (!pageFirst) return;
+    const view = own.current;
+    notePreferredControl(page, view, true);
+    return () => notePreferredControl(page, view, false);
+  }, [page, pageFirst]);
 
   const lifts = kind === 'tile' || (isTV && kind !== 'row' && kind !== 'plain');
   const restScale = (h: boolean, f: boolean) => {
@@ -158,7 +173,8 @@ export function Touchable({
       }}
       accessibilityState={{ disabled: !!disabled, ...rest.accessibilityState }}
       style={[webPressable, disabled && styles.disabled, containerStyle]}
-      {...rest}>
+      {...rest}
+      hasTVPreferredFocus={(firstFocus && isTV && !pageFirst) || rest.hasTVPreferredFocus}>
       {/* TV: no shadow; an elevation shadow under a scaling tile is slow on a TV stick. */}
       <Animated.View style={[inner, animated, lifted && !isTV && t.shadow('raised')]}>
         {typeof children === 'function' ? children(state) : children}

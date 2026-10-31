@@ -3,18 +3,54 @@
  * react-native-pager-view). Web uses tab-pager.web.tsx.
  *
  * The scroll position goes to a Reanimated shared value on the UI thread.
+ *
+ * TV has no swipe, and the native pager breaks the focus there: it keeps the
+ * other pages in the window off screen, and Down from the tab strip went to
+ * them (or past the page). TV shows only the selected page, in a plain view.
  */
 import { useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import PagerView, { type PagerViewOnPageScrollEventData, type PagerViewProps } from 'react-native-pager-view';
-import Animated, { useEvent, useSharedValue } from 'react-native-reanimated';
+import Animated, { useEvent, useSharedValue, withTiming } from 'react-native-reanimated';
+
+import { isTV } from '@/platform/tv';
+import { motion } from '@/theme';
 
 import { TabStrip } from './tab-strip';
 import type { TabPagerProps } from './tab-pager-types';
 
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
 
-export function TabPager({ tabs, renderPage, initialIndex = 0, onIndexChange }: TabPagerProps) {
+export function TabPager(props: TabPagerProps) {
+  return isTV ? <TvTabPager {...props} /> : <NativeTabPager {...props} />;
+}
+
+/** TV: the strip and the selected page only. The indicator slides to the new tab. */
+function TvTabPager({ tabs, renderPage, initialIndex = 0, onIndexChange }: TabPagerProps) {
+  const [index, setIndex] = useState(initialIndex);
+  const position = useSharedValue(initialIndex);
+  const tab = tabs[index];
+  return (
+    <View style={styles.flex}>
+      <TabStrip
+        tabs={tabs}
+        index={index}
+        position={position}
+        onPress={(i) => {
+          if (i === index) return;
+          position.set(withTiming(i, { duration: motion.duration.base }));
+          setIndex(i);
+          onIndexChange?.(i);
+        }}
+      />
+      <View key={tab?.key} style={styles.flex}>
+        {tab ? renderPage(tab, index) : null}
+      </View>
+    </View>
+  );
+}
+
+function NativeTabPager({ tabs, renderPage, initialIndex = 0, onIndexChange }: TabPagerProps) {
   const pagerRef = useRef<PagerView>(null);
   const [index, setIndex] = useState(initialIndex);
   const [visited, setVisited] = useState(() => new Set([initialIndex]));

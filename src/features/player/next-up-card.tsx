@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import type { BaseItemDto } from '@/api/types';
 import { ItemImage } from '@/components/item-image';
+import { Touchable } from '@/components/touchable';
 import { episodeLabel } from '@/lib/format';
 import { NEXT_UP_COUNTDOWN_SECONDS } from '@/player/segments';
 
@@ -38,9 +39,24 @@ function CountdownRing({ seconds, paused }: { seconds: number; paused: boolean }
 /**
  * The next-episode card (design-system §7.8): the next episode's thumb and a
  * 10 s countdown ring, with "Play Now" and "Cancel". When the countdown ends,
- * `onPlay` runs.
+ * `onPlay` runs. TV: "Play Now" takes the focus while the controls are
+ * hidden (`preferredFocus`); Right reaches "Cancel".
  */
-export function NextUpCard({ next, onPlay, onCancel, autoplay }: { next: BaseItemDto; onPlay: () => void; onCancel: () => void; autoplay: boolean }) {
+export function NextUpCard({
+  next,
+  onPlay,
+  onCancel,
+  autoplay,
+  preferredFocus,
+  onFocusChange,
+}: {
+  next: BaseItemDto;
+  onPlay: () => void;
+  onCancel: () => void;
+  autoplay: boolean;
+  preferredFocus?: boolean;
+  onFocusChange?: (focused: boolean) => void;
+}) {
   const [left, setLeft] = useState(NEXT_UP_COUNTDOWN_SECONDS);
   const fired = useRef(false);
   useEffect(() => {
@@ -69,16 +85,30 @@ export function NextUpCard({ next, onPlay, onCancel, autoplay }: { next: BaseIte
             {label || 'Next episode'}
           </Text>
           <View style={styles.actions}>
-            <Pressable
+            <Touchable
+              kind="button"
+              radius={radius.pill}
               onPress={onPlay}
+              hasTVPreferredFocus={preferredFocus}
+              onFocus={() => onFocusChange?.(true)}
+              onBlur={() => onFocusChange?.(false)}
               accessibilityRole="button"
               accessibilityLabel={autoplay ? `Play now. Starts in ${left} seconds` : 'Play now'}
               style={({ pressed }) => [styles.play, pressed && styles.pressed]}>
               <Text style={styles.playText}>Play Now</Text>
-            </Pressable>
-            <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel" hitSlop={8} style={({ pressed }) => [styles.cancel, pressed && styles.pressed]}>
+            </Touchable>
+            <Touchable
+              kind="button"
+              radius={radius.sm}
+              onPress={onCancel}
+              onFocus={() => onFocusChange?.(true)}
+              onBlur={() => onFocusChange?.(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+              hitSlop={8}
+              style={({ pressed }) => [styles.cancel, pressed && styles.pressed]}>
               <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
+            </Touchable>
           </View>
         </View>
         {autoplay ? (

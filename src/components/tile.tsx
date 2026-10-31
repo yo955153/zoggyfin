@@ -101,7 +101,7 @@ export const Tile = memo(function Tile({
       radius={r}
       onPress={() => onPress(item)}
       onLongPress={onLongPress ? () => onLongPress(item) : undefined}
-      hasTVPreferredFocus={preferredFocus}
+      firstFocus={preferredFocus}
       onFocus={onFocusItem ? () => onFocusItem(item) : undefined}
       accessibilityRole="button"
       accessibilityLabel={label}

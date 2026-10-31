@@ -46,7 +46,21 @@ export function toast(text: string, opts?: { icon?: IconName; action?: ToastActi
   useToastStore.getState().show(text, opts);
 }
 
-/** Visible time: 3.2 s, or 6 s with an action. */
-export function toastDuration(m: Pick<ToastMessage, 'action'>): number {
-  return m.action ? 6000 : 3200;
+/**
+ * Visible time: 3.2 s, or 6 s with an action. TV: 10 s with an action, as
+ * the remote needs more time to reach it (and it stays while it has the
+ * focus: toastTakesFocus).
+ */
+export function toastDuration(m: Pick<ToastMessage, 'action'>, tv = false): number {
+  if (!m.action) return 3200;
+  return tv ? 10_000 : 6000;
+}
+
+/**
+ * TV: an action toast takes the focus when it shows, so one Select runs the
+ * action. Never while a text field has the focus (the person is typing).
+ * Phones and the web keep the focus where it is.
+ */
+export function toastTakesFocus(m: Pick<ToastMessage, 'action'>, tv: boolean, textFocused: boolean): boolean {
+  return tv && !!m.action && !textFocused;
 }

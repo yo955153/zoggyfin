@@ -1,6 +1,7 @@
 /**
  * A playlist page: play and shuffle, download, rename and delete (in More),
- * swipe left on an entry to remove it, and Reorder mode to drag entries.
+ * swipe left on an entry to remove it, and Reorder mode to drag entries
+ * (TV: a Move menu on each entry).
  * Audio and video playlists. Reorder and remove are optimistic (ops.ts).
  */
 import { type ReactNode, useState } from 'react';
@@ -19,7 +20,7 @@ import { Touchable } from '@/components/touchable';
 import { openRenamePlaylist } from '@/features/playlists/add-to-playlist';
 import { moveItem, removeItems } from '@/features/playlists/ops';
 import { episodeLabel, formatClock, formatDuration } from '@/lib/format';
-import { features } from '@/platform/tv';
+import { features, isTV } from '@/platform/tv';
 import { isAudioItem, usePlayer } from '@/player';
 import { createStyles, type AppTheme, font, iconSize, radius, scaled, scriptStyle, sizes, spacing, type, useLayout, useStyles, useTheme } from '@/theme';
 
@@ -95,7 +96,11 @@ export function PlaylistDetail({ item, onRefresh }: ViewProps) {
           ) : null}
           {editing && list.length ? (
             <>
-              <Text style={[s.hint, { paddingHorizontal: l.gutter }]}>Drag the handles to change the order. Tap the bin to remove an entry.</Text>
+              <Text style={[s.hint, { paddingHorizontal: l.gutter }]}>
+                {isTV
+                  ? 'Select the arrows on an entry to move it. Select the bin to remove it.'
+                  : 'Drag the handles to change the order. Tap the bin to remove an entry.'}
+              </Text>
               <ReorderList
                 rows={list}
                 rowKey={(t, i) => t.PlaylistItemId ?? `${t.Id}-${i}`}
