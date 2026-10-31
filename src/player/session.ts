@@ -31,10 +31,10 @@ import type { EngineEvent } from './engine-types';
 import { isForeignDownload, outboxOnly, withOutbox } from './outbox-transport';
 import { ProgressReporter, type ProgressTransport, secondsToTicks, ticksToSecondsExact, toServerReport } from './progress-reporter';
 import { normalizeSegments } from './segments';
-import { setPlayerState, initialPlayerState, playerState, type NowPlaying } from './store';
+import { setPlayerState, initialPlayerState, playerState, type LiveNow, type NowPlaying } from './store';
 import { audioOptions, audioSwitchNeedsStream, pickSource, planStream, playbackInfoBody, type StreamPlan, type StreamServer } from './stream';
 import { chaptersOf, pickTrickplay } from './timeline';
-import type { PlayRequest } from './types';
+import type { LivePlayRequest, LiveStreamChoice, PlayRequest } from './types';
 import { parseVtt } from './vtt';
 
 interface Ctx {
@@ -121,6 +121,36 @@ function subtitleLine(item: BaseItemDto): string | undefined {
   return item.ProductionYear ? String(item.ProductionYear) : undefined;
 }
 
+/** The plan of a live stream: no Jellyfin source, no tracks, no quality choice. */
+function livePlan(url: string, isHls: boolean): StreamPlan {
+  return {
+    url,
+    isHls,
+    playMethod: 'DirectStream',
+    mediaSourceId: '',
+    playSessionId: null,
+    audio: [],
+    subtitles: [],
+    audioIndex: null,
+    subtitleIndex: null,
+    burnedSubtitle: false,
+  };
+}
+
+/** The artwork for the lock screen: only http(s) logos (a data or file URI is not one the system loads). */
+function liveArtwork(logo: string | null): string | undefined {
+  return logo && /^https?:\/\//i.test(logo) ? logo : undefined;
+}
+
+/** The streams of the live channel that loads now, and the next one to try. */
+interface LiveAttempt {
+  id: number;
+  candidates: LiveStreamChoice[];
+  next: number;
+  userAgent: string | null;
+  unsupported: string | null;
+}
+
 interface LoadOptions {
   startSeconds: number;
   audioIndex?: number | null;
@@ -137,6 +167,8 @@ class VideoSession {
   /** Guards against an old load finishing after a newer one started. */
   private loadId = 0;
   private lastRequest: PlayRequest | null = null;
+  /** The live channel that plays (or loads), for Try Again and the next stream form. */
+  private liveAttempt: LiveAttempt | null = null;
 
   constructor() {
     this.engine.subscribe(this.onEngine);
@@ -154,7 +186,7 @@ class VideoSession {
   private async switchToDownload(itemId: string): Promise<void> {
     const st = playerState();
     const now = st.now;
-    if (!now || now.kind !== 'video' || now.plan.isLocal || now.item.Id !== itemId) return;
+    if (!now || now.kind !== 'video' || now.live || now.plan.isLocal || now.item.Id !== itemId) return;
     if (st.status === 'error' || st.status === 'ended' || playRouter.active || controlGate.active) return;
     const r = downloaded(itemId);
     if (!r) return;
@@ -180,6 +212,10 @@ class VideoSession {
     switch (e.type) {
       case 'status':
         if (e.status === 'error') {
+          if (st.now.live) {
+            this.liveFailed(e.error);
+            break;
+          }
           if (this.recoverAfterAddressSwitch()) break;
           setPlayerState({ status: 'error', error: e.error ?? 'The video could not be played.' });
           void this.reporter?.stop({ positionTicks: secondsToTicks(st.position) });
@@ -196,7 +232,8 @@ class VideoSession {
         setPlayerState({ position: e.position, buffered: e.buffered });
         break;
       case 'duration':
-        if (e.duration > 0) setPlayerState({ duration: e.duration });
+        // A live stream has no length (some players report the size of the live window).
+        if (e.duration > 0 && !st.now.live) setPlayerState({ duration: e.duration });
         break;
       case 'rate':
         setPlayerState({ rate: e.rate });
@@ -211,10 +248,12 @@ class VideoSession {
         setPlayerState({ video: e.video });
         break;
       case 'ended':
-        void this.onEnded();
+        if (st.now.live) setPlayerState({ status: 'error', error: 'The channel stopped sending.', playing: false });
+        else void this.onEnded();
         break;
       case 'remote':
-        if (e.command === 'next' && st.now.next) void this.playNext();
+        if (st.now.live) this.zap(e.command === 'next' ? 1 : -1);
+        else if (e.command === 'next' && st.now.next) void this.playNext();
         break;
     }
   };
@@ -437,6 +476,87 @@ class VideoSession {
     if (def) void this.selectSubtitle(def.index);
   }
 
+  /**
+   * Plays a live channel (IPTV). The source gives the streams to try; the
+   * next one loads when one fails, and the source's message shows when none
+   * plays. No Jellyfin item and no progress reports. `presentation` keeps
+   * the current one (channel up and down from the mini player).
+   */
+  async playLive(request: LivePlayRequest, opts: { keepPresentation?: boolean } = {}): Promise<void> {
+    const id = ++this.loadId;
+    const presentation = opts.keepPresentation ? playerState().presentation : 'full';
+    await this.finishCurrent();
+    if (id !== this.loadId) return;
+    this.lastRequest = null;
+    this.liveAttempt = null;
+    const index = Math.min(Math.max(0, request.index), request.channels.length - 1);
+    const ch = request.channels[index];
+    if (!ch) return;
+    const live: LiveNow = { channels: request.channels, index, source: request.source };
+    const item: BaseItemDto = { Id: `iptv:${request.source.providerId}:${ch.id}`, Name: ch.name, Type: 'TvChannel' };
+    setPlayerState({
+      ...initialPlayerState,
+      rate: 1,
+      presentation,
+      now: { kind: 'video', item, queue: [], plan: livePlan('', false), segments: [], chapters: [], trickplay: null, bitrateChoice: null, bitrate: 0, next: null, live },
+      status: 'loading',
+    });
+    const stream = await request.source.resolve(ch.id);
+    if (id !== this.loadId) return;
+    this.liveAttempt = { id, candidates: stream.candidates, next: 0, userAgent: stream.userAgent, unsupported: stream.unsupported };
+    request.source.onStart?.(ch.id);
+    this.loadNextLive();
+  }
+
+  /** Loads the next stream form of the live channel, or shows why it does not play. True when one loads. */
+  private loadNextLive(): boolean {
+    const a = this.liveAttempt;
+    const now = playerState().now;
+    const live = now?.live;
+    if (!a || !now || !live || a.id !== this.loadId) return false;
+    const choice = a.candidates[a.next];
+    if (!choice) return false;
+    a.next++;
+    const ch = live.channels[live.index];
+    setPlayerState({ now: { ...now, plan: livePlan(choice.url, choice.isHls) }, status: 'loading', error: null });
+    this.engine.load({
+      uri: choice.url,
+      isHls: choice.isHls,
+      startSeconds: 0,
+      title: ch.name,
+      subtitle: live.source.nowLine?.(ch.id) ?? (ch.group || 'Live TV'),
+      artworkUri: liveArtwork(ch.logo),
+      autoplay: true,
+      userAgent: a.userAgent,
+    });
+    return true;
+  }
+
+  /** A live stream failed: try its next form, else show the source's message or the player's. */
+  private liveFailed(error: string | undefined): void {
+    if (this.loadNextLive()) return;
+    const a = this.liveAttempt;
+    // The player's own error text can hold the stream URL (and the credentials in it): never show it.
+    const text = a?.unsupported ?? (error && !/https?:|\/\//i.test(error) ? error : null) ?? 'The channel could not be played.';
+    setPlayerState({ status: 'error', error: text, playing: false });
+  }
+
+  /** Channel up (+1) or down (-1) in the list the channel was played from. */
+  zap(delta: number): void {
+    const live = playerState().now?.live;
+    if (!live || live.channels.length < 2) return;
+    const n = live.channels.length;
+    const index = (((live.index + delta) % n) + n) % n;
+    void this.playLive({ channels: live.channels, index, source: live.source }, { keepPresentation: true });
+  }
+
+  /** Switches to a channel of the current list (the channel list in the player). */
+  playChannelAt(index: number): void {
+    const live = playerState().now?.live;
+    if (!live || index === live.index) return;
+    void this.playLive({ channels: live.channels, index, source: live.source }, { keepPresentation: true });
+  }
+
   private async load(id: number, item: BaseItemDto, queue: BaseItemDto[], opts: LoadOptions): Promise<void> {
     const { api, userId, server } = context();
     const settings = usePlaybackSettings.getState();
@@ -561,6 +681,11 @@ class VideoSession {
   private async reload(opts: Omit<LoadOptions, 'startSeconds'>): Promise<void> {
     const st = playerState();
     if (!st.now) return;
+    if (st.now.live) {
+      // A live stream has no other forms to ask the server for: start the channel again.
+      this.retryLive();
+      return;
+    }
     if (st.now.plan.isLocal) {
       // A downloaded file has its tracks inside; the server is not asked for another stream.
       if (st.status === 'error' && this.lastRequest) void this.play({ ...this.lastRequest, startPositionTicks: secondsToTicks(st.position) });
@@ -584,9 +709,15 @@ class VideoSession {
     }
   }
 
+  private retryLive(): void {
+    const live = playerState().now?.live;
+    if (live) void this.playLive({ channels: live.channels, index: live.index, source: live.source }, { keepPresentation: true });
+  }
+
   retry(): void {
     const st = playerState();
-    if (st.now) void this.reload({});
+    if (st.now?.live) this.retryLive();
+    else if (st.now) void this.reload({});
     else if (this.lastRequest) void this.play(this.lastRequest);
   }
 
@@ -606,7 +737,9 @@ class VideoSession {
   }
 
   seekTo(seconds: number): void {
-    const { duration } = playerState();
+    const { duration, now } = playerState();
+    // Live: no seeking (the stream plays at the live edge).
+    if (now?.live) return;
     const target = Math.max(0, duration > 0 ? Math.min(seconds, duration - 0.5) : seconds);
     if (controlGate.intercept({ action: 'seek', position: target })) return;
     this.directSeek(target);
@@ -752,6 +885,10 @@ class VideoSession {
 
   async playNext(): Promise<void> {
     const now = playerState().now;
+    if (now?.live) {
+      this.zap(1);
+      return;
+    }
     if (!now?.next) return;
     const rest = now.queue[0]?.Id === now.next.Id ? now.queue.slice(1) : [];
     // In a together session the next episode goes to the group (see play-router.ts).
@@ -776,6 +913,7 @@ class VideoSession {
   /** Ends playback, reports the last position and refreshes Continue Watching. */
   async stop(): Promise<void> {
     this.loadId++;
+    this.liveAttempt = null;
     await this.finishCurrent();
     setPlayerState({ ...initialPlayerState });
   }

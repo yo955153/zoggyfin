@@ -24,6 +24,11 @@ export interface EngineSource {
    * the player's default.
    */
   readAhead?: number;
+  /**
+   * The User-Agent header for the stream (IPTV providers can ask for one).
+   * expo-video and libmpv send it; a browser does not let a page set it.
+   */
+  userAgent?: string | null;
 }
 
 /** A subtitle for an engine that draws subtitles itself. */

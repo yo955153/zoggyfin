@@ -2,6 +2,7 @@ import {
   createDoublePress,
   createTapGate,
   DOUBLE_PRESS_MS,
+  liveKeyAction,
   NO_PRESS,
   NO_RUN,
   nextRun,
@@ -232,5 +233,33 @@ describe('tap gate (controls hidden)', () => {
     g.cancel();
     expect(g.due(9999)).toBe(false);
     expect(g.press('left', 100, true).double).toBe(false);
+  });
+});
+
+describe('live TV keys', () => {
+  it('zaps with the channel keys at any time', () => {
+    expect(liveKeyAction('channelUp', false)).toEqual({ type: 'zap', delta: 1 });
+    expect(liveKeyAction('channelDown', true)).toEqual({ type: 'zap', delta: -1 });
+    expect(tvKeyFromEvent({ eventType: 'channelUp', eventKeyAction: 1 })).toEqual({ key: 'channelUp', phase: 'press' });
+    expect(tvKeyFromEvent({ eventType: 'next', eventKeyAction: 1 })).toEqual({ key: 'channelUp', phase: 'press' });
+    expect(tvKeyFromWeb('PageDown')).toBe('channelDown');
+  });
+
+  it('zaps with Up and Down only while the controls are hidden', () => {
+    expect(liveKeyAction('up', true)).toEqual({ type: 'zap', delta: 1 });
+    expect(liveKeyAction('down', true)).toEqual({ type: 'zap', delta: -1 });
+    expect(liveKeyAction('up', false)).toBeNull();
+    expect(liveKeyAction('down', false)).toBeNull();
+  });
+
+  it('never seeks: Left, Right, rewind and fast forward only show the controls', () => {
+    for (const k of ['left', 'right', 'rewind', 'fastForward'] as const) expect(liveKeyAction(k, true)).toEqual({ type: 'wake' });
+    expect(liveKeyAction('back', true)).toBeNull();
+    expect(liveKeyAction('playPause', true)).toBeNull();
+  });
+
+  it('leaves video keys as they were', () => {
+    expect(playerKeyAction('channelUp', false)).toEqual({ type: 'none' });
+    expect(playerKeyAction('down', false)).toEqual({ type: 'wake' });
   });
 });
