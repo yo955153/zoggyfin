@@ -53,6 +53,8 @@ export function LiveTvScreen() {
   const lists = useChannelLists(providerId);
   // The group picked for a provider (another provider starts on its own first group).
   const [pick, setPick] = useState<{ providerId: string | null; key: string } | null>(null);
+  // TV: the width for the channel list beside the groups (see the columns below).
+  const [listWidth, setListWidth] = useState(0);
   const picked = pick && pick.providerId === providerId ? pick.key : null;
   const setPicked = (key: string) => setPick({ providerId, key });
   const [text, setText] = useState('');
@@ -230,7 +232,7 @@ export function LiveTvScreen() {
         ref={list}
         data={view.channels}
         keyExtractor={(ch) => ch.id}
-        style={s.flex}
+        style={[s.flex, isNativeTV && wide && listWidth > 0 ? { width: listWidth } : null]}
         contentContainerStyle={{ paddingHorizontal: wide ? spacing.sm : l.gutter, paddingBottom: bottomPad, paddingTop: spacing.xs }}
         getItemLayout={(_d, index) => ({ length: CHANNEL_ROW_HEIGHT, offset: CHANNEL_ROW_HEIGHT * index, index })}
         initialNumToRender={14}
@@ -266,7 +268,12 @@ export function LiveTvScreen() {
         {groupChips}
         {banner}
         {wide ? (
-          <View style={[s.columns, { paddingLeft: l.gutter }]}>
+          // TV lists sit in a focus guide with no size of its own (react-native-tvos): in this row
+          // it took the width of its content only, and the channel names had no room. The list gets
+          // the width left beside the groups.
+          <View
+            style={[s.columns, { paddingLeft: l.gutter }]}
+            onLayout={isNativeTV ? (e) => setListWidth(Math.max(0, Math.round(e.nativeEvent.layout.width - l.gutter - GROUP_COLUMN_WIDTH))) : undefined}>
             <GroupColumn groups={groups} selected={query ? null : groupKey} onSelect={(k) => {
               setText('');
               setPicked(k);
@@ -280,6 +287,8 @@ export function LiveTvScreen() {
     </>
   );
 }
+
+const GROUP_COLUMN_WIDTH = scaled(220);
 
 const VIEWABILITY = { itemVisiblePercentThreshold: 30, minimumViewTime: 250 };
 
@@ -350,7 +359,7 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   loadingText: { ...font(type.footnote), color: c.text2, marginBottom: spacing.sm },
   listEmpty: { ...font(type.body), color: c.text2, textAlign: 'center' as const, padding: spacing.xxl },
   columns: { flex: 1, flexDirection: 'row' as const },
-  groupColumn: { width: scaled(220), flexGrow: 0 },
+  groupColumn: { width: GROUP_COLUMN_WIDTH, flexGrow: 0 },
   groupRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
