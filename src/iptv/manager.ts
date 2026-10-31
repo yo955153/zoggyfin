@@ -51,6 +51,8 @@ import {
   type ProviderRecord,
   type ProviderSecrets,
 } from './types';
+import { splitM3uVod } from './m3u-vod';
+import { removeVodData, resetVodState, setM3uVod } from './vod-store';
 import { parseXmltv } from './xmltv';
 import { normalizeXtreamInput, parseXtreamAuth, parseXtreamCategories, parseXtreamShortEpg, parseXtreamStreams, type XtreamLogin, xtreamApiUrl } from './xtream';
 
@@ -83,6 +85,7 @@ function applyScope(scope: Scope | null): void {
   const activeId = saved && providers.providers[saved] ? saved : (providers.order[0] ?? null);
   // Another account: its providers only; the memory of the old ones goes.
   setIptvState({ scope: id, providers, activeId, data: {}, lists: {}, guides: {}, guideNames: {}, guideStatus: {} });
+  resetVodState();
 }
 
 let bound = false;
@@ -122,7 +125,7 @@ export function providerById(id: string): ProviderRecord | null {
 
 // ---- Loading channels --------------------------------------------------------------
 
-function xtreamLogin(record: ProviderRecord, secrets: ProviderSecrets): XtreamLogin | null {
+export function xtreamLogin(record: ProviderRecord, secrets: ProviderSecrets): XtreamLogin | null {
   if (record.kind !== 'xtream' || !record.server || !secrets.username || !secrets.password) return null;
   return { server: record.server, username: secrets.username, password: secrets.password };
 }
@@ -160,9 +163,20 @@ async function fetchChannels(record: ProviderRecord, secrets: ProviderSecrets): 
   return { channels: r.channels, playlistGuideUrl: r.guideUrls.find(isHttpUrl) };
 }
 
-function showChannels(id: string, channels: Channel[]): void {
+/**
+ * Shows a channel list. An M3U list can hold films and episodes too: they
+ * go to Films and Series (`m3u-vod.ts`), and the channel list keeps the
+ * live channels. The cache file keeps the whole list.
+ */
+function showChannels(id: string, entries: Channel[]): void {
+  const split = providerById(id)?.kind === 'm3u' ? splitM3uVod(entries) : { live: entries, vod: null };
+  setM3uVod(id, split.vod);
+  const channels = split.live;
   patchData(id, { status: 'ready', channels, index: buildSearchIndex(channels), error: null, refreshing: false });
 }
+
+/** The number of live channels shown for a provider. */
+const liveCount = (id: string, fallback: number) => iptvState().data[id]?.channels.length ?? fallback;
 
 async function writeChannels(id: string, channels: Channel[]): Promise<void> {
   const file: ChannelsFile = { schemaVersion: CHANNELS_SCHEMA_VERSION, providerId: id, savedAt: Date.now(), channels };
@@ -191,7 +205,7 @@ export function refresh(id: string): Promise<void> {
       if (r.playlistGuideUrl !== secrets.playlistGuideUrl) writeSecrets(id, { ...secrets, playlistGuideUrl: r.playlistGuideUrl });
       showChannels(id, r.channels);
       await writeChannels(id, r.channels);
-      updateRecord(id, { refreshedAt: Date.now(), channelCount: r.channels.length, hasGuide: record.kind === 'xtream' || !!(secrets.guideUrl || r.playlistGuideUrl) });
+      updateRecord(id, { refreshedAt: Date.now(), channelCount: liveCount(id, r.channels.length), hasGuide: record.kind === 'xtream' || !!(secrets.guideUrl || r.playlistGuideUrl) });
       void loadGuide(id, true);
     } catch (e) {
       const text = iptvErrorText(e);
@@ -296,6 +310,7 @@ export async function saveProvider(input: ProviderInput, id?: string): Promise<s
   saveSnapshot(scope, { ...st.providers.providers, [pid]: saved }, order);
   if (!iptvState().lists[pid]) setIptvState({ lists: { ...iptvState().lists, [pid]: loadLists(pid) } });
   showChannels(pid, r.channels);
+  if (saved.kind === 'm3u') updateRecord(pid, { channelCount: liveCount(pid, saved.channelCount) });
   // A changed guide or login: the old guide goes.
   setIptvState({ guides: { ...iptvState().guides, [pid]: EMPTY_GUIDE }, guideStatus: { ...iptvState().guideStatus, [pid]: 'idle' } });
   await writeChannels(pid, r.channels);
@@ -312,6 +327,7 @@ export async function removeProvider(id: string): Promise<void> {
   saveSnapshot(scope, rest, st.providers.order.filter((x) => x !== id));
   removeSecrets(id);
   removeLists(id);
+  removeVodData(id);
   const { [id]: _d, ...data } = st.data;
   const { [id]: _g, ...guides } = st.guides;
   setIptvState({ data, guides });
