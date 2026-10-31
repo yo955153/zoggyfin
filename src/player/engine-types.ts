@@ -60,6 +60,35 @@ export interface VideoTrackInfo {
   codec: string | null;
 }
 
+/**
+ * An audio or subtitle track inside the stream or file, as the engine lists
+ * it (IPTV films, episodes and channels, which have no Jellyfin streams).
+ */
+export interface EmbeddedTrack {
+  /** The engine's own id for the track; only that engine understands it. */
+  id: string;
+  /** The track's title in the file or playlist, or null. */
+  title: string | null;
+  /** An ISO 639 code (`en`, `fre`, `pt-BR`, `und`) or null. */
+  language: string | null;
+  /** A codec name (`ac3`, `mp4a.40.2`, `subrip`, `hdmv_pgs_subtitle`) or null when not known. */
+  codec: string | null;
+  isDefault: boolean;
+  isForced: boolean;
+}
+
+/** The tracks of the stream that plays, and the selected ones. */
+export interface EmbeddedTracks {
+  audio: EmbeddedTrack[];
+  subtitles: EmbeddedTrack[];
+  /** The selected audio track, or null when not known. */
+  audioId: string | null;
+  /** The selected subtitle, or null when subtitles are off. */
+  subtitleId: string | null;
+}
+
+export const NO_EMBEDDED_TRACKS: EmbeddedTracks = { audio: [], subtitles: [], audioId: null, subtitleId: null };
+
 export type EngineEvent =
   | { type: 'status'; status: EngineStatus; error?: string }
   | { type: 'playing'; playing: boolean }
@@ -72,7 +101,9 @@ export type EngineEvent =
   /** The playing video track changed (a new source, an adaptive switch). Null: not known yet. */
   | { type: 'video'; video: VideoTrackInfo | null }
   /** A remote command from the lock screen or a headset (web Media Session). */
-  | { type: 'remote'; command: 'next' | 'previous' };
+  | { type: 'remote'; command: 'next' | 'previous' }
+  /** Engines with `embedded`: the tracks inside the stream, or the selection, changed. */
+  | { type: 'embedded'; tracks: EmbeddedTracks };
 
 export type EngineListener = (event: EngineEvent) => void;
 
@@ -98,6 +129,17 @@ export interface VideoEngine {
     selectAudio(index: number): void;
     /** null turns subtitles off. */
     selectSubtitle(subtitle: EngineSubtitle | null): void;
+  };
+  /**
+   * Engines that list and switch the tracks inside any stream they play, by
+   * their own ids (the `embedded` event). The session uses it only for IPTV,
+   * where no server knows the tracks. An engine that cannot list the tracks
+   * of a stream sends no list (or an empty one).
+   */
+  embedded?: {
+    selectAudio(id: string): void;
+    /** null turns subtitles off. */
+    selectSubtitle(id: string | null): void;
   };
   subscribe(listener: EngineListener): () => void;
 }

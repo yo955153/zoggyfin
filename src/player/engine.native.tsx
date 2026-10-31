@@ -9,6 +9,7 @@ import { Platform, type StyleProp, View, type ViewStyle } from 'react-native';
 
 import { setAutoPictureInPicture } from '@/native/zoggyfin-native';
 
+import { expoTrackId, fromExpoVideo } from './embedded-tracks';
 import type { EngineListener, EngineSource, EngineStatus, VideoEngine, VideoFit, VideoTrackInfo } from './engine-types';
 
 /**
@@ -133,7 +134,13 @@ class NativeEngine implements VideoEngine {
       p.addListener('sourceLoad', ({ duration }) => {
         this.emit({ type: 'duration', duration });
         this.emit({ type: 'video', video: trackInfo(p.videoTrack) });
+        this.emitTracks(p);
       }),
+      // The tracks inside the stream (IPTV): AVPlayer's media selection groups, ExoPlayer's track groups.
+      p.addListener('availableAudioTracksChange', () => this.emitTracks(p)),
+      p.addListener('audioTrackChange', () => this.emitTracks(p)),
+      p.addListener('availableSubtitleTracksChange', () => this.emitTracks(p)),
+      p.addListener('subtitleTrackChange', () => this.emitTracks(p)),
       p.addListener('videoTrackChange', ({ videoTrack }) => this.emit({ type: 'video', video: trackInfo(videoTrack) })),
       p.addListener('playToEnd', () => {
         if (this.sourceReady) this.emit({ type: 'ended' });
@@ -148,6 +155,38 @@ class NativeEngine implements VideoEngine {
     this.playerListeners.forEach((l) => l());
     return p;
   }
+
+  private emitTracks(p: VideoPlayer): void {
+    if (this.player !== p) return;
+    try {
+      this.emit({ type: 'embedded', tracks: fromExpoVideo(p.availableAudioTracks, p.audioTrack, p.availableSubtitleTracks, p.subtitleTrack) });
+    } catch {
+      // The player was released while the event was on its way.
+    }
+  }
+
+  /**
+   * Switches by the id from `fromExpoVideo`. expo-video takes one of its own
+   * track objects: Android finds it by id, iOS by label and language.
+   */
+  readonly embedded = {
+    selectAudio: (id: string) => {
+      const p = this.player;
+      if (!p) return;
+      const t = p.availableAudioTracks.find((x, i) => expoTrackId(x, i) === id);
+      if (t) p.audioTrack = t;
+    },
+    selectSubtitle: (id: string | null) => {
+      const p = this.player;
+      if (!p) return;
+      if (id === null) {
+        p.subtitleTrack = null;
+        return;
+      }
+      const t = p.availableSubtitleTracks.find((x, i) => expoTrackId(x, i) === id);
+      if (t) p.subtitleTrack = t;
+    },
+  };
 
   load(source: EngineSource): void {
     const p = this.ensurePlayer();

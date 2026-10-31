@@ -10,15 +10,40 @@ import { type StyleProp, View, type ViewStyle } from 'react-native';
 import { hasMpv, mpv, showVideoThrough } from '@/platform/desktop';
 
 import { MpvEngine } from './engine-mpv';
+import { type ElementTrackLike, fromHls, fromMediaElement } from './embedded-tracks';
 import type { EngineListener, EngineSource, VideoEngine, VideoFit } from './engine-types';
 
 type MediaSessionAction = 'play' | 'pause' | 'seekbackward' | 'seekforward' | 'seekto' | 'nexttrack' | 'previoustrack';
+
+/** A media element's AudioTrackList or TextTrackList: Safari has both; Chromium has no AudioTrackList. */
+type TrackList = EventTarget & { readonly length: number; [index: number]: ElementTrackLike };
+
+function listOf(list: TrackList | undefined): ElementTrackLike[] {
+  const out: ElementTrackLike[] = [];
+  for (let i = 0; list && i < list.length; i++) out.push(list[i]);
+  return out;
+}
+
+/** Text tracks that are subtitles (hls.js also adds metadata and chapter tracks). */
+const isSubtitle = (t: ElementTrackLike) => t.kind === 'subtitles' || t.kind === 'captions' || t.kind === 'forced';
 
 class WebEngine implements VideoEngine {
   readonly video: HTMLVideoElement | null;
   private hls: HlsJs | null = null;
   private listeners = new Set<EngineListener>();
   private loadToken = 0;
+  /**
+   * hls.js picks its own renditions when it parses the playlist (DEFAULT,
+   * AUTOSELECT). A choice made before that waits here, then wins.
+   */
+  private hlsParsed = false;
+  private hlsPending: { audio?: number; subtitle?: number } = {};
+  /**
+   * The subtitle asked for. hls.js reads the subtitle back from the text
+   * track modes when it makes its text tracks, and can drop a choice made
+   * just before: it is set again then (a few times at most).
+   */
+  private hlsSubtitle: { index: number; retries: number } | null = null;
 
   constructor() {
     this.video = typeof document !== 'undefined' ? document.createElement('video') : null;
@@ -53,7 +78,68 @@ class WebEngine implements VideoEngine {
       if (!v.getAttribute('src') && !this.hls) return;
       this.emit({ type: 'status', status: 'error', error: v.error?.message || 'The video could not be played.' });
     });
+    // The tracks inside a file or a natively played HLS stream (Safari). hls.js reports its own.
+    for (const list of [this.audioList(), this.textList()]) {
+      for (const type of ['addtrack', 'removetrack', 'change']) list?.addEventListener(type, () => this.emitElementTracks());
+    }
   }
+
+  private audioList(): TrackList | undefined {
+    return (this.video as unknown as { audioTracks?: TrackList } | null)?.audioTracks;
+  }
+
+  private textList(): TrackList | undefined {
+    return (this.video as unknown as { textTracks?: TrackList } | null)?.textTracks;
+  }
+
+  private emitElementTracks(): void {
+    if (this.hls || !this.video?.getAttribute('src')) return;
+    this.emit({ type: 'embedded', tracks: fromMediaElement(listOf(this.audioList()), listOf(this.textList())) });
+  }
+
+  private emitHlsTracks(): void {
+    const h = this.hls;
+    if (!h) return;
+    this.emit({ type: 'embedded', tracks: fromHls(h.audioTracks, h.audioTrack, h.subtitleTracks, h.subtitleDisplay ? h.subtitleTrack : -1) });
+  }
+
+  /**
+   * hls.js switches the renditions of the playlist (`EXT-X-MEDIA`) and the
+   * browser draws the WebVTT cues. Without hls.js: the element's own lists
+   * (Safari: native HLS, MP4). Ids come from `embedded-tracks.ts`.
+   */
+  readonly embedded = {
+    selectAudio: (id: string) => {
+      const i = Number(id);
+      if (this.hls) {
+        if (this.hlsParsed) this.hls.audioTrack = i;
+        else this.hlsPending.audio = i;
+        return;
+      }
+      const list = this.audioList();
+      if (!list) return;
+      for (let k = 0; k < list.length; k++) list[k].enabled = k === i;
+      this.emitElementTracks();
+    },
+    selectSubtitle: (id: string | null) => {
+      const i = id === null ? -1 : Number(id);
+      if (this.hls) {
+        if (!this.hlsParsed) {
+          this.hlsPending.subtitle = i;
+          return;
+        }
+        this.setHlsSubtitle(this.hls, i);
+        return;
+      }
+      const list = this.textList();
+      if (!list) return;
+      for (let k = 0; k < list.length; k++) {
+        const t = list[k];
+        if (isSubtitle(t)) t.mode = k === i ? 'showing' : 'disabled';
+      }
+      this.emitElementTracks();
+    },
+  };
 
   private emit: EngineListener = (e) => this.listeners.forEach((l) => l(e));
 
@@ -90,7 +176,9 @@ class WebEngine implements VideoEngine {
       }
       v.play().catch(() => this.emit({ type: 'playing', playing: false }));
     };
-    const nativeHls = v.canPlayType('application/vnd.apple.mpegurl') !== '';
+    // Chromium also plays HLS itself now, but lists no audio or subtitle renditions
+    // (no AudioTrackList): it keeps hls.js. Safari has both and plays HLS natively.
+    const nativeHls = v.canPlayType('application/vnd.apple.mpegurl') !== '' && 'audioTracks' in v;
     if (source.isHls && !nativeHls) {
       void import('hls.js').then(({ default: HlsClass }) => {
         if (token !== this.loadToken) return;
@@ -103,7 +191,31 @@ class WebEngine implements VideoEngine {
         hls.on(HlsClass.Events.ERROR, (_e, data) => {
           if (data.fatal) this.emit({ type: 'status', status: 'error', error: `Stream error: ${data.details}` });
         });
+        const tracks = () => {
+          if (this.hls === hls) this.emitHlsTracks();
+        };
+        hls.on(HlsClass.Events.AUDIO_TRACKS_UPDATED, tracks);
+        hls.on(HlsClass.Events.AUDIO_TRACK_SWITCHED, tracks);
+        hls.on(HlsClass.Events.SUBTITLE_TRACKS_UPDATED, tracks);
+        hls.on(HlsClass.Events.SUBTITLE_TRACK_SWITCH, (_e, data) => {
+          const want = this.hlsSubtitle;
+          if (this.hls === hls && want && data.id !== want.index && want.retries > 0) {
+            want.retries--;
+            // After hls.js has finished this switch.
+            setTimeout(() => {
+              if (this.hls === hls && this.hlsSubtitle === want && hls.subtitleTrack !== want.index) this.setHlsSubtitle(hls, want.index);
+            }, 0);
+          }
+          tracks();
+        });
         hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
+          if (this.hls === hls) {
+            this.hlsParsed = true;
+            const pending = this.hlsPending;
+            this.hlsPending = {};
+            if (pending.audio !== undefined) hls.audioTrack = pending.audio;
+            if (pending.subtitle !== undefined) this.setHlsSubtitle(hls, pending.subtitle);
+          }
           if (token !== this.loadToken || source.autoplay === false) return;
           v.play().catch(() => this.emit({ type: 'playing', playing: false }));
         });
@@ -150,7 +262,17 @@ class WebEngine implements VideoEngine {
     }
   }
 
+  private setHlsSubtitle(hls: HlsJs, index: number): void {
+    if (this.hlsSubtitle?.index !== index) this.hlsSubtitle = { index, retries: 5 };
+    hls.subtitleDisplay = index >= 0;
+    hls.subtitleTrack = index;
+    this.emitHlsTracks();
+  }
+
   private teardownHls(): void {
+    this.hlsParsed = false;
+    this.hlsPending = {};
+    this.hlsSubtitle = null;
     this.hls?.destroy();
     this.hls = null;
   }

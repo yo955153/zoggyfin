@@ -6,6 +6,7 @@
  */
 import { desktopWindow, localPath, mpv, type MpvEvent, type MpvTrack, nowPlaying, type NowPlayingInfo, type RemoteCommand } from '@/platform/desktop';
 
+import { fromMpv } from './embedded-tracks';
 import type { EngineEvent, EngineListener, EngineSource, EngineSubtitle, VideoEngine } from './engine-types';
 import { PositionLine } from './position-line';
 
@@ -128,6 +129,8 @@ export class MpvEngine implements VideoEngine {
         break;
       case 'tracks':
         this.tracksNow = e.tracks;
+        // libmpv lists the tracks of any file or stream (IPTV uses them; Jellyfin items use `tracks`).
+        if (this.active) this.emit({ type: 'embedded', tracks: fromMpv(e.tracks) });
         break;
       case 'playback-restart': {
         this.seeking = false;
@@ -338,6 +341,19 @@ export class MpvEngine implements VideoEngine {
     selectSubtitle: (subtitle: EngineSubtitle | null) => {
       this.pendingSub = subtitle;
       if (this.loaded) this.applyPendingTracks();
+    },
+  };
+
+  /** Switches by libmpv's own track ids (from `fromMpv`). */
+  readonly embedded = {
+    selectAudio: (id: string) => {
+      const n = Number(id);
+      if (Number.isInteger(n)) this.run(() => mpv.set('aid', n));
+    },
+    selectSubtitle: (id: string | null) => {
+      const n = id === null ? null : Number(id);
+      if (n === null) this.run(() => mpv.set('sid', 'no'));
+      else if (Number.isInteger(n)) this.run(() => mpv.set('sid', n));
     },
   };
 
