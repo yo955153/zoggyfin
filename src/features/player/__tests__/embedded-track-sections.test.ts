@@ -34,8 +34,10 @@ describe('embeddedTrackSections', () => {
   it('shows empty sections when the engine lists nothing', () => {
     const [audio, subs] = embeddedTrackSections(null, { audio: jest.fn(), subtitle: jest.fn() });
     expect(audio.rows).toEqual([]);
-    expect(audio.empty).toBeTruthy();
+    expect(audio.empty).toBe('This player cannot switch the tracks of this stream');
     expect(subs.rows).toEqual([]);
-    expect(subs.empty).toBe('No subtitles in this stream');
+    expect(subs.empty).toBe('This player cannot show the subtitles of this stream');
+    const [, none] = embeddedTrackSections({ audio: [], subtitles: [], audioId: null, subtitleId: null }, { audio: jest.fn(), subtitle: jest.fn() });
+    expect(none.empty).toBe('No subtitles in this stream');
   });
 });

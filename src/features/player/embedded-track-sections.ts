@@ -19,7 +19,8 @@ export function embeddedTrackSections(
   return [
     {
       title: 'Audio',
-      empty: 'The player lists no audio tracks for this stream',
+      // No list at all: this player cannot see the tracks (a browser playing an MP4 or MKV file).
+      empty: tracks ? 'No audio tracks listed for this stream' : 'This player cannot switch the tracks of this stream',
       rows: t.audio.map((a, i) => ({
         key: `a${a.id}`,
         label: audioLabels[i],
@@ -30,7 +31,7 @@ export function embeddedTrackSections(
     },
     {
       title: 'Subtitles',
-      empty: 'No subtitles in this stream',
+      empty: tracks ? 'No subtitles in this stream' : 'This player cannot show the subtitles of this stream',
       rows: t.subtitles.length
         ? [
             { key: 'off', label: 'Off', selected: t.subtitleId === null, onPress: () => select.subtitle(null) },
