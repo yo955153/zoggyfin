@@ -32,7 +32,10 @@ export interface TouchableProps extends Omit<PressableProps, 'style' | 'children
   /** Style of the outer press area (flex, margins). */
   containerStyle?: StyleProp<ViewStyle>;
   children?: ReactNode | ((s: TouchState) => ReactNode);
-  /** Draw the focus ring on keyboard and TV focus. Default true. */
+  /**
+   * Draw the focus ring on keyboard focus. Default true. TV rows never get a
+   * ring: they get the row fill instead (one focus mark per control).
+   */
   ring?: boolean;
   /**
    * TV: this control takes the first focus of its page (the first tile of a
@@ -56,8 +59,11 @@ function pressScale(kind: TouchKind): number {
  * Press, hover and focus feedback for every control. Feedback starts on
  * press-in; the release settles with the `snappy` spring. Tiles lift on hover
  * and focus (scale + `raised` shadow); the focus ring is 2 pt `focusRing`
- * with a 2 pt gap. TV: a white ring and the focus scale, no shadow; the
- * last focused control is remembered for the side menu (features/tv/focus).
+ * with a 2 pt gap. TV shows exactly one focus mark per control (design
+ * system §7.19): tiles, buttons, chips and icon buttons get a white ring and
+ * the focus scale (no shadow); rows get the TV row fill under their content,
+ * with no ring and no scale. The last focused control is remembered for the
+ * side menu (features/tv/focus).
  * Android TV: a control on a page that is not visible (a page under the
  * open one) gives the focus to the visible page at once, and a control that
  * mounts on the visible page takes a focus that was lost (features/tv/focus).
@@ -128,7 +134,10 @@ export function Touchable({
 
   const ringWidth = isTV ? tv.focusRingWidth : 2;
   const ringGap = isTV ? tv.focusRingGap : 2;
-  const showRing = ring && focused && !disabled;
+  // TV rows: the fill is the only focus mark (a ring on top of a fill read as two).
+  const tvRow = isTV && kind === 'row';
+  const showRing = ring && !tvRow && focused && !disabled;
+  const showFill = tvRow && focused && !disabled;
   const lifted = lifts && (hovered || focused) && !disabled;
 
   const inner = typeof style === 'function' ? style(state) : style;
@@ -177,6 +186,8 @@ export function Touchable({
       hasTVPreferredFocus={(firstFocus && isTV && !pageFirst) || rest.hasTVPreferredFocus}>
       {/* TV: no shadow; an elevation shadow under a scaling tile is slow on a TV stick. */}
       <Animated.View style={[inner, animated, lifted && !isTV && t.shadow('raised')]}>
+        {/* Under the content, over the row's own background. */}
+        {showFill ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.tvRowFill, { borderRadius: radius }]} /> : null}
         {typeof children === 'function' ? children(state) : children}
         {kind === 'tile' || kind === 'button' || kind === 'icon' ? (
           <View
@@ -215,4 +226,5 @@ const styles = StyleSheet.create({
   pressOverlay: { backgroundColor: mediaColors.pressOverlay },
   hoverOverlay: { backgroundColor: mediaColors.hoverOverlay },
   ring: { position: 'absolute' },
+  tvRowFill: { backgroundColor: mediaColors.tvRowFocus },
 });

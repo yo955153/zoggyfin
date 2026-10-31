@@ -194,7 +194,7 @@ export default function SearchScreen() {
                     onPress={() => applyRecent(r)}
                     accessibilityRole="button"
                     accessibilityLabel={`Search for ${r}`}
-                    style={({ pressed, hovered, focused }) => [s.recentRow, (pressed || hovered || focused) && s.rowActive]}>
+                    style={({ pressed, hovered, focused }) => [s.recentRow, (pressed || hovered || (focused && !isTV)) && s.rowActive]}>
                     <Icon name="clock.arrow.circlepath" size={scaled(iconSize.sm)} color={c.text3} />
                     <View style={[s.recentBody, i < recent.length - 1 && s.line]}>
                       <Text style={[s.recentText, scriptStyle(r, s.recentText)]} numberOfLines={1}>

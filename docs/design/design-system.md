@@ -568,6 +568,25 @@ Disabled: 40 % opacity, `accessibilityState={{ disabled: true }}`, no press feed
   When Zoggyfin may not install apps yet, the title is "Allow Zoggyfin to install the update",
   one `footnote` line says where the switch is, and the buttons are "Later" and "Open Settings".
 
+### 7.19 TV focus
+
+A focused control on TV shows **one** focus mark, never two (a ring around a fill reads as two
+things in focus). `Touchable` applies the mark from its `kind`, so screens do not draw their own.
+
+| Control | `kind` | TV focus mark |
+|---|---|---|
+| Tile (poster, thumb, square) | `tile` | White 3-pt ring with a 3-pt gap, and the focus scale (1.1). No shadow |
+| Round tile (person, artist) | `plain`, ring on the circle | The same ring and scale, on the circle only |
+| Button, chip, icon button, round detail button | `button`, `icon` | White ring and the focus scale |
+| Row and list item (Settings, sheets, Live TV groups and channels, search results, admin) | `row` | `tvRowFocus` fill (white 22 %) under the content. No ring, no scale. The text keeps its colours |
+| Side menu item | own `Pressable` | Solid `text` fill with `bg` text (the navigation is the strongest mark on screen) |
+| Text field | `TextField` | White 3-pt border |
+| Player pill button (over video) | own `Pressable` | White 35 % fill |
+
+- A row that is also *selected* (the current group, a checked option) keeps its selected look
+  (`accentSoft` fill or a check mark); the focus fill goes on top of it.
+- Phones, iPad, the Mac app and the web keep the keyboard focus ring of §8 on every control.
+
 ---
 
 ## 8. iPad, Mac, keyboard and pointer

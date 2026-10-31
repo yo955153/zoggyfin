@@ -9,6 +9,7 @@ import { ScrollView, Text, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
 import { Touchable } from '@/components/touchable';
+import { isTV } from '@/platform/tv';
 import { Group, LeadingIcon, makeSettingsStyles, SettingsRow } from '@/features/settings/rows';
 import { createStyles, type AppTheme, font, iconSize, scaled, sizes, spacing, type, useStyles, useTheme } from '@/theme';
 import { useSidebarInset } from '@/theme/sidebar-inset';
@@ -101,7 +102,7 @@ function AdminHomeWide({ target }: { target: AdminTarget }) {
                 accessibilityRole="tab"
                 accessibilityState={{ selected: on }}
                 accessibilityLabel={x.label}
-                style={({ pressed, hovered, focused }) => [rs.rowPad, (pressed || hovered || focused) && rs.rowPressed, on && { backgroundColor: c.accentSoft }]}>
+                style={({ pressed, hovered, focused }) => [rs.rowPad, (pressed || hovered || (focused && !isTV)) && rs.rowPressed, on && { backgroundColor: c.accentSoft }]}>
                 <LeadingIcon name={x.icon} />
                 <View style={[rs.row, rs.rowBody, i < ADMIN_SECTIONS.length - 1 && rs.rowBorder]}>
                   <Text style={[rs.label, on && { color: c.accent, fontWeight: '600' }]}>{x.label}</Text>

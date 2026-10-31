@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/icon';
 import { isTV } from '@/platform/tv';
-import { font, mediaColors, scaled, withAlpha } from '@/theme';
+import { font, mediaColors, scaled } from '@/theme';
 
 import { c, iconSize, radius, spacing, textStyle, type } from './tokens';
 
@@ -216,7 +216,8 @@ const styles = StyleSheet.create({
   sheetTV: { maxWidth: 760, maxHeight: '85%', bottom: undefined, top: '7.5%', borderRadius: radius.xl },
   titleTV: font(type.title2),
   rowTV: { minHeight: scaled(56) },
-  rowFocusTV: { backgroundColor: withAlpha(mediaColors.white, 0.22), borderLeftWidth: 4, borderLeftColor: mediaColors.white },
+  // TV: the shared row focus (design system §7.19): the fill only.
+  rowFocusTV: { backgroundColor: mediaColors.tvRowFocus },
   labelTV: font(type.body),
   detailTV: font(type.footnote),
   listInner: { gap: spacing.lg },

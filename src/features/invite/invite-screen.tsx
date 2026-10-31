@@ -23,6 +23,7 @@ import { Icon } from '@/components/icon';
 import { EmptyState } from '@/components/states';
 import { TextField } from '@/components/text-field';
 import { Touchable } from '@/components/touchable';
+import { isTV } from '@/platform/tv';
 import { Group, makeSettingsStyles, SettingsRow, webSwitchColors } from '@/features/settings/rows';
 import { InviteQr } from '@/features/invite/invite-qr';
 import { addressChoices, addressWarning, chosenAddresses, LABEL_TEXT } from '@/invite/addresses';
@@ -415,7 +416,7 @@ function CheckRow({ label, sub, checked, last, onPress }: { label: string; sub?:
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
       accessibilityLabel={sub ? `${label}, ${sub}` : label}
-      style={({ pressed, hovered, focused }) => [rs.rowPad, (pressed || hovered || focused) && rs.rowPressed]}>
+      style={({ pressed, hovered, focused }) => [rs.rowPad, (pressed || hovered || (focused && !isTV)) && rs.rowPressed]}>
       <Icon name={checked ? 'checkmark.circle.fill' : 'circle'} size={scaled(iconSize.md)} color={checked ? c.accent : c.text3} />
       <View style={[rs.row, rs.rowBody, !last && rs.rowBorder]}>
         <View style={s.flex}>

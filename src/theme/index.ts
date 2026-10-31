@@ -211,6 +211,8 @@ export const mediaColors = {
   badgeFill: 'rgba(0,0,0,0.6)',
   pressOverlay: 'rgba(0,0,0,0.08)',
   hoverOverlay: 'rgba(255,255,255,0.08)',
+  /** TV: the fill of a focused row (TV is always dark). */
+  tvRowFocus: 'rgba(255,255,255,0.22)',
   tileHairlineDark: 'rgba(255,255,255,0.08)',
   tileHairlineLight: 'rgba(0,0,0,0.08)',
   heroTopScrim: 'rgba(0,0,0,0.35)',

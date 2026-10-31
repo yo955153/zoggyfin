@@ -71,7 +71,7 @@ export const TrackRow = memo(function TrackRow({
       accessibilityLabel={[item.Name, artist, time, playing ? 'playing' : null].filter(Boolean).join(', ')}
       accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'More actions' }] : undefined}
       onAccessibilityAction={onLongPress ? () => onLongPress(item) : undefined}
-      style={({ pressed, hovered, focused }) => [s.track, { paddingLeft: l.gutter }, (pressed || hovered || focused) && s.active]}>
+      style={({ pressed, hovered, focused }) => [s.track, { paddingLeft: l.gutter }, (pressed || hovered || (focused && !isTV)) && s.active]}>
       {showArt ? (
         <ItemImage item={item} variant="square" width={scaled(sizes.trackArt)} aspectRatio={1} rounded={6} hideArtTitle />
       ) : playing ? (
@@ -128,7 +128,7 @@ export const ArtistRow = memo(function ArtistRow({ item, onPress, last }: { item
       onPress={() => onPress(item)}
       accessibilityRole="button"
       accessibilityLabel={[item.Name, meta].filter(Boolean).join(', ')}
-      style={({ pressed, hovered, focused }) => [s.track, { paddingLeft: l.gutter }, (pressed || hovered || focused) && s.active]}>
+      style={({ pressed, hovered, focused }) => [s.track, { paddingLeft: l.gutter }, (pressed || hovered || (focused && !isTV)) && s.active]}>
       <ItemImage item={item} variant="square" width={scaled(56)} aspectRatio={1} circle />
       <View style={[s.trackBody, s.artistBody, { paddingRight: l.gutter }, !last && s.line]}>
         <View style={s.flex}>
@@ -155,7 +155,7 @@ export const EpisodeRow = memo(function EpisodeRow({ item, onPress }: { item: Ba
       onPress={() => onPress(item)}
       accessibilityRole="button"
       accessibilityLabel={[item.Name, label, item.UserData?.Played ? 'played' : null].filter(Boolean).join(', ')}
-      style={({ pressed, hovered, focused }) => [s.episode, { paddingHorizontal: l.gutter }, (pressed || hovered || focused) && s.active]}>
+      style={({ pressed, hovered, focused }) => [s.episode, { paddingHorizontal: l.gutter }, (pressed || hovered || (focused && !isTV)) && s.active]}>
       <View>
         <ItemImage item={item} variant="landscape" width={scaled(sizes.episodeThumb)} aspectRatio={16 / 9} rounded={radius.sm} hideArtTitle />
         {progress !== null ? (

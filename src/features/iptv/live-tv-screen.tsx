@@ -313,15 +313,12 @@ function GroupColumn({ groups, selected, onSelect, bottomPad }: { groups: GroupV
             accessibilityRole="button"
             accessibilityState={{ selected: on }}
             accessibilityLabel={`${item.label}, ${item.count} ${item.count === 1 ? 'channel' : 'channels'}`}
-            style={({ pressed, hovered, focused }) => [s.groupRow, on && s.groupSelected, (pressed || hovered) && s.groupPressed, focused && isTV && s.groupFocused]}>
-            {({ focused }) => (
-              <>
-                <Text style={[s.groupLabel, on && s.groupLabelOn, focused && isTV && s.groupLabelFocused]} numberOfLines={1}>
-                  {item.label}
-                </Text>
-                <Text style={[s.groupCount, focused && isTV && s.groupLabelFocused]}>{item.count}</Text>
-              </>
-            )}
+            radius={radius.md}
+            style={({ pressed, hovered }) => [s.groupRow, on && s.groupSelected, (pressed || hovered) && s.groupPressed]}>
+            <Text style={[s.groupLabel, on && s.groupLabelOn]} numberOfLines={1}>
+              {item.label}
+            </Text>
+            <Text style={s.groupCount}>{item.count}</Text>
           </Touchable>
         );
       }}
@@ -372,9 +369,7 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   },
   groupSelected: { backgroundColor: c.accentSoft },
   groupPressed: { backgroundColor: c.surface2 },
-  groupFocused: { backgroundColor: c.text },
   groupLabel: { ...font(type.body), color: c.text, flex: 1 },
   groupLabelOn: { fontWeight: '600' as const },
-  groupLabelFocused: { color: c.bg },
   groupCount: { ...font(type.footnote), color: c.text3 },
 }));

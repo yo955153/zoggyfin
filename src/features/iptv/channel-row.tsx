@@ -70,20 +70,21 @@ export const ChannelRow = memo(function ChannelRow({
         accessibilityRole="button"
         accessibilityLabel={label}
         accessibilityHint={isTV ? undefined : 'Plays the channel. Long press to add it to Favourites or remove it.'}
-        style={({ pressed, hovered, focused }) => [s.row, (pressed || hovered) && s.rowPressed, focused && isTV && s.rowFocused]}>
-        {({ focused }) => (
+        radius={radius.md}
+        style={({ pressed, hovered }) => [s.row, (pressed || hovered) && s.rowPressed]}>
+        {() => (
           <>
             <ChannelLogo uri={channel.logo} name={channel.name} size={scaled(40)} />
             <View style={s.body}>
               <View style={s.titleLine}>
-                {playing ? <Icon name="play.fill" size={scaled(iconSize.sm - 4)} color={focused && isTV ? c.bg : c.accent} /> : null}
-                <Text style={[s.title, focused && isTV && s.onFocus]} numberOfLines={1}>
+                {playing ? <Icon name="play.fill" size={scaled(iconSize.sm - 4)} color={c.accent} /> : null}
+                <Text style={[s.title]} numberOfLines={1}>
                   {title}
                 </Text>
               </View>
               {nowText ? (
                 <View style={s.nowLine}>
-                  <Text style={[s.now, focused && isTV && s.onFocus]} numberOfLines={1}>
+                  <Text style={[s.now]} numberOfLines={1}>
                     {nowText}
                   </Text>
                   {nn.now ? (
@@ -93,7 +94,7 @@ export const ChannelRow = memo(function ChannelRow({
                   ) : null}
                 </View>
               ) : (
-                <Text style={[s.now, s.muted, focused && isTV && s.onFocus]} numberOfLines={1}>
+                <Text style={[s.now, s.muted]} numberOfLines={1}>
                   {channel.group || 'Live'}
                 </Text>
               )}
@@ -134,11 +135,9 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
     borderCurve: 'continuous' as const,
   },
   rowPressed: { backgroundColor: c.surface2 },
-  rowFocused: { backgroundColor: c.text },
   body: { flex: 1, minWidth: 0, gap: sizes.tileMetaGap },
   titleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.xs },
   title: { ...font(type.headline), color: c.text, flexShrink: 1 },
-  onFocus: { color: c.bg },
   nowLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm },
   now: { ...font(type.subheadline), color: c.text2, flexShrink: 1 },
   muted: { color: c.text3 },

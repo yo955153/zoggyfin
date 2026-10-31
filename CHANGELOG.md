@@ -102,6 +102,8 @@ first commit to today. All of it was built in the first weeks of the project.
 - TV: The music library picker shows above the Music tabs. The first focus goes to the first
   visible tile on Music and on library grids, not to a tile below the screen edge or the Sort chip.
 - TV: The Live TV channel list uses its full width.
+- TV: A focused row (Settings, sheets, Live TV, search) shows one fill and no ring. Before, it showed a
+  ring and a fill at the same time. Tiles and buttons keep the ring and the focus scale.
 
 ## Mac app releases
 
