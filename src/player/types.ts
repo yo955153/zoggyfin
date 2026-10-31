@@ -33,6 +33,18 @@ export interface LiveChannelRef {
   group: string;
 }
 
+/** A programme on a live channel. Times in ms since the epoch. */
+export interface LiveProgramme {
+  title: string;
+  start: number;
+  stop: number;
+}
+
+export interface LiveNowNext {
+  now: LiveProgramme | null;
+  next: LiveProgramme | null;
+}
+
 /** A stream to try for a live channel. */
 export interface LiveStreamChoice {
   url: string;
@@ -51,6 +63,12 @@ export interface LiveSource {
   resolve(channelId: string): Promise<{ candidates: LiveStreamChoice[]; userAgent: string | null; unsupported: string | null }>;
   /** The programme that runs now on the channel, or null. */
   nowLine?(channelId: string): string | null;
+  /**
+   * Now and next on the channel with their times, as far as the guide knows
+   * (the zap banner, the channel card and the channel list preview). It may
+   * ask the provider for them; ask again later for what arrived.
+   */
+  nowNext?(channelId: string): LiveNowNext;
   /** A channel started to play (Recently watched). */
   onStart?(channelId: string): void;
 }

@@ -11,6 +11,7 @@ import { usePlayer } from '@/player';
 import { buildGroups, channelsInGroup, EMPTY_LISTS, type GroupView } from './lists';
 import {
   bindSession,
+  clearSearches,
   ensureLoaded,
   formValues,
   loadGuide,
@@ -18,7 +19,9 @@ import {
   nowNextOf,
   playRequest,
   providerById,
+  recentSearchesOf,
   refresh,
+  rememberSearchFor,
   removeProvider,
   requestNowNext,
   saveProvider,
@@ -36,6 +39,7 @@ export type { Channel, NowNext, ProviderInput, ProviderKind, ProviderRecord, Pro
 export type { GroupView } from './lists';
 export type { ProviderData, LoadStatus } from './store';
 export { ALL_GROUP, FAVOURITES_GROUP, RECENTS_GROUP } from './lists';
+export { browseEntries, type BrowseEntry, type BrowseSection, defaultGroup, PROVIDERS_ENTRY, resolveGroup, SEARCH_ENTRY } from './browse';
 export { iptvErrorText } from './errors';
 export { progressOf } from './guide';
 
@@ -56,7 +60,16 @@ export const iptv = {
   /** Xtream: asks for now and next of the channels on screen. */
   requestNowNext: (providerId: string, channels: readonly Channel[]) => requestNowNext(providerId, channels),
   provider: providerById,
+  /** Keeps a search the person used (they played one of its channels). */
+  rememberSearch: rememberSearchFor,
+  clearSearches,
 };
+
+/** The recent channel searches of a provider, newest first. */
+export function useRecentSearches(providerId: string | null): string[] {
+  const kept = useIptvStore((s) => (providerId ? s.searches[providerId] : undefined));
+  return useMemo(() => (providerId ? (kept ?? recentSearchesOf(providerId)).queries : []), [providerId, kept]);
+}
 
 /** The providers of the signed-in account, in order. */
 export function useProviders(): ProviderRecord[] {

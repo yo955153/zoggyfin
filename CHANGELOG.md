@@ -70,6 +70,12 @@ first commit to today. All of it was built in the first weeks of the project.
 
 ### Changed
 
+- **Live TV.** A new layout, made for the TV first: a browse column (Search, Favourites, Recently
+  watched, All channels, the groups, Providers), the channel list with numbers, logos and what is on
+  now, and on TV a panel with now and next for the focused channel. Search is one step away (the
+  Search entry, a Search button, the field on phones); it opens the keyboard on TV, shows results as
+  you type, finds channel numbers, and keeps recent searches. Favourites come first when there are
+  some. The loading, empty and error states are new.
 - The invite flow, the nearby transport and the rendezvous crypto use one design on every platform:
   ChaCha20-Poly1305, with CryptoKit on Apple platforms.
 - A saved server stays one entry when its address or its Id changes.

@@ -604,6 +604,37 @@ insets. Every control, text and focus mark stays inside 5 % of each edge: 96 x 5
 - Horizontal rows may run off the trailing edge (a part of the next tile shows that the row
   scrolls). Their focused tile never does.
 
+### 7.21 Live TV
+
+TV first (TiviMate style), then the same parts in other windows.
+
+- **TV:** a header (Live TV, the provider and its channel count; provider chips when there is more
+  than one; Search, reload and Providers buttons), then three columns: the browse column (200 pt),
+  the channel list, and the details panel (290 pt, `surface`, radius `lg`) for the focused channel.
+- **Browse column** (`iptv/browse.ts`): Search; Favourites when it has channels; Recently watched
+  when it has channels; All channels; Favourites when it is empty; other sections (films and series,
+  `features/iptv/sections.ts`); a GROUPS heading and the provider's groups; Providers last. The
+  selected entry has the `accentSoft` fill and an accent icon. It takes the first focus on TV.
+- **Channel row** (64 pt on TV, 72 pt elsewhere): number (tabular, right-aligned), logo plate, name
+  (`headline`), the programme now (`subheadline`, `text2`) with a 36-pt progress bar. A heart button
+  at the end; a small filled heart after the name on TV. The playing channel is in `accent`. Narrow
+  and wide windows with no details panel show the next programme as a third line.
+- **Details panel:** the logo, number and name (`title3`), Favourite and the group; NOW with its
+  times, the title (`headline`), a progress bar with the time left and the description; NEXT with
+  its start and title; a hint for Select and the menu key at the bottom.
+- **Search:** one step from anywhere. TV: the Search entry and the header button open a field at the
+  top of the list and the keyboard at once (`disableFullscreenUI`, so the results show above the
+  keyboard). Elsewhere: the field in the toolbar. Results follow each key press: the channel number
+  first (exact, then numbers that start with the query, lowest first), then names that start with
+  the query, then a word that starts with it, then anywhere. Recent searches show as chips while the
+  field is empty; a search is kept when one of its channels plays. Back leaves the search.
+- **Favourites:** the heart, the menu key on a focused row (TV), and a long press (touch).
+- **States:** no provider (a 72-pt `accentSoft` circle with the TV glyph, two buttons), loading
+  (skeleton rows and one line), failed (the reason, Try again, Edit provider), an empty group or no
+  results (an icon, a title and one sentence; above the keyboard during a search).
+- **Narrow windows:** the toolbar (field, reload, Providers), chips for the lists, sections and
+  groups, and the list.
+
 ---
 
 ## 8. iPad, Mac, keyboard and pointer
