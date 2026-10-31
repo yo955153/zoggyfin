@@ -87,6 +87,7 @@ All app code is in `src/`. The path alias `@/` points to `src/` (`tsconfig.json`
 | `src/settings/` | Device settings: appearance, playback (Zustand + storage) |
 | `src/images/` | Image URLs, image choice per tile (`resolve-image.ts`), generated art |
 | `src/invite/` | Invite links: payload, policy, join, cleanup |
+| `src/iptv/` | Live TV (IPTV): providers, M3U, Xtream and XMLTV parsers, channel files, guide, stream choice. `index.ts` is the only import surface |
 | `src/lib/` | Small shared helpers: reachability (`online.ts`), toast, format, navigation, pull to refresh, OTA info |
 | `modules/` | Local Expo native modules (Swift, Kotlin), see section 2.9 |
 | `patches/` | pnpm patches of dependencies, see section 5 |
@@ -188,9 +189,18 @@ Play → session.ts finds the completed record (local.ts) → plays the file →
 - `features/actions/use-item-actions.ts` supplies the `AppActionApi` (play, favourite, download, delete and so on) to the sheet.
 - `extensions/runtime.ts` turns installed manifests (`schema.ts`) into item actions (`ext.<id>.…`), Home rows (order 45+) and share targets. Extensions are data only: no extension code runs in the app. Requests go only to the manifest's origin (`http.ts`, `match.ts`). See `docs/extensions.md`.
 
+### 2.7a Live TV (`src/iptv/`)
+
+- Pure, tested parsers: `m3u.ts` and `xmltv.ts` take text in chunks; `xtream.ts` reads the Xtream JSON. `text-stream.ts` decodes UTF-8 and gzip (`fflate`) in chunks and yields to the event loop, so a list of 100k channels never blocks the UI.
+- `manager.ts` loads, refreshes and saves providers. Provider records are in MMKV per account (`iptv.providers.<serverId>.<userId>`); passwords and tokenised list URLs are only in the secure store (`secrets.ts`).
+- Channel lists and the guide window are files (`files.native.ts`, `files.ts`). Fetches go through `transport.native.ts` (a download to a cache file), the Rust command `iptv_fetch` in the Mac app, or `fetch` on the web (CORS).
+- `stream-url.ts` picks the stream form per platform: HLS on iOS and the web, `.ts` on Android and the Mac app. It tries the Xtream HLS form of an M3U `.ts` URL before it gives up on iOS.
+- Play: `iptv.playRequest()` builds a `LivePlayRequest` for `usePlayer().playLive()`. The session sends no Jellyfin progress and has no duration. `player/index.ts` refuses a live request while a together session runs.
+- Saved shapes are versioned (`migrate.ts`). Error texts never contain a URL (`errors.ts`).
+
 ### 2.8 Features (`src/features/`)
 
-`actions`, `admin` (server admin panel, fixture mode), `detail` (item pages), `home`, `invite`, `library` (filters), `music` (music pager), `music-player`, `offline`, `player`, `playlists`, `profile`, `search`, `servers`, `settings`, `together` (session sheet, room bar), `tv` (focus, side menu, remote, billboard), `updates` (Mac update card).
+`actions`, `admin` (server admin panel, fixture mode), `detail` (item pages), `home`, `invite`, `iptv` (Live TV pages, provider form), `library` (filters), `music` (music pager), `music-player`, `offline`, `player`, `playlists`, `profile`, `search`, `servers`, `settings`, `together` (session sheet, room bar), `tv` (focus, side menu, remote, billboard), `updates` (Mac update card).
 Pure logic sits in its own file with tests (for example `admin/logic.ts`, `playlists/logic.ts`, `detail/hero-layout.ts`, `profile/menu-model.ts`).
 
 ### 2.9 Native code (`modules/`, `patches/`, `desktop/`)
@@ -262,6 +272,8 @@ The "Manual check" column lists what unit tests cannot see. The `verify-change` 
 | Pull to refresh (`lib/use-pull-refresh.ts`, `components/refresh-spinner.tsx`) | `use-pull-refresh.test.ts` | Home, grids, detail, music, admin | iOS 26 large-title screens: the spinner stays until the refresh ends |
 | `src/platform/desktop.ts`, `src/platform/updates/` | `src/platform/__tests__/desktop.test.ts`, `src/platform/updates/__tests__/updates.test.ts` | Mac app player, downloads, update card | `pnpm desktop:dev` |
 | `src/native/`, `modules/` | `src/native/__tests__/seekable-mp4.test.ts` | Player capabilities, key input, together, discovery, share | Native build on iOS and Android. An OTA to an older binary must not crash (section 5) |
+| `src/iptv/` | `src/iptv/__tests__/` (m3u, xmltv, xtream, text, lists, manager; parsers have 10k+ entry performance tests) | Live TV pages, player live mode, Mac `iptv_fetch` | Add an M3U and an Xtream provider; groups, search, favourite; play, channel up and down, channel list; a refresh; a provider with no CORS on the plain web shows the message |
+| `src/features/iptv/`, live mode in `src/features/player/` | `src/player/__tests__/tv-keys.test.ts` (live keys) | Live TV routes, mini player | Phone, iPad width, web and TV: the list scrolls fast; TV: D-pad reaches every row, Left reaches the side menu, Up and Down zap with the controls hidden |
 | `src/lib/ota.ts` | `ota.test.ts` | Settings row, client version sent to the server | Settings shows the update |
 | `desktop/` | Rust: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` | Mac app only | `pnpm desktop:dev`: video, downloads, media keys, window state |
 | `site/` | `src/invite/__tests__/join-page.test.ts` covers the join page | Invite links | Open the pages locally; check `/join` with a test invite |
