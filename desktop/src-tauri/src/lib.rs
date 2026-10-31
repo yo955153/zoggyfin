@@ -12,6 +12,7 @@ compile_error!("build the release with panic = \"unwind\" (Cargo.toml [profile.r
 mod debug;
 mod discovery;
 mod downloads;
+mod iptv;
 mod links;
 #[cfg(target_os = "macos")]
 mod media_macos;
@@ -108,6 +109,7 @@ pub fn run() {
             downloads::files_list_dirs,
             downloads::files_fetch,
             downloads::files_disk_space,
+            iptv::iptv_fetch,
             now_playing_update,
             now_playing_clear,
             links::desktop_take_links,

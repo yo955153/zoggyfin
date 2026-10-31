@@ -11,6 +11,7 @@ import type { VideoTrackInfo } from './engine-types';
 import type { Segment } from './segments';
 import type { StreamPlan } from './stream';
 import type { Chapter, Trickplay } from './timeline';
+import type { LiveChannelRef, LiveSource } from './types';
 import type { Cue } from './vtt';
 
 export type PlayerKind = 'video' | 'audio';
@@ -32,6 +33,14 @@ export interface NowPlaying {
   /** The bitrate sent to the server for the current stream. */
   bitrate: number;
   next: BaseItemDto | null;
+  /** A live channel (IPTV): no duration, no seeking; channel up and down move through `channels`. */
+  live?: LiveNow;
+}
+
+export interface LiveNow {
+  channels: LiveChannelRef[];
+  index: number;
+  source: LiveSource;
 }
 
 export interface PlayerState {

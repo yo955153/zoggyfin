@@ -36,6 +36,7 @@ const DESTINATIONS: Destination[] = [
   { name: 'search', href: '/search', label: 'Search', icon: 'magnifyingglass' },
   { name: 'library', href: '/libraries', label: 'Library', icon: 'square.stack' },
   { name: 'music', href: '/music', label: 'Music', icon: 'music.note' },
+  { name: 'live', href: '/(tabs)/(live)/live-tv', label: 'Live TV', icon: 'tv' },
   { name: null, href: '/settings', label: 'Settings', icon: 'gearshape' },
 ];
 

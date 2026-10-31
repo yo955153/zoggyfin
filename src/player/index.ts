@@ -11,12 +11,13 @@ import { useSessionStore } from '@/auth/session-store';
 import { toast } from '@/lib/toast';
 
 import { audioSession } from './audio/session';
+import { controlGate } from './control-gate';
 import { playRouter } from './play-router';
 import { videoSession } from './session';
 import { playerState, setPlayerState } from './store';
-import type { PlayerController, PlayRequest } from './types';
+import type { LivePlayRequest, PlayerController, PlayRequest } from './types';
 
-export type { PlayerController, PlayRequest } from './types';
+export type { LiveChannelRef, LivePlayRequest, LiveSource, LiveStreamChoice, PlayerController, PlayRequest } from './types';
 export { usePlayerStore } from './store';
 export { playRouter } from './play-router';
 
@@ -49,6 +50,7 @@ export const activePlayback = {
   },
   previous(): void {
     if (playerState().now?.kind === 'audio') audioSession().previous();
+    else if (playerState().now?.live) videoSession().zap(-1);
   },
   skip(seconds: number): void {
     if (playerState().now?.kind === 'audio') audioSession().skip(seconds);
@@ -93,6 +95,22 @@ export function playHere(request: PlayRequest): void {
   router.navigate('/player');
 }
 
+/**
+ * Plays a live channel here. Live TV is not shared in a together session:
+ * the group keeps one timeline, and a live stream has none to share.
+ */
+function playLiveHere(request: LivePlayRequest): void {
+  if (playRouter.active || controlGate.active) {
+    toast('Live TV does not play in a watch-together session. Leave the session first.', { icon: 'person.2.slash' });
+    return;
+  }
+  void (async () => {
+    if (playerState().now?.kind === 'audio') await audioSession().stopForVideo();
+    await videoSession().playLive(request);
+  })();
+  router.navigate('/player');
+}
+
 /** True when a together session lets this device change its queue; else says why. */
 function queueAllowed(): boolean {
   const lock = playRouter.queueLock();
@@ -106,6 +124,9 @@ const controller: PlayerController = {
     // In a together session the session decides first (play-router.ts).
     const routed = playRouter.route(request, 'user');
     if (routed) playHere(routed);
+  },
+  playLive(request) {
+    playLiveHere(request);
   },
   playNext(item) {
     if (queueAllowed()) void audioSession().playNext(item);

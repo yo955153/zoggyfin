@@ -51,6 +51,9 @@ Zoggyfin is not affiliated with the Jellyfin project.
 - **Server discovery.** The first screen finds Jellyfin servers on the local network.
 - **Watch and listen together.** Use Jellyfin SyncPlay groups over the internet, or start a
   nearby session with no internet and no server.
+- **Live TV (IPTV).** Add an Xtream or M3U provider and watch live channels in the same player.
+  Channel groups, favourites, recently watched, search, now and next from the guide, and channel
+  up and down. On the plain web, the provider must allow cross-origin requests.
 - **Invites.** An administrator adds a person and sends one link or QR code.
 - **Admin panel.** Dashboard, now playing, users, libraries, tasks, activity, devices and logs
   for server administrators.

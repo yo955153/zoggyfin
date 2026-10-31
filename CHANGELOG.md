@@ -53,6 +53,11 @@ first commit to today. All of it was built in the first weeks of the project.
 - **Motion.** Favourite and Played turn on at once on the item page, with a small pop and a light
   haptic. Download rings move smoothly between steps. A finished download's icon arrives with a small
   bounce. Item, library and genre pages fade their content in after a loading skeleton.
+- **Live TV (IPTV).** Xtream and M3U providers per account (passwords in the secure store), channel
+  lists cached in files, groups with Favourites and Recently watched, fast search, now and next from
+  Xtream or an XMLTV guide, and playback in the video player with channel up and down and a channel
+  list. A tab on the web and the Mac app, a Library row and a Settings entry on phones and tablets,
+  and a side menu entry on TV.
 - **Home discovery.** "Because you watched" rows from the server's movie recommendations, a "Short on
   time" row of unwatched movies of 100 minutes or less, and a genre of the day that changes at midnight.
 - **Android TV updates.** The sideloaded Android TV app (Google TV, Fire TV) finds a new APK, downloads

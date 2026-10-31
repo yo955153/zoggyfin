@@ -267,6 +267,8 @@ export class MpvEngine implements VideoEngine {
     this.run(async () => {
       await mpv.set('pause', paused);
       await mpv.set('force-media-title', source.title);
+      // An IPTV provider can ask for its own user agent; everything else gets libmpv's default.
+      await mpv.set('user-agent', source.userAgent || 'libmpv');
       // Subtitles stay off until the session picks one; audio follows the plan.
       // A download plays from its file on the disk.
       // A stream from a nearby host reads less ahead: every guest shares the host's upload.
