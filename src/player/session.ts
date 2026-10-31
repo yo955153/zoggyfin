@@ -27,10 +27,13 @@ import { controlGate, togglePauses } from './control-gate';
 import { playRouter } from './play-router';
 import { buildDeviceProfile } from './device-profile';
 import { getEngine } from './engine';
-import type { EngineEvent } from './engine-types';
+import { sameEmbeddedTracks } from './embedded-tracks';
+import type { EmbeddedTracks, EngineEvent } from './engine-types';
 import { isForeignDownload, outboxOnly, withOutbox } from './outbox-transport';
 import { ProgressReporter, type ProgressTransport, secondsToTicks, ticksToSecondsExact, toServerReport } from './progress-reporter';
 import { normalizeSegments } from './segments';
+import { chooseTracks, rememberChoice, titleKey } from './track-prefs';
+import { loadTrackPrefs, saveTrackPrefs } from './track-prefs-store';
 import { setPlayerState, initialPlayerState, playerState, type LiveNow, type NowPlaying, type VodNow } from './store';
 import { audioOptions, audioSwitchNeedsStream, pickSource, planStream, playbackInfoBody, type StreamPlan, type StreamServer } from './stream';
 import { chaptersOf, pickTrickplay } from './timeline';
@@ -192,6 +195,8 @@ class VideoSession {
   /** The film or episode has played: its position may be saved (a failed load must not wipe a saved one). */
   private vodPlayed = false;
   private vodSavedAt = 0;
+  /** IPTV: the saved track choice was applied to the stream that loads (once per kind and load). */
+  private tracksApplied = { audio: false, subtitle: false };
 
   constructor() {
     this.engine.subscribe(this.onEngine);
@@ -290,8 +295,73 @@ class VideoSession {
         if (st.now.live) this.zap(e.command === 'next' ? 1 : -1);
         else if (e.command === 'next' && st.now.next) void this.playNext();
         break;
+      case 'embedded':
+        // Jellyfin items use the server's streams; only IPTV has no other list.
+        if (st.now.live || st.now.vod) this.onEmbedded(e.tracks);
+        break;
     }
   };
+
+  /** IPTV: the key the track choice of the title that plays is kept by (a series shares one). */
+  private trackKey(): string | null {
+    const now = playerState().now;
+    if (now?.vod) {
+      const ref = now.vod.items[now.vod.index];
+      if (!ref) return null;
+      return titleKey(now.vod.source.providerId, ref.kind === 'episode' ? { kind: 'series', id: ref.seriesId ?? ref.id } : { kind: 'film', id: ref.id });
+    }
+    const live = now?.live;
+    const ch = live?.channels[live.index];
+    return live && ch ? titleKey(live.source.providerId, { kind: 'live', id: ch.id }) : null;
+  }
+
+  /** A new stream loads: its tracks are not known yet. */
+  private resetEmbedded(): void {
+    this.tracksApplied = { audio: false, subtitle: false };
+    if (playerState().embedded) setPlayerState({ embedded: null });
+  }
+
+  /** The engine listed the stream's tracks: show them, and select the saved choice the first time. */
+  private onEmbedded(tracks: EmbeddedTracks): void {
+    const prev = playerState().embedded;
+    if (!prev || !sameEmbeddedTracks(prev, tracks)) setPlayerState({ embedded: tracks });
+    const engine = this.engine.embedded;
+    const key = this.trackKey();
+    const audio = !this.tracksApplied.audio && tracks.audio.length > 0;
+    const subtitle = !this.tracksApplied.subtitle && tracks.subtitles.length > 0;
+    if (!engine || !key || (!audio && !subtitle)) return;
+    const choice = chooseTracks(tracks, loadTrackPrefs(), key);
+    if (audio) {
+      this.tracksApplied.audio = true;
+      if (choice.audioId !== undefined) engine.selectAudio(choice.audioId);
+    }
+    if (subtitle) {
+      this.tracksApplied.subtitle = true;
+      if (choice.subtitleId !== undefined) engine.selectSubtitle(choice.subtitleId);
+    }
+  }
+
+  /** IPTV: plays another audio track of the stream, and keeps the choice for the title. */
+  selectEmbeddedAudio(id: string): void {
+    const t = playerState().embedded;
+    const track = t?.audio.find((x) => x.id === id);
+    if (!t || !track || !this.engine.embedded || t.audioId === id) return;
+    this.engine.embedded.selectAudio(id);
+    setPlayerState({ embedded: { ...t, audioId: id } });
+    const key = this.trackKey();
+    if (key) saveTrackPrefs(rememberChoice(loadTrackPrefs(), key, 'audio', track, Date.now()));
+  }
+
+  /** IPTV: shows a subtitle of the stream (null: off), and keeps the choice for the title. */
+  selectEmbeddedSubtitle(id: string | null): void {
+    const t = playerState().embedded;
+    const track = id === null ? null : t?.subtitles.find((x) => x.id === id);
+    if (!t || track === undefined || !this.engine.embedded || t.subtitleId === id) return;
+    this.engine.embedded.selectSubtitle(id);
+    setPlayerState({ embedded: { ...t, subtitleId: id } });
+    const key = this.trackKey();
+    if (key) saveTrackPrefs(rememberChoice(loadTrackPrefs(), key, 'subtitle', track, Date.now()));
+  }
 
   private snapshot = () => {
     const st = playerState();
@@ -595,6 +665,7 @@ class VideoSession {
     if (!now || !live) return;
     const ch = live.channels[live.index];
     setPlayerState({ now: { ...now, plan: livePlan(choice.url, choice.isHls) }, status: 'loading', error: null });
+    this.resetEmbedded();
     this.engine.load({
       uri: choice.url,
       isHls: choice.isHls,
@@ -701,6 +772,7 @@ class VideoSession {
     // A form that failed after it played a while: the next one starts where it stopped.
     const start = this.vodPlayed ? this.engine.position || playerState().position : a.start;
     setPlayerState({ now: { ...now, plan: { ...livePlan(choice.url, choice.isHls), playMethod: 'DirectPlay' } }, status: 'loading', error: null });
+    this.resetEmbedded();
     this.engine.load({
       uri: choice.url,
       isHls: choice.isHls,

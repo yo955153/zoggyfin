@@ -7,7 +7,7 @@ import { create } from 'zustand';
 
 import type { BaseItemDto } from '@/api/types';
 
-import type { VideoTrackInfo } from './engine-types';
+import type { EmbeddedTracks, VideoTrackInfo } from './engine-types';
 import type { Segment } from './segments';
 import type { StreamPlan } from './stream';
 import type { Chapter, Trickplay } from './timeline';
@@ -68,6 +68,8 @@ export interface PlayerState {
   cues: Cue[] | null;
   /** The video track the engine reports for the current stream, or null. */
   video: VideoTrackInfo | null;
+  /** IPTV: the audio and subtitle tracks inside the stream, as the engine lists them; null when none are known. */
+  embedded: EmbeddedTracks | null;
 }
 
 export const initialPlayerState: PlayerState = {
@@ -84,6 +86,7 @@ export const initialPlayerState: PlayerState = {
   pip: false,
   cues: null,
   video: null,
+  embedded: null,
 };
 
 export const usePlayerStore = create<PlayerState>(() => initialPlayerState);
