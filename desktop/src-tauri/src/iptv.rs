@@ -53,11 +53,7 @@ fn network_error(e: &reqwest::Error) -> String {
 }
 
 #[tauri::command]
-pub async fn iptv_fetch(
-    url: String,
-    user_agent: Option<String>,
-    max_bytes: Option<u64>,
-) -> Result<Response, String> {
+pub async fn iptv_fetch(url: String, user_agent: Option<String>, max_bytes: Option<u64>) -> Result<Response, String> {
     let u = check_url(&url)?;
     let cap = max_bytes.unwrap_or(HARD_MAX).min(HARD_MAX);
     let mut req = client().get(u);
