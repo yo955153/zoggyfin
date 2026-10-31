@@ -11,7 +11,7 @@ import type { VideoTrackInfo } from './engine-types';
 import type { Segment } from './segments';
 import type { StreamPlan } from './stream';
 import type { Chapter, Trickplay } from './timeline';
-import type { LiveChannelRef, LiveSource } from './types';
+import type { LiveChannelRef, LiveSource, VodRef, VodSource } from './types';
 import type { Cue } from './vtt';
 
 export type PlayerKind = 'video' | 'audio';
@@ -35,6 +35,14 @@ export interface NowPlaying {
   next: BaseItemDto | null;
   /** A live channel (IPTV): no duration, no seeking; channel up and down move through `channels`. */
   live?: LiveNow;
+  /** An IPTV film or episode: seekable, positions kept on the device, no Jellyfin calls. */
+  vod?: VodNow;
+}
+
+export interface VodNow {
+  items: VodRef[];
+  index: number;
+  source: VodSource;
 }
 
 export interface LiveNow {

@@ -31,10 +31,10 @@ import type { EngineEvent } from './engine-types';
 import { isForeignDownload, outboxOnly, withOutbox } from './outbox-transport';
 import { ProgressReporter, type ProgressTransport, secondsToTicks, ticksToSecondsExact, toServerReport } from './progress-reporter';
 import { normalizeSegments } from './segments';
-import { setPlayerState, initialPlayerState, playerState, type LiveNow, type NowPlaying } from './store';
+import { setPlayerState, initialPlayerState, playerState, type LiveNow, type NowPlaying, type VodNow } from './store';
 import { audioOptions, audioSwitchNeedsStream, pickSource, planStream, playbackInfoBody, type StreamPlan, type StreamServer } from './stream';
 import { chaptersOf, pickTrickplay } from './timeline';
-import type { LivePlayRequest, LiveStreamChoice, PlayRequest } from './types';
+import type { LivePlayRequest, LiveStreamChoice, PlayRequest, VodPlayRequest, VodRef } from './types';
 import { parseVtt } from './vtt';
 import { tsBridge } from '@/native/ts-bridge';
 
@@ -143,6 +143,21 @@ function liveArtwork(logo: string | null): string | undefined {
   return logo && /^https?:\/\//i.test(logo) ? logo : undefined;
 }
 
+/** The item the player screen, the mini player and the next-up card show for an IPTV film or episode. */
+function vodItem(ref: VodRef, providerId: string): BaseItemDto {
+  const item: BaseItemDto = { Id: `iptv-vod:${providerId}:${ref.kind}:${ref.id}`, Name: ref.title, Type: ref.kind === 'episode' ? 'Episode' : 'Movie' };
+  if (ref.kind === 'episode') {
+    item.SeriesName = ref.seriesName;
+    item.ParentIndexNumber = ref.season;
+    item.IndexNumber = ref.episode;
+  } else if (ref.year) item.ProductionYear = ref.year;
+  if (ref.duration) item.RunTimeTicks = secondsToTicks(ref.duration);
+  return item;
+}
+
+/** How often the position of a film or an episode is saved while it plays (ms). */
+const VOD_SAVE_MS = 10_000;
+
 /** The streams of the live channel that loads now, and the next one to try. */
 interface LiveAttempt {
   id: number;
@@ -172,6 +187,11 @@ class VideoSession {
   private lastRequest: PlayRequest | null = null;
   /** The live channel that plays (or loads), for Try Again and the next stream form. */
   private liveAttempt: LiveAttempt | null = null;
+  /** The IPTV film or episode that loads or plays, with its stream forms. */
+  private vodAttempt: (LiveAttempt & { start: number }) | null = null;
+  /** The film or episode has played: its position may be saved (a failed load must not wipe a saved one). */
+  private vodPlayed = false;
+  private vodSavedAt = 0;
 
   constructor() {
     this.engine.subscribe(this.onEngine);
@@ -189,7 +209,7 @@ class VideoSession {
   private async switchToDownload(itemId: string): Promise<void> {
     const st = playerState();
     const now = st.now;
-    if (!now || now.kind !== 'video' || now.live || now.plan.isLocal || now.item.Id !== itemId) return;
+    if (!now || now.kind !== 'video' || now.live || now.vod || now.plan.isLocal || now.item.Id !== itemId) return;
     if (st.status === 'error' || st.status === 'ended' || playRouter.active || controlGate.active) return;
     const r = downloaded(itemId);
     if (!r) return;
@@ -219,6 +239,10 @@ class VideoSession {
             this.liveFailed(e.error);
             break;
           }
+          if (st.now.vod) {
+            this.vodFailed(e.error);
+            break;
+          }
           if (this.recoverAfterAddressSwitch()) break;
           setPlayerState({ status: 'error', error: e.error ?? 'The video could not be played.' });
           void this.reporter?.stop({ positionTicks: secondsToTicks(st.position) });
@@ -229,10 +253,15 @@ class VideoSession {
         if (e.playing !== st.playing) {
           setPlayerState({ playing: e.playing });
           this.reporter?.tick(e.playing ? 'Unpause' : 'Pause');
+          if (st.now.vod) {
+            if (e.playing) this.vodPlayed = true;
+            else this.saveVod(false);
+          }
         }
         break;
       case 'time':
         setPlayerState({ position: e.position, buffered: e.buffered });
+        if (st.now.vod && this.vodPlayed && e.position >= 5 && Date.now() - this.vodSavedAt >= VOD_SAVE_MS) this.saveVod(false);
         break;
       case 'duration':
         // A live stream has no length (some players report the size of the live window).
@@ -252,7 +281,10 @@ class VideoSession {
         break;
       case 'ended':
         if (st.now.live) setPlayerState({ status: 'error', error: 'The channel stopped sending.', playing: false });
-        else void this.onEnded();
+        else {
+          if (st.now.vod) this.saveVod(true);
+          void this.onEnded();
+        }
         break;
       case 'remote':
         if (st.now.live) this.zap(e.command === 'next' ? 1 : -1);
@@ -300,6 +332,7 @@ class VideoSession {
     const id = ++this.loadId;
     // A server item replaces a live channel: its TS bridge session (iOS) ends too.
     this.endLiveAttempt();
+    this.vodAttempt = null;
     await this.finishCurrent();
     this.lastRequest = request;
     setPlayerState({ ...initialPlayerState, status: 'loading', presentation: 'full' });
@@ -599,6 +632,126 @@ class VideoSession {
     void this.playLive({ channels: live.channels, index, source: live.source }, { keepPresentation: true });
   }
 
+  /**
+   * Plays an IPTV film or episode. The source gives the streams to try (the
+   * next one loads when one fails) and keeps the positions on the device.
+   * Seekable, with no Jellyfin item, no progress reports and no server calls.
+   * The episode after `index` in `items` is the next-up episode.
+   */
+  async playVod(request: VodPlayRequest, opts: { keepPresentation?: boolean } = {}): Promise<void> {
+    const id = ++this.loadId;
+    const presentation = opts.keepPresentation ? playerState().presentation : 'full';
+    await this.finishCurrent();
+    if (id !== this.loadId) return;
+    this.lastRequest = null;
+    this.endLiveAttempt();
+    this.vodAttempt = null;
+    this.vodPlayed = false;
+    this.vodSavedAt = Date.now();
+    const index = Math.min(Math.max(0, request.index), request.items.length - 1);
+    const ref = request.items[index];
+    if (!ref) return;
+    const providerId = request.source.providerId;
+    const vod: VodNow = { items: request.items, index, source: request.source };
+    const nextRef = request.items[index + 1];
+    const start = Math.max(0, request.startSeconds ?? 0);
+    setPlayerState({
+      ...initialPlayerState,
+      rate: playerState().rate,
+      presentation,
+      now: {
+        kind: 'video',
+        item: vodItem(ref, providerId),
+        queue: [],
+        plan: livePlan('', false),
+        segments: [],
+        chapters: [],
+        trickplay: null,
+        bitrateChoice: null,
+        bitrate: 0,
+        next: nextRef ? vodItem(nextRef, providerId) : null,
+        vod,
+      },
+      status: 'loading',
+      position: start,
+      duration: ref.duration ?? 0,
+    });
+    const stream = await request.source.resolve(ref);
+    if (id !== this.loadId) return;
+    this.vodAttempt = { id, candidates: stream.candidates, next: 0, userAgent: stream.userAgent, unsupported: stream.unsupported, start };
+    if (!this.loadNextVod()) this.vodFailed(undefined);
+  }
+
+  /** Loads the next stream form of the film or episode. True when one loads. */
+  private loadNextVod(): boolean {
+    const a = this.vodAttempt;
+    const now = playerState().now;
+    const vod = now?.vod;
+    if (!a || !now || !vod || a.id !== this.loadId) return false;
+    const choice = a.candidates[a.next];
+    if (!choice) return false;
+    a.next++;
+    const ref = vod.items[vod.index];
+    const subtitle =
+      ref.kind === 'episode'
+        ? [ref.seriesName, ref.season !== undefined && ref.episode !== undefined ? `S${ref.season} E${ref.episode}` : null].filter(Boolean).join(' · ')
+        : ref.year
+          ? String(ref.year)
+          : '';
+    // A form that failed after it played a while: the next one starts where it stopped.
+    const start = this.vodPlayed ? this.engine.position || playerState().position : a.start;
+    setPlayerState({ now: { ...now, plan: { ...livePlan(choice.url, choice.isHls), playMethod: 'DirectPlay' } }, status: 'loading', error: null });
+    this.engine.load({
+      uri: choice.url,
+      isHls: choice.isHls,
+      startSeconds: start,
+      title: ref.title,
+      subtitle: subtitle || undefined,
+      artworkUri: liveArtwork(ref.poster),
+      autoplay: true,
+      userAgent: a.userAgent,
+    });
+    const rate = playerState().rate;
+    if (rate !== 1) this.engine.setRate(rate);
+    return true;
+  }
+
+  /** A film or episode stream failed: try its next form, else show why. */
+  private vodFailed(error: string | undefined): void {
+    if (this.loadNextVod()) return;
+    const a = this.vodAttempt;
+    // The player's own error text can hold the stream URL (and the credentials in it): never show it.
+    const clean = error && !/https?:|\/\//i.test(error) ? error : null;
+    // A form that never started: the format is the likely reason. One that played and stopped: the player's reason.
+    const text = (this.vodPlayed ? clean : (a?.unsupported ?? clean)) ?? 'This title could not be played.';
+    setPlayerState({ status: 'error', error: text, playing: false });
+  }
+
+  /** Gives the source the position of the film or episode that plays. */
+  private saveVod(ended: boolean): void {
+    const st = playerState();
+    const vod = st.now?.vod;
+    if (!vod || !this.vodPlayed) return;
+    const ref = vod.items[vod.index];
+    if (!ref) return;
+    this.vodSavedAt = Date.now();
+    const position = this.engine.position || st.position;
+    try {
+      vod.source.savePosition(ref, ended ? st.duration || position : position, st.duration, ended);
+    } catch (e) {
+      console.warn('[player] the position was not saved', e instanceof Error ? e.name : 'error');
+    }
+  }
+
+  /** Starts the film or episode again where it was (Try again, a reload). */
+  private restartVod(): void {
+    const st = playerState();
+    const vod = st.now?.vod;
+    if (!vod) return;
+    const position = this.vodPlayed ? this.engine.position || st.position : (this.vodAttempt?.start ?? st.position);
+    void this.playVod({ items: vod.items, index: vod.index, source: vod.source, startSeconds: position }, { keepPresentation: true });
+  }
+
   private async load(id: number, item: BaseItemDto, queue: BaseItemDto[], opts: LoadOptions): Promise<void> {
     const { api, userId, server } = context();
     const settings = usePlaybackSettings.getState();
@@ -728,6 +881,11 @@ class VideoSession {
       this.retryLive();
       return;
     }
+    if (st.now.vod) {
+      // An IPTV title has no server to ask for another form: start it again where it was.
+      this.restartVod();
+      return;
+    }
     if (st.now.plan.isLocal) {
       // A downloaded file has its tracks inside; the server is not asked for another stream.
       if (st.status === 'error' && this.lastRequest) void this.play({ ...this.lastRequest, startPositionTicks: secondsToTicks(st.position) });
@@ -759,6 +917,7 @@ class VideoSession {
   retry(): void {
     const st = playerState();
     if (st.now?.live) this.retryLive();
+    else if (st.now?.vod) this.restartVod();
     else if (st.now) void this.reload({});
     else if (this.lastRequest) void this.play(this.lastRequest);
   }
@@ -931,6 +1090,11 @@ class VideoSession {
       this.zap(1);
       return;
     }
+    if (now?.vod) {
+      const vod = now.vod;
+      if (vod.index + 1 < vod.items.length) await this.playVod({ items: vod.items, index: vod.index + 1, source: vod.source, startSeconds: 0 }, { keepPresentation: true });
+      return;
+    }
     if (!now?.next) return;
     const rest = now.queue[0]?.Id === now.next.Id ? now.queue.slice(1) : [];
     // In a together session the next episode goes to the group (see play-router.ts).
@@ -965,6 +1129,9 @@ class VideoSession {
     const reporter = this.reporter;
     this.reporter = null;
     const position = this.engine.position || st.position;
+    // An IPTV title keeps its position on the device (never on the server).
+    if (st.now?.vod) this.saveVod(st.status === 'ended');
+    this.vodPlayed = false;
     this.engine.unload();
     if (reporter) {
       await reporter.stop({ positionTicks: secondsToTicks(position), isPaused: true });
