@@ -1092,7 +1092,11 @@ class VideoSession {
     }
     if (now?.vod) {
       const vod = now.vod;
-      if (vod.index + 1 < vod.items.length) await this.playVod({ items: vod.items, index: vod.index + 1, source: vod.source, startSeconds: 0 }, { keepPresentation: true });
+      if (vod.index + 1 >= vod.items.length) return;
+      // Moving on to the next episode (Play Now, the countdown, the remote's Next) counts as watched.
+      this.saveVod(true);
+      this.vodPlayed = false;
+      await this.playVod({ items: vod.items, index: vod.index + 1, source: vod.source, startSeconds: 0 }, { keepPresentation: true });
       return;
     }
     if (!now?.next) return;
