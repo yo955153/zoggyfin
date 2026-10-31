@@ -54,6 +54,11 @@ Zoggyfin is not affiliated with the Jellyfin project.
 - **Live TV (IPTV).** Add an Xtream or M3U provider and watch live channels in the same player.
   Channel groups, favourites, recently watched, search, now and next from the guide, and channel
   up and down. On the plain web, the provider must allow cross-origin requests.
+- **IPTV films and series.** Browse an Xtream provider's films and series (and the films and
+  episodes of an M3U list) by category, search titles, keep favourites, and resume where you
+  stopped. Series play on to the next episode. Positions stay on the device and never go to
+  Jellyfin. MKV files play on Android, Android TV and the Mac app; iPhone, iPad and Apple TV play
+  MP4 and HLS only.
 - **Invites.** An administrator adds a person and sends one link or QR code.
 - **Admin panel.** Dashboard, now playing, users, libraries, tasks, activity, devices and logs
   for server administrators.

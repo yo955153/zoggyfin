@@ -15,9 +15,9 @@ import { controlGate } from './control-gate';
 import { playRouter } from './play-router';
 import { videoSession } from './session';
 import { playerState, setPlayerState } from './store';
-import type { LivePlayRequest, PlayerController, PlayRequest } from './types';
+import type { LivePlayRequest, PlayerController, PlayRequest, VodPlayRequest } from './types';
 
-export type { LiveChannelRef, LiveNowNext, LivePlayRequest, LiveProgramme, LiveSource, LiveStreamChoice, PlayerController, PlayRequest } from './types';
+export type { LiveChannelRef, LiveNowNext, LivePlayRequest, LiveProgramme, LiveSource, LiveStreamChoice, PlayerController, PlayRequest, VodPlayRequest, VodRef, VodSource } from './types';
 export { usePlayerStore } from './store';
 export { playRouter } from './play-router';
 
@@ -111,6 +111,22 @@ function playLiveHere(request: LivePlayRequest): void {
   router.navigate('/player');
 }
 
+/**
+ * Plays an IPTV film or episode here. Not shared in a together session: the
+ * other members have no access to this device's provider.
+ */
+function playVodHere(request: VodPlayRequest): void {
+  if (playRouter.active || controlGate.active) {
+    toast('IPTV films and series do not play in a watch-together session. Leave the session first.', { icon: 'person.2.slash' });
+    return;
+  }
+  void (async () => {
+    if (playerState().now?.kind === 'audio') await audioSession().stopForVideo();
+    await videoSession().playVod(request);
+  })();
+  router.navigate('/player');
+}
+
 /** True when a together session lets this device change its queue; else says why. */
 function queueAllowed(): boolean {
   const lock = playRouter.queueLock();
@@ -127,6 +143,9 @@ const controller: PlayerController = {
   },
   playLive(request) {
     playLiveHere(request);
+  },
+  playVod(request) {
+    playVodHere(request);
   },
   playNext(item) {
     if (queueAllowed()) void audioSession().playNext(item);

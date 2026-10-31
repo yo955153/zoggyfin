@@ -67,6 +67,12 @@ first commit to today. All of it was built in the first weeks of the project.
 - **TS bridge (iOS).** A native bridge that plays a progressive MPEG-TS stream (the `.ts` URLs of many
   IPTV lists, which AVPlayer cannot open) as a live HLS playlist from a local server, with Picture in
   Picture, AirPlay and the lock screen. Live TV uses it on iPhone and iPad. Needs a new native iOS build.
+- **IPTV films and series.** Films and Series pages in Live TV for Xtream providers (and for the film
+  and episode entries of M3U lists): categories, poster grids, title search, Favourites, Continue
+  watching, film and series pages with seasons and episodes. Catalogues are cached in files per
+  provider and load again when a day old. Films and episodes play seekable in the video player, with
+  the resume position kept on the device (never sent to Jellyfin) and the next episode through the
+  next-up card. MKV plays on Android and the Mac app; iOS tries the panel's HLS form and else says why.
 
 ### Changed
 

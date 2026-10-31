@@ -42,6 +42,7 @@ import {
   usePlayChannel,
   useProviders,
   useRecentSearches,
+  useVodKinds,
 } from '@/iptv';
 import { useRootScreenOptions } from '@/lib/stack-options';
 import { useTabBottomPadding } from '@/lib/tab-bar-inset';
@@ -92,7 +93,8 @@ export function LiveTvScreen() {
   const wide = l.tv || l.bp !== 'compact';
   // TV: the focused channel's details beside the list.
   const details = l.tv;
-  const sections = useMemo(() => (provider ? liveTvSections.filter((x) => !x.available || x.available(provider)) : []), [provider]);
+  const kinds = useVodKinds(providerId);
+  const sections = useMemo(() => liveTvSections.filter((x) => x.available(kinds)), [kinds]);
 
   const base = useChannelView(providerId, '', '');
   const groupKey = resolveGroup(base.groups, picked);
@@ -167,7 +169,9 @@ export function LiveTvScreen() {
     },
     [setPicked],
   );
-  const openSection = useCallback((x: LiveTvSection) => router.push(x.href(group)), [group]);
+  const openSection = useCallback((x: LiveTvSection) => {
+    if (providerId) router.push(x.href(group, providerId));
+  }, [group, providerId]);
   const openProviders = useCallback(() => router.push(providersHref(group)), [group]);
 
   // Xtream: now and next load for the rows on screen.
