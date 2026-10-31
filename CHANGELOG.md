@@ -91,6 +91,17 @@ first commit to today. All of it was built in the first weeks of the project.
   page under the open one, and the remote seemed to do nothing.
 - Android and TV: Back closes a confirm dialog (for example "Clear cache?"). Before, only its buttons closed it.
 - TV: Extension pages are not offered on TV. The remote cannot use them.
+- TV: Skip Intro and Up Next take the focus while the player controls are hidden. Double Left/Right
+  still seeks, and Up/Down still changes the Live TV channel. The error card buttons show a focus ring.
+- TV: Left and Right on the Now Playing seek bar seek, also when held. Every Now Playing button, the
+  mini player and every text field show a focus ring.
+- TV: The queue and playlists have a Move button with a menu of moves. The queue menu also removes.
+- TV: Track rows have a More button, so the track menu needs no long press.
+- TV: An action toast (for example Undo) takes the focus and stays while it has it. Back closes it.
+  It never takes the focus from a text field.
+- TV: The music library picker shows above the Music tabs. The first focus goes to the first
+  visible tile on Music and on library grids, not to a tile below the screen edge or the Sort chip.
+- TV: The Live TV channel list uses its full width.
 
 ## Mac app releases
 
