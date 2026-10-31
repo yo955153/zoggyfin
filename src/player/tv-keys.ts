@@ -216,6 +216,28 @@ export function playerKeyAction(key: TvKey, double: boolean): PlayerKeyAction {
   }
 }
 
+/** What holds the TV focus in the video player. */
+export type PlayerFocusOwner =
+  /** The full-screen layer: Select plays or pauses (controls hidden, no prompt). */
+  | 'layer'
+  /** Skip Intro or Up Next: Select skips or plays the next episode. */
+  | 'prompt'
+  /** The controls (Play, the seek bar, the top row) or the error card. */
+  | 'controls';
+
+/**
+ * Who takes the focus. With the controls hidden, a prompt (Skip Intro, Up
+ * Next) takes it, so one Select uses it; else the full-screen layer does.
+ * The remote keys still reach the player (useTvRemote), so Left and Right
+ * keep seeking and Down still shows the controls. When the controls show,
+ * a prompt that has the focus keeps it: the controls do not pull it to Play.
+ */
+export function playerFocusOwner(s: { controlsVisible: boolean; promptShown: boolean; promptFocused: boolean; error: boolean }): PlayerFocusOwner {
+  if (s.error) return 'controls';
+  if (!s.controlsVisible) return s.promptShown ? 'prompt' : 'layer';
+  return s.promptShown && s.promptFocused ? 'prompt' : 'controls';
+}
+
 export type LiveKeyAction = { type: 'zap'; delta: 1 | -1 } | { type: 'wake' } | null;
 
 /**

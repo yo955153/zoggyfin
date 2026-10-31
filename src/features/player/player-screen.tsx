@@ -20,6 +20,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { useImageServer } from '@/api/use-api';
 import { Icon, type IconName } from '@/components/icon';
 import { ToastHost } from '@/components/toast-host';
+import { Touchable } from '@/components/touchable';
 import { useHideDevToolsButton } from '@/lib/dev-tools';
 import { episodeLabel } from '@/lib/format';
 import { KeyInput } from '@/native/key-input';
@@ -48,6 +49,7 @@ import {
   NO_RUN,
   nextRun,
   liveKeyAction,
+  playerFocusOwner,
   playerKeyAction,
   SCRUB_COMMIT_MS,
   type ScrubRun,
@@ -355,17 +357,39 @@ export function PlayerScreen() {
     trackFocus(on);
     if (on) enterRow('center');
   }, [trackFocus]);
+  // TV: Skip Intro or Up Next takes the focus while the controls are hidden (player/tv-keys.ts).
+  const promptShown = (phase === 'counting' && !!now?.next) || !!prompt;
+  const [promptFocused, setPromptFocused] = useState(false);
+  const promptFocusRef = useRef(false);
+  const trackPrompt = useCallback((on: boolean) => {
+    if (promptFocusRef.current === on) return;
+    promptFocusRef.current = on;
+    trackFocus(on);
+    setPromptFocused(on);
+  }, [trackFocus]);
+  // A prompt that goes away while focused may send no blur.
+  useEffect(() => {
+    if (!promptShown) trackPrompt(false);
+  }, [promptShown, trackPrompt]);
+  const focusOwner = playerFocusOwner({ controlsVisible: visible, promptShown, promptFocused, error: status === 'error' });
   // The seek bar's view: Down from the center row goes to it.
   const [barView, setBarView] = useState<FocusTarget | null>(null);
   // Down showed the controls: the bar takes the focus, not Play.
   const [focusBar, setFocusBar] = useState(false);
-  // Hidden controls are unmounted, maybe with no blur: start the count again.
+  // Hidden controls are unmounted, maybe with no blur: start the count again
+  // (a focused prompt stays mounted and keeps its count).
   useEffect(() => {
     if (!visible) {
-      controlFocus.current = 0;
+      controlFocus.current = promptFocusRef.current ? 1 : 0;
       focusRow.current = { now: null, before: null };
     }
   }, [visible]);
+  // The hidden bar has no focus, and its blur may never come.
+  const [barVisible, setBarVisible] = useState(visible);
+  if (barVisible !== visible) {
+    setBarVisible(visible);
+    if (!visible) setBarFocused(false);
+  }
   const scrubRun = useRef<ScrubRun>(NO_RUN);
   const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -707,8 +731,8 @@ export function PlayerScreen() {
           <View style={StyleSheet.absoluteFill} accessible={false} />
         </GestureDetector>
 
-        {/* TV, controls hidden: this layer holds the focus, so Select plays or pauses and shows them. */}
-        {isTV && !visible && status !== 'error' ? (
+        {/* TV, controls hidden: this layer holds the focus, so Select plays or pauses and shows them. A prompt takes it instead. */}
+        {isTV && focusOwner === 'layer' ? (
           <Pressable
             hasTVPreferredFocus
             focusable
@@ -859,7 +883,7 @@ export function PlayerScreen() {
                 label={showsPause ? 'Pause' : 'Play'}
                 size={player.playSize}
                 glyph={iconSize.xxl}
-                preferredFocus={isTV && visible && !focusBar}
+                preferredFocus={isTV && visible && !focusBar && focusOwner === 'controls'}
                 haptic
                 onPress={() => {
                   wake();
@@ -962,11 +986,20 @@ export function PlayerScreen() {
           style={[styles.prompts, { right: sideInset, bottom: visible ? bottomPad + 96 : bottomPad + spacing.lg }]}
           pointerEvents="box-none">
           {phase === 'counting' && now?.next ? (
-            <NextUpCard next={now.next} onPlay={playNext} onCancel={cancelNext} autoplay={settings.autoplayNext} />
+            <NextUpCard
+              next={now.next}
+              onPlay={playNext}
+              onCancel={cancelNext}
+              autoplay={settings.autoplayNext}
+              preferredFocus={isTV && focusOwner === 'prompt'}
+              onFocusChange={trackPrompt}
+            />
           ) : prompt ? (
             <SkipPill
               key={prompt.segment.start}
               label={prompt.label}
+              preferredFocus={isTV && focusOwner === 'prompt'}
+              onFocusChange={trackPrompt}
               onPress={() => {
                 if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 s.seekTo(prompt.target);
@@ -981,12 +1014,13 @@ export function PlayerScreen() {
               <Text style={styles.errorTitle}>Playback stopped</Text>
               <Text style={styles.errorText}>{error ?? 'The video could not be played.'}</Text>
               <View style={styles.errorActions}>
-                <Pressable onPress={() => s.retry()} style={styles.retry} accessibilityRole="button">
+                {/* TV: Try Again takes the focus, so the card never needs touch. */}
+                <Touchable kind="button" radius={radius.lg} hasTVPreferredFocus={isTV} onPress={() => s.retry()} style={styles.retry} accessibilityRole="button">
                   <Text style={styles.retryText}>Try Again</Text>
-                </Pressable>
-                <Pressable onPress={closePlayer} style={styles.closeBtn} accessibilityRole="button">
+                </Touchable>
+                <Touchable kind="button" radius={radius.lg} onPress={closePlayer} style={styles.closeBtn} accessibilityRole="button">
                   <Text style={styles.closeText}>Close</Text>
-                </Pressable>
+                </Touchable>
               </View>
             </View>
           </View>
