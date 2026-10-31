@@ -285,6 +285,8 @@ export function PlayerScreen() {
   const s = videoSession();
   // Live TV (IPTV): no seeking, channel up and down, and a channel list.
   const live = now?.live ?? null;
+  // An IPTV film or episode: seekable like a server item, but no together, no server tracks and no quality choice.
+  const vod = now?.vod ?? null;
   const liveChannel = live ? (live.channels[live.index] ?? null) : null;
   // What runs now on the channel; the guide can arrive after the channel starts.
   const [liveTick, setLiveTick] = useState(0);
@@ -670,14 +672,14 @@ export function PlayerScreen() {
   ].filter((r) => r !== null);
   const settingsSections: SheetSection[] = now
     ? [
-        ...(now.plan.isLocal
+        ...(now.plan.isLocal || vod
           ? [
               {
-                title: now.plan.fromPeer ? 'Quality · Nearby' : 'Quality · Downloaded',
+                title: vod ? 'Quality · IPTV' : now.plan.fromPeer ? 'Quality · Nearby' : 'Quality · Downloaded',
                 rows: [
                   {
                     key: 'local',
-                    label: now.plan.fromPeer ? "Streams the host's file" : 'Plays the file on this device',
+                    label: vod ? "Plays the provider's file as it is" : now.plan.fromPeer ? "Streams the host's file" : 'Plays the file on this device',
                     selected: true,
                     onPress: () => undefined,
                   },
@@ -835,10 +837,10 @@ export function PlayerScreen() {
               {live && live.channels.length > 1 ? (
                 <PillButton onFocusChange={trackTop} icon="list.bullet" label="Channels" onPress={() => setSheet('channels')} />
               ) : null}
-              {togetherAvailable && !live ? (
+              {togetherAvailable && !live && !vod ? (
                 <PillButton onFocusChange={trackTop} icon="person.2" label="Watch together" onPress={() => openTogetherSheet('player', null)} />
               ) : null}
-              {live ? null : <PillButton onFocusChange={trackTop} icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} />}
+              {live || vod ? null : <PillButton onFocusChange={trackTop} icon="captions.bubble" label="Audio and subtitles" onPress={() => setSheet('tracks')} />}
               {now?.kind === 'audio' ? null : (
                 <PillButton onFocusChange={trackTop} icon="aspectratio" label="Screen size" onPress={() => setSheet('screen')} />
               )}
