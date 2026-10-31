@@ -46,4 +46,12 @@ export const features = {
   watchTogether: !isTV,
   extensionPanels: !isTV,
   touchGestures: !isTV,
+  /**
+   * Live TV from IPTV providers: every platform. The plain web build reads
+   * only providers that allow web pages (CORS) and cannot send a user agent;
+   * the apps (and the Mac app, through Rust) have neither limit.
+   */
+  iptv: true,
+  /** IPTV lists reach the plain web only when the provider allows it (see `src/iptv/transport.ts`). */
+  iptvNeedsCors: Platform.OS === 'web' && !isDesktopApp,
 } as const;

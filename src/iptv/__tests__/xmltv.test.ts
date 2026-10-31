@@ -77,3 +77,12 @@ describe('XmltvWindowParser', () => {
     expect(ms).toBeLessThan(5000);
   });
 });
+
+describe('matching by name', () => {
+  it('keeps a channel found by its display name', () => {
+    const keep = new Set(['ch0.example']);
+    const p = new XmltvWindowParser({ from: T0, to: T0 + HOUR, keep, matchNames: new Set(['channel 2']) });
+    p.push(bigXmltv(3, 1, T0));
+    expect(Object.keys(p.end().channels).sort()).toEqual(['ch0.example', 'ch2.example']);
+  });
+});

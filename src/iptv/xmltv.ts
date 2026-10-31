@@ -62,6 +62,12 @@ export interface XmltvOptions {
   to: number;
   /** Keep only these channel ids (null: all). */
   keep?: Set<string> | null;
+  /**
+   * Lower-case names of playlist channels with no guide id. A `<channel>`
+   * whose display name is one of them is kept too (XMLTV lists the channels
+   * before the programmes).
+   */
+  matchNames?: Set<string> | null;
   /** The most programmes kept per channel (the earliest ones in the window). */
   maxPerChannel?: number;
   /** Descriptions are cut to this many characters. */
@@ -148,6 +154,7 @@ export class XmltvWindowParser {
     while ((m = re.exec(body)) !== null) {
       const name = decodeXml(m[1]).trim().toLowerCase();
       if (name && !this.names.has(name)) this.names.set(name, id);
+      if (name && this.opts.keep && this.opts.matchNames?.has(name)) this.opts.keep.add(id);
     }
   }
 
