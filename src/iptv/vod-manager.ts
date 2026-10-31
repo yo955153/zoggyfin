@@ -357,7 +357,8 @@ export function loadInfo(pid: string, kind: VodKind, id: string, force = false):
       isData: kind === 'film' ? (v): v is VodInfo => isInfo<FilmInfo>(v) : isSeriesInfo,
       fetch: async () => {
         const json = await xtreamJson(pid, kind === 'film' ? 'get_vod_info' : 'get_series_info', kind === 'film' ? { vod_id: id } : { series_id: id });
-        const info = kind === 'film' ? parseVodInfo(json) : parseSeriesInfo(json, name);
+        // A film with no details still plays: an empty answer is no details, not an error.
+        const info = kind === 'film' ? (parseVodInfo(json) ?? {}) : parseSeriesInfo(json, name);
         if (!info) throw new IptvError('answer');
         return info;
       },

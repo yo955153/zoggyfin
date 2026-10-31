@@ -128,6 +128,19 @@ export function useVodTitle(providerId: string | null, kind: VodKind, id: string
   );
 }
 
+/**
+ * A page opened with no catalogue loaded (a restart on the page, a link):
+ * loads every title of the kind (from the saved file when there is one), so
+ * the title, its poster and its file type are known.
+ */
+export function useEnsureTitle(providerId: string | null, kind: VodKind, missing: boolean): Loaded<unknown>['status'] {
+  const status = useVodStore((s) => (providerId ? (s.all[catalogueKey(providerId, kind)] ?? EMPTY_ALL).status : 'idle'));
+  useEffect(() => {
+    if (providerId && missing) void loadAll(providerId, kind);
+  }, [providerId, kind, missing]);
+  return status;
+}
+
 /** The favourites and positions of a provider. */
 export function useVodLists(providerId: string | null): VodLists {
   bindSession();

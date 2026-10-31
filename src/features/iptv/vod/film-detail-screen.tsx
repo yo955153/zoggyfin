@@ -2,9 +2,10 @@
  * The page of an IPTV film: the details from the provider, Play or Resume
  * (the position this device saved), Start over and Favourite.
  */
+import { Stack } from 'expo-router';
 import { ActivityIndicator, Text, View } from 'react-native';
 
-import { type Film, isVodFavourite, playedFractionOf, positionOf, resumeAt, useActiveProviderId, useVodInfo, useVodLists, useVodPlayer, useVodTitle, vod } from '@/iptv';
+import { type Film, isVodFavourite, playedFractionOf, positionOf, resumeAt, useActiveProviderId, useEnsureTitle, useVodInfo, useVodLists, useVodPlayer, useVodTitle, vod } from '@/iptv';
 import { formatClock } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { createStyles, type AppTheme, font, spacing, type, useStyles, useTheme } from '@/theme';
@@ -22,6 +23,7 @@ export function FilmDetailScreen({ id, providerId: wanted }: { id: string; provi
   const lists = useVodLists(pid);
   const player = useVodPlayer();
   const details = info.data;
+  const allStatus = useEnsureTitle(pid, 'film', !item);
   // Opened with no catalogue loaded (a restart on this page): the details have the name and the file type.
   const film: Film | null = item ?? (details?.name ? { id, name: details.name, categoryId: '', streamId: /^\d+$/.test(id) ? Number(id) : undefined, ...(details.ext ? { ext: details.ext } : {}) } : null);
   const name = film?.name ?? '';
@@ -33,7 +35,14 @@ export function FilmDetailScreen({ id, providerId: wanted }: { id: string; provi
   if (!film) {
     return (
       <View style={s.center}>
-        {info.status === 'error' ? <Text style={s.text}>{info.error ?? 'This film did not load.'}</Text> : <ActivityIndicator color={c.text2} />}
+        <Stack.Screen options={{ title: '' }} />
+        {info.status === 'error' ? (
+          <Text style={s.text}>{info.error ?? 'This film did not load.'}</Text>
+        ) : allStatus === 'ready' && info.status === 'ready' ? (
+          <Text style={s.text}>{"This film is not in the provider's list any more."}</Text>
+        ) : (
+          <ActivityIndicator color={c.text2} />
+        )}
       </View>
     );
   }

@@ -4,6 +4,7 @@
  * the picked season. An episode plays from its saved position; Next in the
  * player goes on through the seasons.
  */
+import { Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 
@@ -18,6 +19,7 @@ import {
   resumeAt,
   seriesTarget,
   useActiveProviderId,
+  useEnsureTitle,
   useVodInfo,
   useVodLists,
   useVodPlayer,
@@ -43,6 +45,7 @@ export function SeriesDetailScreen({ id, providerId: wanted }: { id: string; pro
   const lists = useVodLists(pid);
   const player = useVodPlayer();
   const details = info.data;
+  const allStatus = useEnsureTitle(pid, 'series', !item);
   const seasons = useMemo(() => details?.seasons ?? [], [details]);
   const target = useMemo(() => seriesTarget(seasons, lists), [seasons, lists]);
   const [picked, setPicked] = useState<number | null>(null);
@@ -81,10 +84,12 @@ export function SeriesDetailScreen({ id, providerId: wanted }: { id: string; pro
 
   const credits = [details?.director ? `Director: ${details.director}` : null, details?.cast ? `Cast: ${details.cast}` : null].filter((x): x is string => !!x);
 
-  if (!name && info.status !== 'error') {
+  if (!name) {
+    const gone = info.status === 'error' && allStatus !== 'loading' && allStatus !== 'idle';
     return (
       <View style={s.center}>
-        <ActivityIndicator color={c.text2} />
+        <Stack.Screen options={{ title: '' }} />
+        {gone ? <Text style={s.note}>{info.error ?? 'This series did not load.'}</Text> : <ActivityIndicator color={c.text2} />}
       </View>
     );
   }
