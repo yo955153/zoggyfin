@@ -81,6 +81,8 @@ grep NowPlayingManager.swift build.log      # no match: the patch is not in the 
 | Web | A new `pnpm expo export --platform web`, then host `dist/` |
 | Website (`site/`) | Deploys from `main` through `.github/workflows/site.yml` |
 
+Users see an OTA update: release builds check after start and on return to the foreground, download it, and show a card "An update is ready" with "Restart now" and "Later" (`src/platform/updates/ota.ts`). To show a short line on that card, set `ZOGGYFIN_UPDATE_MESSAGE="<one line>"` for the `eas update` command (app.config.ts puts it in the manifest). EAS does not put the `--message` text in the manifest. No links: the card removes them.
+
 ## 7. Report
 
 Report: the last build commit, the decision (OTA or native build) with the files that decide it, the native-import check result, and the targets that need their own release.

@@ -47,6 +47,10 @@ first commit to today. All of it was built in the first weeks of the project.
 - **Website.** The landing page, the download page, the privacy policy, the support page and the invite
   page at zoggyfin.zog-tech.com, deployed to Cloudflare Pages.
 - **Releases.** EAS build profiles, EAS Update for over-the-air updates and TestFlight builds.
+- **Update ready card.** On iPhone, iPad, Android and TV the app checks for an over-the-air update
+  after start, on return to the foreground (at most every 30 minutes) and from "Check for updates" in
+  Settings. It downloads the update, then a small card says "An update is ready" with "Restart now" and
+  "Later". The card waits while video or audio plays. A new TV app from the TV updater wins over it.
 - **Stream info.** The player shows the resolution and bitrate that play under the title. The Playback
   sheet puts them next to the original file, so a viewer can tell whether a higher quality would help.
 - **Screen size.** A player menu with Fit, Fill (crop) and Stretch.
