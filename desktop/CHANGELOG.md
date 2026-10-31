@@ -4,6 +4,14 @@ Each section is the notes of one release. `pnpm desktop:publish` puts the sectio
 version into `latest.json` (the update card shows it) and into the GitHub release.
 Write one short line per item.
 
+## 0.1.11 (2026-10-30)
+
+- Home: "Because you watched" rows, a "Short on time" row and a genre of the day
+- Player: a Screen size menu with Fit, Fill and Stretch
+- Player: the resolution and bitrate that play show under the title and in the Playback menu
+- Favourite and Played turn on at once on an item page
+- Download rings move smoothly, and pages fade in after loading
+
 ## 0.1.10 (2026-10-29)
 
 - The display no longer dims or sleeps while a video plays
