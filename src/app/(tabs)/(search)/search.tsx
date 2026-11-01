@@ -32,7 +32,9 @@ import { formatDuration } from '@/lib/format';
 import { useOpenItem } from '@/lib/navigation';
 import { useRootScreenOptions } from '@/lib/stack-options';
 import { useOffline } from '@/lib/online';
+import { toast } from '@/lib/toast';
 import { useDebounced } from '@/lib/use-debounced';
+import { voiceInput } from '@/native/voice-input';
 import { isTV } from '@/platform/tv';
 import { usePlayer } from '@/player';
 import { readJson, writeJson } from '@/storage/json';
@@ -72,6 +74,8 @@ export default function SearchScreen() {
   const q = useSearch(term, genre ?? undefined);
   const offline = useOffline();
   const genreList = browseGenres(useVideoGenres(!offline).data);
+  // The system speech screen (Android): the TV remote's voice button opens Google's search instead.
+  const [canSpeak] = useState(() => !!voiceInput?.available());
   const records = useDownloadsStore((st) => st.records);
   const nameOf = useServerNames();
   // With downloads from more than one server, each local result names its server.
@@ -116,6 +120,14 @@ export default function SearchScreen() {
     if (name && !GENRE_SEARCH_FILTERS.some((f) => f.value === filter)) setFilter('all');
   };
 
+  const speak = async () => {
+    try {
+      const said = (await voiceInput?.listen('Search Zoggyfin'))?.trim();
+      if (said) applyRecent(said);
+    } catch {
+      toast('Voice search is not available on this device.', { icon: 'mic.fill' });
+    }
+  };
 
   return (
     <>
@@ -167,6 +179,11 @@ export default function SearchScreen() {
                 </Touchable>
               ) : null}
             </View>
+            {canSpeak ? (
+              <Touchable onPress={speak} radius={radius.md} hitSlop={8} accessibilityRole="button" accessibilityLabel="Search by voice" style={s.mic}>
+                <Icon name="mic.fill" size={scaled(iconSize.md)} color={c.text} />
+              </Touchable>
+            ) : null}
             {text ? (
               <Touchable
                 onPress={() => {
@@ -379,7 +396,14 @@ const makeStyles = createStyles(({ c }: AppTheme) => ({
   },
   input: { ...font(type.body), ...webInput, color: c.text, flex: 1, height: '100%' as const },
   cancel: { ...font(type.body), color: c.accent },
-
+  mic: {
+    height: scaled(sizes.webSearchHeight),
+    width: scaled(sizes.webSearchHeight),
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: c.surface2,
+    borderRadius: radius.md + 2,
+  },
   chips: { flexGrow: 0, marginTop: spacing.md },
   chipsContent: { gap: spacing.sm },
   recent: { marginTop: spacing.xxl },
