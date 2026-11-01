@@ -64,6 +64,12 @@ first commit to today. All of it was built in the first weeks of the project.
   and a side menu entry on TV.
 - **Home discovery.** "Because you watched" rows from the server's movie recommendations, a "Short on
   time" row of unwatched movies of 100 minutes or less, and a genre of the day that changes at midnight.
+- **Genres.** A Genres row on Home (movie and show genres, the largest first) opens a page with every
+  movie and show of the genre. Search has genre chips: a genre keeps the search to its movies and
+  shows, and with no words lists the genre, best rated first.
+- **Voice search (Android).** A microphone button next to the search field opens the system speech
+  screen and searches for what was said. On Google TV the remote's voice button opens Google's own
+  search, not the app's.
 - **Android TV updates.** The sideloaded Android TV app (Google TV, Fire TV) finds a new APK, downloads
   it, checks its SHA-256 and opens the system installer. The Play build (`tv-play`) has no self-update.
   The website has a download for TV. TV releases keep the version 0.1.0; the build number
@@ -122,6 +128,10 @@ first commit to today. All of it was built in the first weeks of the project.
 - TV: the Films and Series pages use the single focus mark and stay inside the overscan-safe area.
   A focused track or episode row no longer runs to the edge of the screen.
 - TV: Down on the last Home row no longer scrolls the rows out of view.
+- Android TV: Home, its rows and the item grids scroll once per press, in a shorter animation. Before,
+  Android jumped to the focused row and the app's scroll then slid it again, so each press jumped and
+  slid. Extra Down presses on the last Home row no longer cut the row off, and fast Up presses in a
+  library grid no longer scroll up past the focus and then back down.
 - TV: Settings, and other pages with no preferred focus, take the focus when they open. Before, the
   focus stayed on the page they covered and the remote could not reach them.
 - Android: a transcode that started mid-file (resume, a quality change) could stop with a playback
