@@ -8,17 +8,19 @@
  * press jumped and slid. With no focus target left (Down on the last row) it
  * scrolled past the end and cut the rows off. `scrollEnabled: false` turns
  * both off on Android: the D-pad still moves the focus, and `scrollTo` still
- * scrolls. The animation is shorter than the default (250 ms) and slows down
- * at the end, so fast presses do not queue up behind it.
+ * scrolls. The animation glides: 300 ms on an ease-out cubic curve, so it
+ * starts at speed and settles softly. A press during a glide starts the next
+ * one from where the page is, still moving fast, so held presses flow on
+ * (180 ms with the plain ease-out felt abrupt).
  *
  * Off on the web TV preview and on tvOS, where the focus engine owns the scroll.
  */
-import { Platform } from 'react-native';
+import { Platform, type ScrollViewProps } from 'react-native';
 
 import { isNativeTV } from '@/platform/tv';
 
 const driven = isNativeTV && Platform.OS === 'android';
 
-export const tvDrivenScroll = driven
-  ? ({ scrollEnabled: false, scrollAnimationDuration: 180, scrollAnimationEasing: 'ease-out' } as const)
+export const tvDrivenScroll: Pick<ScrollViewProps, 'scrollEnabled' | 'scrollAnimationDuration' | 'scrollAnimationEasing'> = driven
+  ? { scrollEnabled: false, scrollAnimationDuration: 300, scrollAnimationEasing: [0.33, 1, 0.68, 1] }
   : {};
