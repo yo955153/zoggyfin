@@ -52,7 +52,8 @@ first commit to today. All of it was built in the first weeks of the project.
   Settings. It downloads the update, then a small card says "An update is ready" with "Restart now" and
   "Later". The card waits while video or audio plays. A new TV app from the TV updater wins over it.
 - **Stream info.** The player shows the resolution and bitrate that play under the title. The Playback
-  sheet puts them next to the original file, so a viewer can tell whether a higher quality would help.
+  sheet puts them next to the original file (with its HDR type and audio track), so a viewer can tell
+  whether a higher quality would help, and says why the server converts the file.
 - **Screen size.** A player menu with Fit, Fill (crop) and Stretch.
 - **Motion.** Favourite and Played turn on at once on the item page, with a small pop and a light
   haptic. Download rings move smoothly between steps. A finished download's icon arrives with a small
@@ -128,7 +129,9 @@ first commit to today. All of it was built in the first weeks of the project.
 - TV: the Films and Series pages use the single focus mark and stay inside the overscan-safe area.
   A focused track or episode row no longer runs to the edge of the screen.
 - TV: Down on the last Home row no longer scrolls the rows out of view.
-- Android TV: Home, its rows and the item grids scroll once per press, in a shorter animation. Before,
+- Android: AV1 films with a Dolby Vision layer over HDR10, HLG or SDR play directly. Before, the server
+  converted them to H.264, often slower than real time, and playback kept stopping to buffer.
+- Android TV: Home, its rows and the item grids scroll once per press, in a 300 ms glide. Before,
   Android jumped to the focused row and the app's scroll then slid it again, so each press jumped and
   slid. Extra Down presses on the last Home row no longer cut the row off, and fast Up presses in a
   library grid no longer scroll up past the focus and then back down.
